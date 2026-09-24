@@ -1,0 +1,183 @@
+/* QuizMB design tokens are the visual source of truth.
+ * Feature code consumes semantic tokens, never literal palette values.
+ */
+:root {
+  --stroke-width: 1px;
+  --focus-width: 2px;
+  --focus-offset: 3px;
+  --focus-system-color: Highlight;
+  --disabled-opacity: 0.5;
+  --motion-duration: 150ms;
+  --motion-easing: ease-out;
+  --motion-button-hover: -1px;
+  --motion-button-active: 1px;
+  --motion-card-hover: -2px;
+  --motion-live-duration: 2s;
+  --motion-live-min-opacity: 0.45;
+  --overlay-blur: 4px;
+}
+
+@theme inline {
+  --font-sans: var(--font-plus-jakarta-sans), sans-serif;
+}
+
+@theme {
+  --color-canvas: #f9faf8;
+  --color-surface: #ffffff;
+  --color-surface-low: #f3f4f2;
+  --color-surface-muted: #edeeec;
+  --color-surface-high: #e7e8e6;
+  --color-surface-highest: #e1e3e1;
+  --color-surface-dim: #d9dad8;
+  --color-surface-inverse: #2e3130;
+  --color-text-inverse: #f0f1ef;
+  --color-action-primary: #1b3022;
+  --color-action-on-primary: #ffffff;
+  --color-danger: #ba1a1a;
+  --color-danger-surface: #ffdad6;
+  --color-danger-on-surface: #93000a;
+  --color-text-primary: #131b15;
+  --color-text-secondary: #5c665f;
+  --color-border-surface: #e6e9e4;
+  --color-border-control: #e2e6e0;
+  --color-accent: #3d6047;
+  --color-accent-soft: #5b8266;
+  --color-action-primary-hover: #142419;
+  --color-action-secondary: #ebf1ec;
+  --color-action-secondary-hover: #dfe7e1;
+  --color-status-live-surface: #e6efe9;
+  --color-status-live-text: #245736;
+  --color-status-scheduled-surface: #f4f1e6;
+  --color-status-scheduled-text: #5c5224;
+  --color-status-neutral-surface: #eaece9;
+  --color-status-neutral-text: #606662;
+  --color-placeholder: rgb(92 102 95 / 60%);
+  --color-scrim: rgb(19 27 21 / 30%);
+
+  --text-display: 40px;
+  --text-display--line-height: 48px;
+  --text-display--font-weight: 600;
+  --text-display--letter-spacing: -0.02em;
+  --text-display-mobile: 32px;
+  --text-display-mobile--line-height: 40px;
+  --text-display-mobile--font-weight: 600;
+  --text-display-mobile--letter-spacing: -0.02em;
+  --text-page-title: 28px;
+  --text-page-title--line-height: 36px;
+  --text-page-title--font-weight: 600;
+  --text-page-title--letter-spacing: -0.015em;
+  --text-page-title-mobile: 24px;
+  --text-page-title-mobile--line-height: 32px;
+  --text-page-title-mobile--font-weight: 600;
+  --text-page-title-mobile--letter-spacing: -0.015em;
+  --text-section-heading: 20px;
+  --text-section-heading--line-height: 28px;
+  --text-section-heading--font-weight: 600;
+  --text-section-heading--letter-spacing: -0.01em;
+  --text-card-title: 17px;
+  --text-card-title--line-height: 24px;
+  --text-card-title--font-weight: 600;
+  --text-card-title--letter-spacing: -0.005em;
+  --text-body: 15px;
+  --text-body--line-height: 24px;
+  --text-body--font-weight: 400;
+  --text-body-secondary: 14px;
+  --text-body-secondary--line-height: 20px;
+  --text-body-secondary--font-weight: 400;
+  --text-label: 13px;
+  --text-label--line-height: 18px;
+  --text-label--font-weight: 600;
+  --text-label--letter-spacing: 0.01em;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-caption--font-weight: 500;
+  --text-badge: 12px;
+  --text-badge--line-height: 16px;
+  --text-badge--font-weight: 600;
+  --text-badge--letter-spacing: 0.01em;
+
+  --spacing-gutter: 1.5rem;
+  --spacing-gutter-sm: 1rem;
+  --spacing-gutter-lg: 2rem;
+  --spacing-margin: 2rem;
+  --spacing-margin-sm: 1rem;
+  --spacing-margin-lg: 4rem;
+  --spacing-space-xs: 0.5rem;
+  --spacing-space-sm: 1rem;
+  --spacing-space-md: 1.5rem;
+  --spacing-space-lg: 2rem;
+  --spacing-space-xl: 3rem;
+  --spacing-space-2xl: 4rem;
+  --spacing-control: 44px;
+  --spacing-control-large: 48px;
+  --spacing-control-x: 16px;
+  --spacing-badge-x: 10px;
+  --spacing-badge-y: 4px;
+  --spacing-status-dot: 6px;
+  --container-content: 1280px;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+
+  --radius-sm: 0.25rem;
+  --radius-control: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-card: 1rem;
+  --radius-feature: 1.5rem;
+  --radius-pill: 9999px;
+  --shadow-card: 0 1px 3px rgb(19 27 21 / 3%), 0 6px 16px rgb(19 27 21 / 2%);
+  --shadow-raised: 0 4px 6px rgb(19 27 21 / 4%), 0 12px 24px rgb(19 27 21 / 4%);
+  --shadow-floating:
+    0 8px 30px rgb(19 27 21 / 8%), 0 2px 8px rgb(19 27 21 / 4%);
+  --shadow-focus: 0 0 0 3px rgb(61 96 71 / 12%);
+}
+
+@utility ds-focus {
+  &:focus-visible {
+    outline: var(--focus-width) solid var(--color-accent);
+    outline-offset: var(--focus-offset);
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+/* Preserve a visible focus indicator when system high-contrast colors
+ * suppress box shadows, including the documented input glow. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: var(--focus-width) solid var(--focus-system-color) !important;
+    outline-offset: var(--focus-offset) !important;
+  }
+}
+
+@utility ds-control-motion {
+  transition-property:
+    background-color, border-color, color, box-shadow, transform;
+  transition-duration: var(--motion-duration);
+  transition-timing-function: var(--motion-easing);
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+    transform: none;
+  }
+}
+
+@utility ds-primary-motion {
+  @media (prefers-reduced-motion: no-preference) {
+    &:hover:not(:disabled) {
+      transform: translateY(var(--motion-button-hover));
+    }
+    &:active:not(:disabled) {
+      transform: translateY(var(--motion-button-active));
+    }
+  }
+}
+
+@utility ds-live-dot {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: live-pulse var(--motion-live-duration) ease-in-out infinite;
+  }
+}
+
+@keyframes live-pulse {
+  50% {
+    opacity: var(--motion-live-min-opacity);
+  }
+}

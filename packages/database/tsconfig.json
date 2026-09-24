@@ -1,0 +1,5 @@
+{
+  "extends": "@quizmb/config/typescript/node",
+  "compilerOptions": { "noEmit": true },
+  "include": ["prisma.config.ts"]
+}

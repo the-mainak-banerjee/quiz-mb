@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+@import '../styles/tokens.css';
+
+:root {
+  color-scheme: light;
+}
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-canvas);
+  color: var(--color-text-primary);
+}
+
+@layer base {
+  :focus-visible {
+    outline: var(--focus-width) solid var(--color-accent);
+    outline-offset: var(--focus-offset);
+  }
+}

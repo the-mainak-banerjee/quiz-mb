@@ -1,0 +1,4 @@
+// Phase 0: datasource only. No models, generator, migrations, or seed.
+datasource db {
+  provider = "postgresql"
+}

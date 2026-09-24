@@ -1,0 +1,16 @@
+{
+  "name": "@quizmb/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "db:check": "prisma db execute --file scripts/check-connection.sql",
+    "lint": "eslint --config ../config/eslint/base.mjs prisma.config.ts"
+  },
+  "devDependencies": {
+    "prisma": "7.10.0",
+    "dotenv": "17.4.2",
+    "@quizmb/config": "workspace:*"
+  }
+}

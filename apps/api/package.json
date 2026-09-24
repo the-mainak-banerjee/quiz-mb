@@ -1,0 +1,30 @@
+{
+  "name": "@quizmb/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --import tsx --watch src/server.ts",
+    "build": "tsc",
+    "start": "node --env-file-if-exists=.env dist/server.js",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit && tsc --noEmit --strict --esModuleInterop --skipLibCheck --module NodeNext --target ES2022 tests/foundation.test.ts tests/env.test.ts",
+    "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "express": "5.2.1",
+    "cors": "2.8.6",
+    "zod": "4.6.5",
+    "pino": "10.3.1"
+  },
+  "devDependencies": {
+    "@quizmb/config": "workspace:*",
+    "tsx": "4.23.15",
+    "@types/express": "5.0.6",
+    "@types/cors": "2.8.19",
+    "@types/node": "24.13.6"
+  }
+}
