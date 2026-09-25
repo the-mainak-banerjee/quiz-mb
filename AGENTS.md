@@ -38,6 +38,7 @@ Use the following precedence:
    - infrastructure responsibilities
 
 If documents appear to conflict:
+
 - follow the precedence above,
 - do not silently invent a resolution,
 - ask before making a material architectural or product decision.
@@ -91,6 +92,7 @@ Do not invent new colors, font sizes, spacing, radii, shadows, or component vari
 Prefer semantic design tokens over hardcoded visual values.
 
 Before creating a new shared component:
+
 1. Search for an existing implementation.
 2. Reuse or extend it when appropriate.
 3. Avoid duplicate abstractions for the same concept.

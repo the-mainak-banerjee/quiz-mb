@@ -1,4 +1,5 @@
 import type { ComponentProps } from 'react';
+import { cn } from '@/lib/utils';
 
 export type BadgeProps = Omit<ComponentProps<'span'>, 'children'> & {
   variant: 'live' | 'scheduled' | 'draft' | 'completed';
@@ -22,12 +23,16 @@ const variants = {
   },
 };
 
-export function Badge({ variant, className = '', ...props }: BadgeProps) {
+export function Badge({ variant, className, ...props }: BadgeProps) {
   const { label, style } = variants[variant];
   return (
     <span
       {...props}
-      className={`inline-flex items-center gap-space-xs rounded-pill px-badge-x py-badge-y text-badge ${style} ${className}`}
+      className={cn(
+        'inline-flex items-center gap-space-xs rounded-pill px-badge-x py-badge-y text-badge',
+        style,
+        className,
+      )}
     >
       {variant === 'live' && (
         <span

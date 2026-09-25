@@ -2,9 +2,67 @@
 
 ## Current status
 
-Phase 0 is complete. Phase 1 has not started. No deployment has been performed.
+Phase 0 and the authentication feature are complete. Other Phase 1/product features have not been started. No deployment has been performed.
 
 This document records implementation progress, verification results, limitations, and approved scope adjustments. Project setup and usage instructions belong in the root README.
+
+## Authentication — September 25, 2026
+
+### Frontend validation UX
+
+- Login and Create Account validate fields on blur and submit, then update or clear field errors as the user edits. Invalid submissions focus the first invalid field.
+- Added `noValidate` to disable native browser validation popups. Field errors use the existing FormField/Input danger state and Text messages; no form library or duplicate controls were added.
+- Removed the generic highlighted-fields summary from frontend validation feedback. Specific field errors remain; login failures and network errors still use form-level messages.
+- Kept changes scoped to the shared frontend auth form. Backend validation and authentication behavior remain unchanged.
+- Verification: frontend lint, typecheck, and auth-form formatting passed. No end-to-end tests were run for this UX change.
+
+### Current transport: direct browser to Express
+
+Supersedes the original BFF transport notes below, following the user's approval:
+
+- Removed the Next.js auth forwarding route, auth transport helper, and refresh proxy. Browser login/logout/refresh go directly to Express. Server Components continue validating the access credential with Express before rendering protected pages.
+- Added the global frontend API factory in `apps/web/src/lib/api/client.ts` and browser instance in `browser.ts`. Every existing frontend API call uses it. GET/POST/PUT/PATCH/DELETE, JSON success unwrapping, field errors/request IDs, network errors, timeout/cancellation, origin confinement and optional authenticated refresh/retry are centralized. Usage is documented in the adjacent README. No dependencies were added.
+- Production requires `AUTH_COOKIE_DOMAIN=quizmb.com`: the HttpOnly Secure access cookie is shared across trusted subdomains using `__Secure-`; the refresh cookie remains API-host-only using `__Host-`. Localhost uses unprefixed cookies without a Domain. Exact-origin CORS, credentials and CSRF checks remain enforced by Express.
+- An expired access JWT remains in its cookie until session expiry solely to let a server-rendered page offer `/session`. It never authorizes expired access. Continue session is an explicit direct-to-Express mutation; no useEffect fetches, browser token storage, Next.js cookie mutation or domain schema changes. Browser authenticated API requests can renew/retry once; cross-tab strict replay behavior remains unchanged.
+- Removed obsolete API_INTERNAL_URL/WEB_ORIGIN configuration and the BFF-specific end-to-end test. Existing production BFF cookies require a new login when switching. Production web/API must share the trusted site; unrelated Vercel preview domains are unsupported with this cookie policy.
+- Focused verification passed: 8 API-client unit tests, 11 API cookie/CORS/CSRF/auth/foundation tests, changed-file formatting, lint, typecheck and production builds. No end-to-end or database integration tests were run for this refactor, as requested. Original integration results below belong to the earlier auth implementation.
+
+Implemented only account signup, login, refresh, logout, current-user retrieval, and name updates. Signup activates accounts immediately without verification. Login/signup use the approved Stitch layout and existing semantic design primitives; forgot-password, terms, and privacy links remain dummy links. The existing foundation landing page is server-protected and displays the signed-in user with logout. No dashboard or other product feature was added.
+
+### Decisions and security
+
+- Express owns authentication; thin Next.js transport endpoints keep browser cookies host-only on the web origin. Server Components validate the user before rendering, with cookie renewal at the routing boundary. No useEffect bootstrapping or browser token storage.
+- Argon2id passwords; approved policy is 15–128 Unicode characters, spaces allowed, no composition requirement.
+- Access JWT defaults to 15 minutes; absolute refresh-session lifetime defaults to 30 days, both centralized in API configuration.
+- Refresh tokens are random 256-bit credentials; PostgreSQL stores only SHA-256 hashes. Family-root row locks serialize refresh, logout, and replay revocation.
+- Reuse revokes the family. Concurrent requests across different web instances may force re-login, as approved. A short-lived per-process coalescing cache reduces duplicate refresh requests within one web instance.
+- Production cookies are HttpOnly, Secure, SameSite=Lax, Path=/ with __Host- names and no Domain. Local HTTP uses unprefixed cookies without Secure. Origin and JSON-content checks protect unsafe requests, including login.
+- Distributed rate limiting is deliberately deferred with TODO(auth-rate-limit) in the auth router. It remains a pre-public-rollout task.
+
+### Database and dependencies
+
+- Added only User and AuthSession, unique normalized emails, indexed token hashes/session families, timestamps, and cascading user-session ownership.
+- Created and applied migration 20260925000000_auth to the development Supabase database. RLS is enabled for both tables without public policies. No seed or unrelated models.
+- Local API uses the development Session pooler. Runtime TLS verifies the server certificate using the official Supabase CA supplied through ignored local environment configuration. Production Vercel runtime should use its configured transaction pooler; migration tooling uses the Session pooler.
+- Added argon2, jose, cookie, Prisma client/pg adapter, pg and its types, and server-only. Database is now an API workspace dependency. No Supabase Auth, Redis, UI library, or client state library.
+
+### Verification
+
+- Final `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` passed. Changed-file Prettier check passed. Fixed a Windows Prisma generation race by ordering database typechecking after its build.
+- Database integration test passed: signup, uniqueness, generic invalid-login errors, profile boundaries, refresh rotation/replay, concurrent refresh, logout races, independent families, expiry, and RLS. Unique test accounts were removed by cleanup.
+- Web transport integration test passed against local servers: CSRF rejection, signup cookies, protected HTML, signed-in login redirect, expired-access renewal, logout and revoked-session rejection.
+- Production cookie attributes and clearing are covered by an HTTP test. Unit/foundation suite: 10 passed; the two environment-dependent suites are skipped in the default command and were run explicitly.
+- Browser checks covered desktop and mobile login/signup, no horizontal overflow, loading state and accessible invalid-login feedback. No production deployment or multi-instance load test was performed.
+- Root format check flags existing formatting in AGENTS.md, .agents/skills/frontend-design/SKILL.md and references/design/DESIGN.md; those unrelated files were left unchanged.
+
+### Main changed paths
+
+- apps/api/src/modules/auth/*, modules/users/service.ts, HTTP CSRF/errors, application wiring, startup and logging; authentication tests and test typecheck config.
+- apps/web/src/features/auth/*, lib/auth/*, proxy.ts, app/api/auth/[action]/route.ts, login/signup pages, root page/layout and components/brand.tsx.
+- packages/database schema, auth migration, runtime factory, package exports and TypeScript/Prisma configuration.
+- Workspace/package manifests, lockfile, Turbo generation ordering, ignored generated output, environment examples and README setup instructions. Local secrets remain ignored. Next.js also generated its app-local AGENTS.md and CLAUDE.md guidance files.
+
+The Phase 0 notes below are historical. Password policy and development token defaults are now resolved as recorded above; other deferred product decisions remain unchanged.
 
 ## Phase 0 — Foundation
 

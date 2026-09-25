@@ -1,4 +1,5 @@
 import type { HTMLAttributes } from 'react';
+import { cn } from '@/lib/utils';
 
 export type SurfaceProps = HTMLAttributes<HTMLElement> & {
   as?: 'div' | 'section' | 'article';
@@ -6,13 +7,16 @@ export type SurfaceProps = HTMLAttributes<HTMLElement> & {
 
 export function Surface({
   as: Tag = 'div',
-  className = '',
+  className,
   ...props
 }: SurfaceProps) {
   return (
     <Tag
       {...props}
-      className={`rounded-card border-(length:--stroke-width) border-border-surface bg-surface p-space-md shadow-card ${className}`}
+      className={cn(
+        'rounded-card border-(length:--stroke-width) border-border-surface bg-surface p-space-md shadow-card',
+        className,
+      )}
     />
   );
 }

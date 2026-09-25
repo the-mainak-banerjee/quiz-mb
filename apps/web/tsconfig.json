@@ -1,6 +1,9 @@
 {
   "extends": "@quizmb/config/typescript/nextjs",
-  "compilerOptions": { "paths": { "@/*": ["./src/*"] } },
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "paths": { "@/*": ["./src/*"] }
+  },
   "include": [
     "next-env.d.ts",
     "**/*.ts",

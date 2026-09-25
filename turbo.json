@@ -10,16 +10,33 @@
         "NODE_ENV",
         "ALLOWED_ORIGINS",
         "LOG_LEVEL",
-        "NEXT_PUBLIC_API_URL"
-      ]
+        "NEXT_PUBLIC_API_URL",
+        "AUTH_COOKIE_DOMAIN",
+        "DATABASE_URL",
+        "DATABASE_SSL_CA_BASE64",
+        "AUTH_ACCESS_SECRET",
+        "AUTH_ACCESS_TTL_SECONDS",
+        "AUTH_SESSION_TTL_SECONDS"
+      ],
+      "dependsOn": ["^build"]
     },
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "src/generated/**"],
       "env": ["NEXT_PUBLIC_API_URL"]
     },
-    "lint": { "dependsOn": ["^lint"] },
-    "typecheck": { "dependsOn": ["^typecheck"] },
-    "test": { "dependsOn": ["^build"], "outputs": [] }
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build", "^typecheck"]
+    },
+    "@quizmb/database#typecheck": {
+      "dependsOn": ["build"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    }
   }
 }

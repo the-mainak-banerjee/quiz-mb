@@ -1,6 +1,6 @@
 import type { NextConfig } from 'next';
-import { webEnv } from './src/lib/env';
+import { API_ORIGIN } from './src/lib/api/config';
 
-void webEnv;
+void API_ORIGIN;
 const config: NextConfig = { reactStrictMode: true };
 export default config;

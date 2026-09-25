@@ -40,10 +40,18 @@ From the repository root, install dependencies:
 pnpm install
 ```
 
-To override local defaults, copy:
+Copy the environment templates:
 
 - `apps/web/.env.example` to `apps/web/.env.local`.
 - `apps/api/.env.example` to `apps/api/.env`.
+- `packages/database/.env.example` to `packages/database/.env`.
+
+Set the API's `DATABASE_URL` and a random `AUTH_ACCESS_SECRET` (at least 32 random bytes, encoded as base64url). Set `DIRECT_DATABASE_URL` in the database tooling environment to the development Supabase Session pooler URL. Apply the checked-in migrations and build the database package before starting an individual application:
+
+```sh
+pnpm --filter @quizmb/database db:migrate
+pnpm --filter @quizmb/database build
+```
 
 Local environment files are ignored by Git. Start both applications:
 
@@ -72,6 +80,9 @@ Stop local servers with Ctrl+C.
 - `pnpm test` — run automated tests.
 - `pnpm build` — build the web and API applications for production.
 - `pnpm db:check` — run the read-only database connectivity probe.
+- `pnpm --filter @quizmb/api test:integration` — exercise the auth lifecycle against the development database; creates and removes uniquely named test accounts. Never use production credentials.
+
+`pnpm --filter @quizmb/web test` runs the global API client's isolated unit tests without a server or database.
 
 After building, start the applications locally with:
 
@@ -84,7 +95,9 @@ pnpm --filter @quizmb/api start
 
 ### Web
 
-`NEXT_PUBLIC_API_URL` specifies the API origin and defaults to `http://localhost:4000`. It is public build-time configuration; never place credentials in a `NEXT_PUBLIC_` variable.
+`NEXT_PUBLIC_API_URL` specifies the exact API origin (no trailing slash). It defaults to `http://localhost:4000` in development and `https://api.quizmb.com` in production, where HTTPS is required. It is public build-time configuration; never place credentials in a `NEXT_PUBLIC_` variable.
+
+Browser requests go directly to Express using the global [API client](apps/web/src/lib/api/README.md), including authentication and future feature calls. There are no Next.js API forwarding routes or refresh proxy. Server Components still validate access with Express before rendering protected content. Database URLs and signing secrets belong only to the API.
 
 ### API
 
@@ -93,6 +106,20 @@ pnpm --filter @quizmb/api start
 - `HOST` — local listening host; defaults to `localhost`.
 - `ALLOWED_ORIGINS` — comma-separated exact HTTP(S) origins, without paths or trailing slashes. Defaults locally to `http://localhost:3000` and must be explicitly configured in production.
 - `LOG_LEVEL` — structured logging level; defaults to `info`.
+- `DATABASE_URL` — Supabase PostgreSQL connection for the API; prefer the transaction pooler on port 6543 for Vercel.
+- `DATABASE_SSL_CA_BASE64` — optional base64 PEM for the official Supabase CA when the local trust store cannot validate the pooler certificate. TLS certificate verification remains enabled.
+- `AUTH_ACCESS_SECRET` — random signing secret, at least 43 characters; keep separate for each environment.
+- `AUTH_ACCESS_TTL_SECONDS` — access credential lifetime, default 900 seconds (15 minutes).
+- `AUTH_SESSION_TTL_SECONDS` — absolute refresh-session lifetime, default 2592000 seconds (30 days).
+- `AUTH_COOKIE_DOMAIN` — required in production: `quizmb.com`. Shares only the access cookie across web/API; omit on localhost.
+
+Signup creates an active account immediately. Passwords accept 15–128 Unicode characters, including spaces, and are hashed with Argon2id. Express sets HttpOnly, SameSite=Lax cookies directly. Production access uses `__Secure-quizmb-access` with Domain=quizmb.com; refresh uses API-host-only `__Host-quizmb-refresh`. Both are Secure. Tokens are never stored in browser JavaScript storage.
+
+The access cookie is retained until session expiry so server pages can recognize expired access and offer `/session` with an explicit Continue session action. Its JWT is still valid for only 15 minutes; expired credentials never authorize a request. The action renews directly with Express, without useEffect fetching. Protected browser API calls can refresh and retry once automatically. Sign-in pages remain accessible for starting a new session.
+
+Production requires trusted subdomains under the same site, such as app.quizmb.com and api.quizmb.com. A Domain cookie reaches all subdomains: do not host untrusted applications under quizmb.com. Unrelated Vercel preview domains cannot use this cookie setup. Existing production BFF sessions require a fresh login after switching cookie names; old web-host-only cookies are no longer read. Use localhost for both local applications (do not mix localhost and 127.0.0.1).
+
+Express owns authentication and profile data. Access credentials reference persisted sessions. Refresh rotates the stored token hash atomically; reuse revokes the session family. Simultaneous refreshes in different browser tabs may require signing in again under this strict replay policy. Logout revokes the current session family. Unsafe requests require an allowed Origin and JSON content type. Authentication rate limiting is intentionally deferred; add distributed limits before public rollout.
 
 `GET /api/health` returns `{"status":"ok"}` to indicate application liveness, not database readiness. Responses include a server-generated `X-Request-ID` for correlation with application logs.
 
@@ -124,10 +151,10 @@ Use two independent Vercel projects with Node.js 24 and the repository's pnpm lo
 
 - Root directory: `apps/api`.
 - Framework preset: Express.
-- Build command: `pnpm build`.
+- Build command: `pnpm --filter @quizmb/api... build` (includes the database package and generated Prisma client).
 - Entry point: `src/index.ts`.
 - Planned domain: `api.quizmb.com`.
-- Production environment: `NODE_ENV=production`, `ALLOWED_ORIGINS=https://app.quizmb.com`, and `LOG_LEVEL=info`.
+- Production environment: `NODE_ENV=production`, `ALLOWED_ORIGINS=https://app.quizmb.com`, `AUTH_COOKIE_DOMAIN=quizmb.com`, `LOG_LEVEL=info`, `DATABASE_URL`, `AUTH_ACCESS_SECRET`, and optional `DATABASE_SSL_CA_BASE64`. Apply migrations separately with the tooling connection before release; builds do not migrate databases.
 
 `src/app.ts` constructs the Express application, `src/index.ts` exports it for Vercel, and `src/server.ts` starts the local listener. Do not use the local listener as the Vercel entry point.
 

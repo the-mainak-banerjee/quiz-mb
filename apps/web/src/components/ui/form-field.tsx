@@ -2,6 +2,7 @@
 
 import { useId, type ReactNode } from 'react';
 import { Input, type InputProps } from './input';
+import { Text } from './text';
 
 export type FormFieldProps = Omit<InputProps, 'children'> & {
   label: string;
@@ -27,7 +28,7 @@ export function FormField({
   return (
     <div className="flex flex-col gap-space-xs">
       <label htmlFor={inputId} className="text-label text-text-primary">
-        {label}
+        {label} {inputProps.required && <span className="text-danger">*</span>}
       </label>
       <Input
         {...inputProps}
@@ -36,18 +37,19 @@ export function FormField({
         aria-invalid={error ? true : invalid}
       />
       {hint && (
-        <p id={hintId} className="text-body-secondary text-text-secondary">
+        <Text id={hintId} variant="body-secondary" tone="secondary">
           {hint}
-        </p>
+        </Text>
       )}
       {error && (
-        <p
+        <Text
           id={errorId}
           role="alert"
-          className="text-body-secondary text-danger"
+          variant="body-secondary"
+          className="text-danger"
         >
           {error}
-        </p>
+        </Text>
       )}
     </div>
   );

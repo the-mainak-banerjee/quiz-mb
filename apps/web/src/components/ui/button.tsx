@@ -1,4 +1,5 @@
 import type { ComponentProps } from 'react';
+import { cn } from '@/lib/utils';
 
 type Appearance =
   | { variant?: 'primary'; size?: 'default' | 'hero' }
@@ -20,14 +21,19 @@ export function Button({
   variant = 'primary',
   size = 'default',
   type = 'button',
-  className = '',
+  className,
   ...props
 }: ButtonProps) {
   return (
     <button
       {...props}
       type={type}
-      className={`ds-focus ds-control-motion inline-flex shrink-0 items-center justify-center gap-space-xs rounded-control px-control-x text-label cursor-pointer disabled:cursor-not-allowed disabled:opacity-(--disabled-opacity) ${size === 'hero' ? 'h-control-large' : 'h-control'} ${variants[variant]} ${className}`}
+      className={cn(
+        'ds-focus ds-control-motion inline-flex shrink-0 cursor-pointer items-center justify-center gap-space-xs rounded-control px-control-x text-label disabled:cursor-not-allowed disabled:opacity-(--disabled-opacity)',
+        size === 'hero' ? 'h-control-large' : 'h-control',
+        variants[variant],
+        className,
+      )}
     />
   );
 }

@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { cn } from '@/lib/utils';
 import {
   Badge,
   Button,
@@ -149,7 +150,10 @@ export default function DesignSystemPage() {
             <div key={label} className="space-y-space-xs">
               <div
                 aria-hidden="true"
-                className={`h-control-large rounded-control border-(length:--stroke-width) border-border-surface ${color}`}
+                className={cn(
+                  'h-control-large rounded-control border-(length:--stroke-width) border-border-surface',
+                  color,
+                )}
               />
               <Text variant="caption">{label}</Text>
               <Text variant="caption" tone="secondary">

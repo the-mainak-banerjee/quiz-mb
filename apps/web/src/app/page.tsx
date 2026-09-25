@@ -1,20 +1,28 @@
-export default function HomePage() {
+import { requireUser } from '@/lib/auth/session';
+import { LogoutButton } from '@/features/auth/logout-button';
+import { Text, Surface } from '@/components/ui';
+export default async function HomePage() {
+  const user = await requireUser();
   return (
-    <section className="max-w-2xl space-y-6">
-      <p className="text-sm font-semibold uppercase tracking-widest text-teal-700">
-        Phase 0 · Foundation
-      </p>
-      <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-        A home for live quizzes.
-      </h1>
-      <p className="text-lg leading-8 text-slate-600">
-        The project foundation is in place. Accounts, quiz creation, and live
-        participation are not available yet.
-      </p>
-      <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
-        This is a scaffold preview. Login and signup pages are nonfunctional
-        placeholders.
-      </p>
-    </section>
+    <main className="mx-auto max-w-content px-margin-sm py-space-2xl md:px-margin lg:px-margin-lg">
+      <section className="space-y-space-md">
+        <Text variant="label" tone="secondary">
+          QuizMB · Foundation
+        </Text>
+        <Text as="h1" variant="display">
+          A home for live quizzes.
+        </Text>
+        <Text tone="secondary">
+          Signed in as {user.name} ({user.email}).
+        </Text>
+        <Surface>
+          <Text tone="secondary">
+            Your account is ready. Quiz creation and live participation are not
+            available yet.
+          </Text>
+        </Surface>
+        <LogoutButton />
+      </section>
+    </main>
   );
 }

@@ -7,6 +7,12 @@ export function createLogger(level: string) {
     redact: {
       paths: [
         'password',
+        'passwordHash',
+        'refresh',
+        'refreshToken',
+        'refreshTokenHash',
+        'access',
+        'res.headers.set-cookie',
         'token',
         'authorization',
         'cookie',

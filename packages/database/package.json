@@ -4,13 +4,29 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "prisma generate && tsc --noEmit -p tsconfig.build.json && tsc --noEmit",
     "db:check": "prisma db execute --file scripts/check-connection.sql",
-    "lint": "eslint --config ../config/eslint/base.mjs prisma.config.ts"
+    "lint": "eslint --config ../config/eslint/base.mjs prisma.config.ts src/index.ts",
+    "generate": "prisma generate",
+    "build": "prisma generate && tsc -p tsconfig.build.json",
+    "db:migrate": "prisma migrate deploy"
   },
   "devDependencies": {
-    "prisma": "7.10.0",
+    "@quizmb/config": "workspace:*",
+    "@types/node": "24.13.6",
+    "@types/pg": "8.23.1",
     "dotenv": "17.4.2",
-    "@quizmb/config": "workspace:*"
+    "prisma": "7.10.0"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "pg": "8.23.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   }
 }

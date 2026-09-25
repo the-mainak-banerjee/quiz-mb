@@ -7,6 +7,7 @@ import { createApp } from '../src/app.js';
 import { createLogger } from '../src/infrastructure/logger.js';
 import { requestContext } from '../src/http/request-context.js';
 import { errorHandler } from '../src/http/error-handler.js';
+import { csrf } from '../src/http/csrf.js';
 
 const logger = createLogger('silent');
 async function withServer(
@@ -41,6 +42,10 @@ test('health, unknown routes, CORS, and request IDs', async () => {
         'http://localhost:3000',
       );
       assert.equal(health.headers.get('cache-control'), 'no-store');
+      assert.equal(
+        health.headers.get('access-control-allow-credentials'),
+        'true',
+      );
       assert.equal(health.headers.get('x-powered-by'), null);
       assert.match(health.headers.get('x-request-id')!, /^[0-9a-f-]{36}$/);
       const blocked = await fetch(`${url}/api/health`, {
@@ -55,13 +60,24 @@ test('health, unknown routes, CORS, and request IDs', async () => {
         method: 'OPTIONS',
         headers: {
           Origin: 'http://localhost:3000',
-          'Access-Control-Request-Method': 'GET',
+          'Access-Control-Request-Method': 'POST',
+          'Access-Control-Request-Headers': 'content-type',
         },
       });
       assert.equal(preflight.status, 204);
+      assert.match(
+        preflight.headers.get('access-control-allow-methods')!,
+        /POST/,
+      );
+      assert.equal(
+        preflight.headers.get('access-control-allow-headers'),
+        'content-type',
+      );
       const missing = await fetch(`${url}/api/unknown`);
       assert.equal(missing.status, 404);
-      const body = await missing.json();
+      const body = (await missing.json()) as {
+        error: { code: string; requestId: string };
+      };
       assert.equal(body.error.code, 'NOT_FOUND');
       assert.equal(body.error.requestId, missing.headers.get('x-request-id'));
       assert.notEqual(
@@ -72,6 +88,57 @@ test('health, unknown routes, CORS, and request IDs', async () => {
       assert.equal(business.status, 404);
     },
   );
+});
+
+test('direct browser mutations require an exact allowed origin and JSON', async () => {
+  const app = express();
+  app.use(csrf(['https://app.quizmb.com']));
+  app.post('/mutation', (_req, res) => res.json({ success: true }));
+  app.use(errorHandler(logger));
+  await withServer(app, async (url) => {
+    for (const origin of [
+      '',
+      'https://evil.quizmb.com',
+      'https://app.quizmb.com.evil.example',
+    ]) {
+      assert.equal(
+        (
+          await fetch(url + '/mutation', {
+            method: 'POST',
+            headers: { Origin: origin, 'Content-Type': 'application/json' },
+            body: '{}',
+          })
+        ).status,
+        403,
+      );
+    }
+    assert.equal(
+      (
+        await fetch(url + '/mutation', {
+          method: 'POST',
+          headers: {
+            Origin: 'https://app.quizmb.com',
+            'Content-Type': 'text/plain',
+          },
+          body: '{}',
+        })
+      ).status,
+      415,
+    );
+    assert.equal(
+      (
+        await fetch(url + '/mutation', {
+          method: 'POST',
+          headers: {
+            Origin: 'https://app.quizmb.com',
+            'Content-Type': 'application/json',
+          },
+          body: '{}',
+        })
+      ).status,
+      200,
+    );
+  });
 });
 
 test('central handler hides internal messages and stack traces', async () => {
