@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Button, Text } from '@/components/ui';
 import { refreshSession } from '@/lib/api/browser';
 import { apiError } from '@/lib/api/client';
+import { APP_LINKS } from '@/config/navigation';
 
 export function ContinueSession() {
   const [pending, setPending] = useState(false);
@@ -14,13 +15,11 @@ export function ContinueSession() {
     setError('');
     try {
       await refreshSession();
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Discard cached server content after cookie rotation.
-      window.location.assign('/');
+      window.location.assign(APP_LINKS.WORKSPACE.DASHBOARD);
     } catch (failure) {
       const result = apiError(failure);
       if (result.status === 401) {
-        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Cookies have been cleared by Express.
-        window.location.assign('/login');
+        window.location.assign(APP_LINKS.AUTH.LOGIN);
         return;
       }
       setError(result.message);
@@ -39,7 +38,7 @@ export function ContinueSession() {
       )}
       <Text>
         <Link
-          href="/login"
+          href={APP_LINKS.AUTH.LOGIN}
           prefetch={false}
           className="ds-focus text-accent underline"
         >

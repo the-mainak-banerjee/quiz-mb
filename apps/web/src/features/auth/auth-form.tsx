@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { Button, FormField, Input, Text } from '@/components/ui';
 import { VisuallyHidden } from '@/components/visually-hidden';
+import { APP_LINKS } from '@/config/navigation';
 import { api } from '@/lib/api/browser';
 import { apiError } from '@/lib/api/client';
 import { API_ROUTES } from '@/lib/api/routes';
@@ -89,8 +90,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         input,
       );
       // A full server navigation verifies the new session before rendering.
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Discard the anonymous router cache after changing HttpOnly cookies.
-      window.location.assign('/');
+      window.location.assign(APP_LINKS.WORKSPACE.DASHBOARD);
     } catch (error) {
       const failure = apiError(error);
       const fieldErrors = Object.fromEntries(
@@ -152,7 +152,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           </label>
           {!signup && (
             <Link
-              href="#"
+              href={APP_LINKS.AUTH.FORGOT_PASSWORD}
               className="ds-focus text-caption text-accent underline-offset-4 hover:text-action-primary hover:underline"
             >
               Forgot password?
@@ -230,11 +230,17 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
       {signup && (
         <Text variant="caption" tone="secondary" className="text-center">
           By signing up, you agree to our{' '}
-          <Link href="#" className="ds-focus text-accent underline">
+          <Link
+            href={APP_LINKS.LEGAL.TERMS}
+            className="ds-focus text-accent underline"
+          >
             Terms of Service
           </Link>{' '}
           and{' '}
-          <Link href="#" className="ds-focus text-accent underline">
+          <Link
+            href={APP_LINKS.LEGAL.PRIVACY}
+            className="ds-focus text-accent underline"
+          >
             Privacy Policy
           </Link>
           .

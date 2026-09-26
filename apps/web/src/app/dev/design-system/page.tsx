@@ -74,6 +74,7 @@ export default function DesignSystemPage() {
           <Button variant="secondary">Secondary</Button>
           <Button variant="outline">Outline</Button>
           <Button variant="ghost">Ghost</Button>
+          <Button variant="danger">Danger</Button>
           <Button size="hero">Hero trigger</Button>
         </div>
         <div className="flex flex-wrap gap-space-sm">
@@ -86,6 +87,9 @@ export default function DesignSystemPage() {
           </Button>
           <Button variant="ghost" disabled>
             Ghost disabled
+          </Button>
+          <Button variant="danger" disabled>
+            Danger disabled
           </Button>
         </div>
       </Surface>

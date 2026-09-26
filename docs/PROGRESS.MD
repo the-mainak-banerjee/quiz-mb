@@ -2,9 +2,18 @@
 
 ## Current status
 
-Phase 0 and the authentication feature are complete. Other Phase 1/product features have not been started. No deployment has been performed.
+Phase 0, authentication, and the dashboard UI are complete. Dashboard product data is mocked; product backend features have not been started. No deployment has been performed.
 
 This document records implementation progress, verification results, limitations, and approved scope adjustments. Project setup and usage instructions belong in the root README.
+
+## Dashboard UI
+
+- Implemented the approved Stitch unified host/participant dashboard at `/dashboard`, using the existing server-side auth guard. Login, signup, and session recovery now lead there; `/` is public and does not fetch a user session.
+- Added reusable dashboard quiz/project cards, role indicators, navigation, empty states and mock-action feedback. Local role filtering and search operate on static fixtures. No dashboard API, model, mutation, scoring, or realtime behavior was introduced.
+- Reused the existing semantic tokens, Text, Button, Input, Surface, Badge, brand and icon system. Badge accepts contextual status wording without adding a visual variant. Fixed cn() incorrectly merging semantic font sizes with text colors and added a regression test.
+- Added `/dev/dashboard` to preview the same components with a fixture user; it returns not-found outside development. Product action buttons announce that the feature is not available yet.
+- Verified three-column desktop, two-column tablet and single-column mobile layouts, including 390px and 320px screens without horizontal overflow. Checked role filtering, search/no-results, mobile account disclosure and preview-action feedback. Anonymous `/` returns 200; anonymous `/dashboard` redirects to `/login`.
+- Frontend formatting, lint, typecheck, all 9 unit tests, and production build passed. Auth redirects were updated in code; no new account creation or database writes were needed for this UI verification.
 
 ## Authentication — September 25, 2026
 
@@ -175,3 +184,20 @@ These decisions were approved before implementation and remain guidance for late
 
 - Reworked the root README to focus on product details, architecture, setup, environment configuration, commands, and hosting instructions.
 - Moved implementation status, historical verification, scope adjustments, and known limitations into this progress document.
+
+### Shared protected workspace and dashboard empty state — 2026-09-26
+
+- Moved `/dashboard` under `(protected)/(workspace)`. The protected layout initializes the server-validated user provider; the workspace layout owns the shared header/footer. Future live screens can use the protected group without workspace chrome.
+- Kept the existing `(auth)` routes and auth feature folders unchanged in this refactor; the public home remains public.
+- Added a shared current-user context with `updateUser` for successful future profile responses. No profile editor, new state library, or auth-fetching effect was added.
+- Dashboard now defaults to the approved empty-state composition; populated fixtures remain at `/dev/dashboard?state=populated` in development only. Selection depends on supplied data, not a first-visit flag.
+- Removed template/starter-kit and import actions. Omitted the reference's unsupported no-sign-in claim; participant accounts remain required.
+- Extracted workspace header, footer, navigation item, shell, and preview actions. Existing dashboard cards use the shared preview action provider.
+- Checks: frontend lint, typecheck, nine existing tests, and production build passed. Desktop/tablet/mobile empty-state presentation inspected. Profile persistence is not implemented; future profile mutations must call `updateUser` with the saved API response.
+
+### Header overlay dismissal — 2026-09-26
+
+- Added Radix Dialog and Dropdown Menu primitives, retaining QuizMB tokens and controls.
+- Account menu and mobile drawer close on outside click and Escape; focus returns to their triggers. Mobile navigation traps focus and locks background scrolling.
+- Logout accepts an optional action renderer so it participates in menu keyboard navigation while keeping existing request, pending, and error behavior. The menu stays open during logout to preserve error feedback.
+- Verified outside clicks, Escape, focus restoration, mobile focus wrapping, and scroll locking in the development preview. Existing nine frontend tests pass; lint, typecheck, and production build pass.

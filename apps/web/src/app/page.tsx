@@ -1,8 +1,7 @@
-import { requireUser } from '@/lib/auth/session';
-import { LogoutButton } from '@/features/auth/logout-button';
+import Link from 'next/link';
 import { Text, Surface } from '@/components/ui';
-export default async function HomePage() {
-  const user = await requireUser();
+import { APP_LINKS } from '@/config/navigation';
+export default function HomePage() {
   return (
     <main className="mx-auto max-w-content px-margin-sm py-space-2xl md:px-margin lg:px-margin-lg">
       <section className="space-y-space-md">
@@ -13,15 +12,34 @@ export default async function HomePage() {
           A home for live quizzes.
         </Text>
         <Text tone="secondary">
-          Signed in as {user.name} ({user.email}).
+          Thoughtful live quizzes for teams and communities.
         </Text>
         <Surface>
           <Text tone="secondary">
-            Your account is ready. Quiz creation and live participation are not
-            available yet.
+            Create an account or sign in to explore your workspace. Quiz
+            creation and live participation are not available yet.
           </Text>
         </Surface>
-        <LogoutButton />
+        <nav aria-label="Get started" className="flex flex-wrap gap-space-md">
+          <Link
+            href={APP_LINKS.WORKSPACE.DASHBOARD}
+            className="ds-focus text-label text-accent underline"
+          >
+            Go to dashboard
+          </Link>
+          <Link
+            href={APP_LINKS.AUTH.LOGIN}
+            className="ds-focus text-label text-accent underline"
+          >
+            Sign in
+          </Link>
+          <Link
+            href={APP_LINKS.AUTH.SIGNUP}
+            className="ds-focus text-label text-accent underline"
+          >
+            Create account
+          </Link>
+        </nav>
       </section>
     </main>
   );

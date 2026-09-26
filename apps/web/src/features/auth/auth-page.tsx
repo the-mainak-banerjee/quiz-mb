@@ -3,12 +3,13 @@ import { ArrowRight, Check, Circle, PartyPopper, Zap } from 'lucide-react';
 import { Surface, Text } from '@/components/ui';
 import { Brand as Wordmark } from '@/components/brand';
 import { cn } from '@/lib/utils';
+import { APP_LINKS } from '@/config/navigation';
 import { AuthForm } from './auth-form';
 
 function Brand() {
   return (
     <Link
-      href="/"
+      href={APP_LINKS.HOME}
       prefetch={false}
       className="ds-focus inline-flex items-center"
     >
@@ -228,7 +229,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
               {signup ? 'Already have an account?' : "Don't have an account?"}
             </span>
             <Link
-              href={signup ? '/login' : '/signup'}
+              href={signup ? APP_LINKS.AUTH.LOGIN : APP_LINKS.AUTH.SIGNUP}
               prefetch={false}
               className="ds-focus inline-flex items-center gap-space-xs text-label text-accent underline-offset-4 hover:text-action-primary hover:underline"
             >

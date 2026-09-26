@@ -3,7 +3,10 @@ import { cn } from '@/lib/utils';
 
 type Appearance =
   | { variant?: 'primary'; size?: 'default' | 'hero' }
-  | { variant: 'secondary' | 'outline' | 'ghost'; size?: 'default' };
+  | {
+      variant: 'secondary' | 'outline' | 'ghost' | 'danger';
+      size?: 'default';
+    };
 export type ButtonProps = ComponentProps<'button'> & Appearance;
 
 const variants = {
@@ -15,6 +18,7 @@ const variants = {
     'bg-surface border-(length:--stroke-width) border-border-surface text-text-primary enabled:hover:border-accent enabled:hover:bg-canvas',
   ghost:
     'bg-transparent text-text-secondary enabled:hover:bg-action-secondary enabled:hover:text-text-primary',
+  danger: 'bg-danger text-action-on-primary enabled:hover:bg-danger-on-surface',
 };
 
 export function Button({

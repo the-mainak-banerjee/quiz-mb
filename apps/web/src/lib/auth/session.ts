@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { createApiClient, ApiError } from '../api/client';
 import { API_ORIGIN } from '../api/config';
 import { API_ROUTES } from '../api/routes';
+import { APP_LINKS } from '@/config/navigation';
 export type CurrentUser = {
   id: string;
   name: string;
@@ -30,7 +31,7 @@ export async function currentUser(
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
       if (error.code === 'TOKEN_EXPIRED' && redirectExpired)
-        redirect('/session');
+        redirect(APP_LINKS.AUTH.SESSION);
       return null;
     }
     throw error;
@@ -38,6 +39,6 @@ export async function currentUser(
 }
 export async function requireUser() {
   const user = await currentUser();
-  if (!user) redirect('/login');
+  if (!user) redirect(APP_LINKS.AUTH.LOGIN);
   return user;
 }

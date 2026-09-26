@@ -3,6 +3,8 @@ import { cn } from '@/lib/utils';
 
 export type BadgeProps = Omit<ComponentProps<'span'>, 'children'> & {
   variant: 'live' | 'scheduled' | 'draft' | 'completed';
+  /** Contextual wording for the existing status, e.g. Live Ready. */
+  label?: string;
 };
 const variants = {
   live: {
@@ -19,11 +21,16 @@ const variants = {
   },
   completed: {
     label: 'Completed',
-    style: 'bg-status-neutral-surface text-status-neutral-text',
+    style: 'bg-danger-surface text-danger-on-surface',
   },
 };
 
-export function Badge({ variant, className, ...props }: BadgeProps) {
+export function Badge({
+  variant,
+  label: customLabel,
+  className,
+  ...props
+}: BadgeProps) {
   const { label, style } = variants[variant];
   return (
     <span
@@ -40,7 +47,7 @@ export function Badge({ variant, className, ...props }: BadgeProps) {
           className="ds-live-dot size-status-dot rounded-pill bg-current"
         />
       )}
-      {label}
+      {customLabel ?? label}
     </span>
   );
 }
