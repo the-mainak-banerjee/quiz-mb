@@ -12,7 +12,6 @@ import {
   Copy,
   Eye,
   Folder,
-  CheckCircle2,
 } from 'lucide-react';
 import type { ProjectDto, QuizDto, QuestionDto } from '@quizmb/contracts';
 import { questionSchema, quizSchema } from '@quizmb/contracts';
@@ -30,6 +29,7 @@ import {
   type QuestionFormHandle,
 } from './question-form';
 import { QuizOption } from './quiz-option';
+import { ReviewPublishPanel } from '@/features/publishing/review-publish-panel';
 const MarkdownPreview = dynamic(() => import('./markdown-preview'));
 type Step = 'details' | 'questions' | 'review';
 export function QuizEditor({
@@ -378,99 +378,12 @@ export function QuizEditor({
         </div>
       )}
       {step === 'review' && quiz && (
-        <div className="space-y-space-md">
-          <Surface className="flex flex-wrap items-center justify-between gap-space-md bg-action-secondary">
-            <div className="space-y-space-xs">
-              <Text
-                as="h2"
-                variant="section-heading"
-                className="flex items-center gap-space-xs"
-              >
-                <CheckCircle2 size={24} />
-                {valid
-                  ? 'Draft content is ready for review'
-                  : 'Complete your quiz before publishing'}
-              </Text>
-              <Text tone="secondary">
-                {quiz.questions.length} saved questions ·{' '}
-                {quiz.questions.filter((q) => q.type !== 'DESCRIPTIVE').length}{' '}
-                scored types ·{' '}
-                {quiz.questions.filter((q) => q.type === 'DESCRIPTIVE').length}{' '}
-                ungraded
-              </Text>
-            </div>
-            <Badge variant="draft" />
-          </Surface>
-          <div className="grid gap-gutter md:grid-cols-2">
-            <Surface className="space-y-space-md">
-              <Text as="h2" variant="section-heading">
-                Metadata & scope
-              </Text>
-              <Text variant="label">Project: {project.name}</Text>
-              <Text>{quiz.title}</Text>
-              <Text tone="secondary">{quiz.description}</Text>
-              <Text>
-                {quiz.registrationLimit} seats ·{' '}
-                {quiz.defaultQuestionDurationSeconds}s default
-              </Text>
-              <Text variant="body-secondary">
-                Planned date:{' '}
-                {quiz.plannedStartAt
-                  ? new Date(quiz.plannedStartAt).toLocaleString()
-                  : 'Not set'}
-              </Text>
-              <Text variant="caption" tone="secondary">
-                This is a planned date only. Publishing is not available yet.
-              </Text>
-            </Surface>
-            <Surface className="space-y-space-md">
-              <Text as="h2" variant="section-heading">
-                Content inventory
-              </Text>
-              {quiz.questions.map((q, i) => (
-                <div
-                  key={q.id}
-                  className="border-b border-border-surface pb-space-sm"
-                >
-                  <Text variant="label" className="line-clamp-2">
-                    {i + 1}. {q.text}
-                  </Text>
-                  <Text variant="caption" tone="secondary">
-                    {QUESTION_LABELS[q.type]} ·{' '}
-                    {q.durationOverrideSeconds ??
-                      quiz.defaultQuestionDurationSeconds}
-                    s ·{' '}
-                    {q.type === 'DESCRIPTIVE'
-                      ? 'Ungraded'
-                      : `${q.options.length} options, ${q.options.filter((o) => o.isCorrect).length} correct`}
-                  </Text>
-                </div>
-              ))}
-              <Text variant="caption" tone="secondary">
-                Total question time:{' '}
-                {quiz.questions.reduce(
-                  (sum, q) =>
-                    sum +
-                    (q.durationOverrideSeconds ??
-                      quiz.defaultQuestionDurationSeconds),
-                  0,
-                )}{' '}
-                seconds (excludes host discussion)
-              </Text>
-            </Surface>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-space-sm">
-            <Button variant="secondary" onClick={() => setStep('questions')}>
-              Back to questions
-            </Button>
-            <div className="space-y-space-xs">
-              <Button disabled>Publish quiz</Button>
-              <Text variant="caption" tone="secondary">
-                Your quiz remains a private draft.
-              </Text>
-            </div>
-          </div>
-        </div>
+        <ReviewPublishPanel
+          quiz={quiz}
+          project={project}
+          valid={valid}
+          onBack={() => setStep('questions')}
+        />
       )}
       <Modal
         open={preview}

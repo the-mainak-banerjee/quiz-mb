@@ -10,16 +10,18 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(uuid()) @db.Uuid
-  name         String        @db.VarChar(100)
-  email        String        @unique @db.VarChar(254)
-  passwordHash String
-  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
-  sessions     AuthSession[]
-  projects     Project[]
-  quizzes      Quiz[]
-  media        MediaAsset[]
+  id                  String               @id @default(uuid()) @db.Uuid
+  name                String               @db.VarChar(100)
+  email               String               @unique @db.VarChar(254)
+  passwordHash        String
+  createdAt           DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime             @updatedAt @db.Timestamptz(3)
+  sessions            AuthSession[]
+  projects            Project[]
+  quizzes             Quiz[]
+  media               MediaAsset[]
+  projectAssociations ProjectAssociation[]
+  quizRegistrations   QuizRegistration[]
 
   @@map("users")
 }
@@ -67,44 +69,85 @@ enum MediaStatus {
   DELETED
 }
 
+enum RegistrationStatus {
+  REGISTERED
+  CANCELLED
+}
+
 model Project {
-  id          String   @id @default(uuid()) @db.Uuid
-  ownerUserId String   @db.Uuid
-  name        String   @db.VarChar(60)
-  description String   @default("") @db.VarChar(240)
-  createdAt   DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
-  owner       User     @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
-  quizzes     Quiz[]
+  id           String               @id @default(uuid()) @db.Uuid
+  ownerUserId  String               @db.Uuid
+  name         String               @db.VarChar(60)
+  description  String               @default("") @db.VarChar(240)
+  createdAt    DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime             @updatedAt @db.Timestamptz(3)
+  owner        User                 @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  quizzes      Quiz[]
+  associations ProjectAssociation[]
 
   @@index([ownerUserId, createdAt])
   @@map("projects")
 }
 
 model Quiz {
-  id                             String       @id @default(uuid()) @db.Uuid
-  publicId                       String       @unique
-  projectId                      String       @db.Uuid
-  creatorUserId                  String       @db.Uuid
-  title                          String       @db.VarChar(90)
-  description                    String       @default("")
+  id                             String               @id @default(uuid()) @db.Uuid
+  publicId                       String               @unique
+  projectId                      String               @db.Uuid
+  creatorUserId                  String               @db.Uuid
+  title                          String               @db.VarChar(90)
+  description                    String               @default("")
   registrationLimit              Int
   defaultQuestionDurationSeconds Int
-  allowLateJoin                  Boolean      @default(true)
-  plannedStartAt                 DateTime?    @db.Timestamptz(3)
-  status                         QuizStatus   @default(DRAFT)
-  coverMediaId                   String?      @db.Uuid
-  createdAt                      DateTime     @default(now()) @db.Timestamptz(3)
-  updatedAt                      DateTime     @updatedAt @db.Timestamptz(3)
-  project                        Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  creator                        User         @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
-  cover                          MediaAsset?  @relation("QuizCover", fields: [coverMediaId], references: [id], onDelete: SetNull)
-  media                          MediaAsset[] @relation("QuizUploads")
+  allowLateJoin                  Boolean              @default(true)
+  plannedStartAt                 DateTime?            @db.Timestamptz(3)
+  status                         QuizStatus           @default(DRAFT)
+  coverMediaId                   String?              @db.Uuid
+  createdAt                      DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt                      DateTime             @updatedAt @db.Timestamptz(3)
+  publishedAt                    DateTime?            @db.Timestamptz(3)
+  project                        Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  creator                        User                 @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
+  cover                          MediaAsset?          @relation("QuizCover", fields: [coverMediaId], references: [id], onDelete: SetNull)
+  media                          MediaAsset[]         @relation("QuizUploads")
   questions                      Question[]
+  registrations                  QuizRegistration[]
+  createdAssociations            ProjectAssociation[] @relation("AssociationCreatedViaQuiz")
 
   @@index([projectId, status])
   @@index([creatorUserId, createdAt])
   @@map("quizzes")
+}
+
+model ProjectAssociation {
+  id               String   @id @default(uuid()) @db.Uuid
+  projectId        String   @db.Uuid
+  userId           String   @db.Uuid
+  createdViaQuizId String?  @db.Uuid
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdViaQuiz   Quiz?    @relation("AssociationCreatedViaQuiz", fields: [createdViaQuizId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, userId])
+  @@index([userId, createdAt])
+  @@map("project_associations")
+}
+
+model QuizRegistration {
+  id           String             @id @default(uuid()) @db.Uuid
+  quizId       String             @db.Uuid
+  userId       String             @db.Uuid
+  status       RegistrationStatus @default(REGISTERED)
+  registeredAt DateTime           @default(now()) @db.Timestamptz(3)
+  cancelledAt  DateTime?          @db.Timestamptz(3)
+  quiz         Quiz               @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([quizId, userId])
+  @@index([quizId, status])
+  @@index([userId, status])
+  @@index([userId, registeredAt])
+  @@map("quiz_registrations")
 }
 
 model Question {

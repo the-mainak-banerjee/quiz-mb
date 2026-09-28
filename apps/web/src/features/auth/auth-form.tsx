@@ -32,7 +32,13 @@ function fieldError(field: Field, value: string, signup: boolean): string {
   return value.length > 1024 ? 'Use 1024 characters or fewer.' : '';
 }
 
-export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
+export function AuthForm({
+  mode,
+  returnTo,
+}: {
+  mode: 'login' | 'signup';
+  returnTo: string;
+}) {
   const signup = mode === 'signup';
   const [visible, setVisible] = useState(false);
   const [pending, setPending] = useState(false);
@@ -90,7 +96,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         input,
       );
       // A full server navigation verifies the new session before rendering.
-      window.location.assign(APP_LINKS.WORKSPACE.DASHBOARD);
+      window.location.assign(returnTo);
     } catch (error) {
       const failure = apiError(error);
       const fieldErrors = Object.fromEntries(

@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
   Clock3,
@@ -8,6 +9,7 @@ import {
   FolderPlus,
   History,
   Layers3,
+  ListChecks,
   Plus,
   Search,
   Sparkles,
@@ -24,7 +26,6 @@ import { api } from '@/lib/api/browser';
 import { apiError } from '@/lib/api/client';
 import { API_ROUTES } from '@/lib/api/routes';
 
-type ProjectFilter = 'all' | 'recent' | 'active';
 type QuizFilter = 'all' | 'scheduled' | 'draft' | 'completed';
 
 function formatDate(value: string) {
@@ -106,32 +107,16 @@ function EmptyProjects({ onCreate }: { onCreate: () => void }) {
 }
 
 export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
+  const router = useRouter();
   const form = useRef<{ close: () => void }>(null);
   const [items, setItems] = useState(initial);
-  const [filter, setFilter] = useState<ProjectFilter>('all');
   const [query, setQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [more, setMore] = useState(initial.length === 25);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const visible = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    const filtered = items.filter((project) =>
-      `${project.name} ${project.description ?? ''}`
-        .toLowerCase()
-        .includes(normalizedQuery),
-    );
-    if (filter === 'recent') {
-      return [...filtered].sort(
-        (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
-      );
-    }
-    if (filter === 'active') {
-      return [...filtered].sort((a, b) => b.quizCount - a.quizCount);
-    }
-    return filtered;
-  }, [filter, items, query]);
+
 
   const createModal = (
     <Modal
@@ -149,6 +134,7 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
         onSaved={(project) => {
           setItems((current) => [project, ...current]);
           setCreateOpen(false);
+          router.push(APP_LINKS.WORKSPACE.PROJECT(project.id));
         }}
       />
     </Modal>
@@ -167,15 +153,10 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
     (total, project) => total + project.quizCount,
     0,
   );
-  const filters: { value: ProjectFilter; label: string }[] = [
-    { value: 'all', label: `All projects ${items.length}` },
-    { value: 'recent', label: 'Recently modified' },
-    { value: 'active', label: 'Most active' },
-  ];
 
   return (
     <>
-      <div className="flex flex-col gap-space-md md:flex-row md:items-end md:justify-between">
+      <div className="flex flex-col gap-space-md lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-space-xs">
           <Text
             variant="label"
@@ -201,7 +182,7 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
       </div>
 
       <div className="flex flex-col gap-space-sm lg:flex-row lg:items-center lg:justify-between">
-        <label className="relative block w-full max-w-xl">
+        <label className="relative block w-full lg:max-w-xl">
           <Search
             className="pointer-events-none absolute left-control-x top-1/2 -translate-y-1/2 text-text-secondary"
             size={18}
@@ -216,28 +197,11 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
             className="pl-space-xl"
           />
         </label>
-        <div
-          role="group"
-          aria-label="Sort projects"
-          className="flex max-w-full gap-badge-y overflow-x-auto rounded-card bg-surface-muted p-badge-y"
-        >
-          {filters.map((item) => (
-            <Button
-              key={item.value}
-              variant={filter === item.value ? 'primary' : 'ghost'}
-              aria-pressed={filter === item.value}
-              onClick={() => setFilter(item.value)}
-              className="whitespace-nowrap rounded-[calc(var(--radius-card)-var(--spacing-badge-y))] px-badge-x"
-            >
-              {item.label}
-            </Button>
-          ))}
-        </div>
       </div>
 
-      {visible.length ? (
+      {initial.length ? (
         <div className="grid gap-gutter md:grid-cols-2">
-          {visible.map((project) => (
+          {initial.map((project) => (
             <Surface
               key={project.id}
               as="article"
@@ -279,10 +243,11 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
                 </Text>
                 <NavigationItem
                   href={APP_LINKS.WORKSPACE.PROJECT(project.id)}
+                  icon={<ArrowRight size={16} aria-hidden="true" />}
+                  iconPosition="right"
                   className="px-space-xs text-accent"
                 >
                   Open project
-                  <ArrowRight size={16} aria-hidden="true" />
                 </NavigationItem>
               </div>
             </Surface>
@@ -426,9 +391,9 @@ export function ProjectQuizzes({
   return (
     <section
       aria-labelledby="project-quizzes-heading"
-      className="space-y-space-md"
+      className="min-w-0 space-y-space-md"
     >
-      <div className="flex flex-col gap-space-sm md:flex-row md:items-center md:justify-between">
+      <div className="flex min-w-0 flex-col gap-space-sm md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-space-xs">
           <Text as="h2" id="project-quizzes-heading" variant="section-heading">
             Quizzes
@@ -442,19 +407,21 @@ export function ProjectQuizzes({
             {items.length}
           </Text>
         </div>
-        <div className="flex max-w-full gap-badge-y overflow-x-auto rounded-card bg-surface-muted p-badge-y">
-          {filters.map((item) => (
-            <Button
-              key={item.value}
-              variant={filter === item.value ? 'primary' : 'ghost'}
-              aria-pressed={filter === item.value}
-              onClick={() => setFilter(item.value)}
-              className="whitespace-nowrap rounded-[calc(var(--radius-card)-var(--spacing-badge-y))] px-badge-x"
-            >
-              {item.label}
-            </Button>
-          ))}
-        </div>
+        {items.length > 0 && (
+          <div className="flex max-w-full gap-badge-y overflow-x-auto rounded-card bg-surface-muted p-badge-y">
+            {filters.map((item) => (
+              <Button
+                key={item.value}
+                variant={filter === item.value ? 'primary' : 'ghost'}
+                aria-pressed={filter === item.value}
+                onClick={() => setFilter(item.value)}
+                className="whitespace-nowrap rounded-[calc(var(--radius-card)-var(--spacing-badge-y))] px-badge-x"
+              >
+                {item.label}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
 
       {visible.length ? (
@@ -478,21 +445,42 @@ export function ProjectQuizzes({
               <QuizCard
                 key={quiz.id}
                 quiz={card}
-                actionHref={APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)}
+                actionHref={
+                  quiz.status === 'PUBLISHED' || quiz.status === 'LOBBY'
+                    ? APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id)
+                    : APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)
+                }
               />
             );
           })}
         </div>
       ) : (
-        <Surface className="text-center">
-          <Text as="h3" variant="card-title">
+        <Surface className="flex flex-col items-center py-space-2xl text-center">
+          {!items.length && (
+            <div className="mb-space-sm flex size-space-2xl items-center justify-center rounded-pill bg-action-secondary text-accent">
+              <ListChecks size={28} aria-hidden="true" />
+            </div>
+          )}
+          <Text
+            as="h3"
+            variant={items.length ? 'card-title' : 'section-heading'}
+          >
             {items.length ? 'No quizzes with this status' : 'No quizzes yet'}
           </Text>
-          <Text tone="secondary" className="mt-space-xs">
+          <Text tone="secondary" className="mt-space-xs max-w-sm">
             {items.length
               ? 'Choose another filter to see this project’s quizzes.'
-              : 'Create the first quiz in this project when you are ready.'}
+              : 'Create your first quiz for this project.'}
           </Text>
+          {!items.length && (
+            <NavigationItem
+              href={APP_LINKS.WORKSPACE.NEW_PROJECT_QUIZ(project.id)}
+              icon={<Plus size={18} aria-hidden="true" />}
+              className="ds-primary-motion mt-space-md bg-action-primary text-action-on-primary hover:bg-action-primary-hover hover:text-action-on-primary"
+            >
+              Create quiz
+            </NavigationItem>
+          )}
         </Surface>
       )}
 

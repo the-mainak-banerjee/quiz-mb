@@ -4,6 +4,7 @@ import { Surface, Text } from '@/components/ui';
 import { Brand as Wordmark } from '@/components/brand';
 import { cn } from '@/lib/utils';
 import { APP_LINKS } from '@/config/navigation';
+import { authLink } from '@/lib/auth/return-to';
 import { AuthForm } from './auth-form';
 
 function Brand() {
@@ -187,7 +188,13 @@ function Preview({ signup }: { signup: boolean }) {
   );
 }
 
-export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
+export function AuthPage({
+  mode,
+  returnTo,
+}: {
+  mode: 'login' | 'signup';
+  returnTo: string;
+}) {
   const signup = mode === 'signup';
 
   return (
@@ -219,7 +226,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                 : 'Enter your credentials to access your live quiz sessions and workspaces.'}
             </Text>
           </div>
-          <AuthForm mode={mode} />
+          <AuthForm mode={mode} returnTo={returnTo} />
           <Text
             variant="body-secondary"
             tone="secondary"
@@ -229,7 +236,10 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
               {signup ? 'Already have an account?' : "Don't have an account?"}
             </span>
             <Link
-              href={signup ? APP_LINKS.AUTH.LOGIN : APP_LINKS.AUTH.SIGNUP}
+              href={authLink(
+                signup ? APP_LINKS.AUTH.LOGIN : APP_LINKS.AUTH.SIGNUP,
+                returnTo,
+              )}
               prefetch={false}
               className="ds-focus inline-flex items-center gap-space-xs text-label text-accent underline-offset-4 hover:text-action-primary hover:underline"
             >

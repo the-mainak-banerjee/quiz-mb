@@ -1,18 +1,26 @@
 import { FolderPlus, Plus, ShieldCheck, UsersRound } from 'lucide-react';
 import { Surface, Text } from '@/components/ui';
-import { PreviewButton } from '@/components/workspace/preview-actions';
-import { QuizCard } from './quiz-card';
+import { NavigationItem } from '@/components/workspace/navigation-item';
 import { QuizList } from './quiz-list';
 import { ProjectCard } from './project-card';
 import type { Quiz } from './mock-data';
 import { DashboardEmptyState } from './dashboard-empty-state';
 import { getGreeting } from '@/lib/utils';
+import { APP_LINKS } from '@/config/navigation';
+
+function deduplicateQuizzes(quizzes: Quiz[]) {
+  const byId = new Map<string, Quiz>();
+  for (const quiz of quizzes) {
+    const current = byId.get(quiz.id);
+    if (!current || quiz.role === 'host') byId.set(quiz.id, quiz);
+  }
+  return [...byId.values()];
+}
 
 export function DashboardView({
   user,
   quizzes = [],
   projects = [],
-  upcomingQuiz = null,
 }: {
   user: { name: string };
   quizzes?: Quiz[];
@@ -22,16 +30,26 @@ export function DashboardView({
     quizzes: number;
     members: number;
   }[];
-  upcomingQuiz?: Quiz | null;
 }) {
-  const empty = quizzes.length === 0 && !upcomingQuiz && projects.length === 0;
+  const uniqueQuizzes = deduplicateQuizzes(quizzes);
+  const empty = uniqueQuizzes.length === 0 && projects.length === 0;
   const greeting = getGreeting();
-  const hosting =
-    quizzes.filter((quiz) => quiz.role === 'host').length +
-    (upcomingQuiz?.role === 'host' ? 1 : 0);
-  const participating = quizzes.filter(
+  const hostedQuizzes = uniqueQuizzes.filter((quiz) => quiz.role === 'host');
+  const participantQuizzes = uniqueQuizzes.filter(
     (quiz) => quiz.role === 'participant',
-  ).length;
+  );
+  const hosting = hostedQuizzes.length;
+  const participating = participantQuizzes.length;
+  const breakdown = (
+    items: Quiz[],
+    labels: Partial<Record<Quiz['status'], string>>,
+  ) =>
+    (Object.keys(labels) as Quiz['status'][])
+      .map((status) => ({
+        count: items.filter((quiz) => quiz.status === status).length,
+        label: labels[status]!,
+      }))
+      .filter((item) => item.count > 0);
   return (
     <main
       id="dashboard-content"
@@ -49,23 +67,20 @@ export function DashboardView({
           </Text>
         </div>
         <div className="flex flex-wrap gap-space-xs">
-          <PreviewButton
-            action="Create quiz"
+          <NavigationItem
+            href={APP_LINKS.WORKSPACE.NEW_QUIZ}
             icon={<Plus size={18} aria-hidden="true" />}
+            className="ds-primary-motion h-control bg-action-primary text-action-on-primary hover:bg-action-primary-hover hover:text-action-on-primary"
           >
             Create quiz
-          </PreviewButton>
+          </NavigationItem>
         </div>
       </div>
       {empty ? (
         <DashboardEmptyState />
       ) : (
         <>
-          <section
-            aria-label="Workspace overview"
-            className="grid gap-gutter md:grid-cols-2"
-          >
-            {upcomingQuiz && <QuizCard quiz={upcomingQuiz} featured />}
+          <section aria-label="Workspace overview" className="grid gap-gutter">
             <Surface className="flex min-w-0 flex-col justify-between gap-space-md">
               <div className="flex flex-wrap items-start justify-between gap-space-xs">
                 <div className="space-y-space-xs">
@@ -94,21 +109,22 @@ export function DashboardView({
                   {
                     label: 'Hosting',
                     count: hosting,
-                    breakdown: [
-                      { count: 1, label: 'live ready' },
-                      { count: 2, label: 'scheduled' },
-                      { count: 1, label: 'draft' },
-                    ],
+                    breakdown: breakdown(hostedQuizzes, {
+                      live: 'live now',
+                      scheduled: 'scheduled',
+                      draft: 'draft',
+                      completed: 'completed',
+                    }),
                     Icon: ShieldCheck,
                   },
                   {
                     label: 'Participating',
                     count: participating,
-                    breakdown: [
-                      { count: 1, label: 'live now' },
-                      { count: 1, label: 'registered' },
-                      { count: 1, label: 'completed' },
-                    ],
+                    breakdown: breakdown(participantQuizzes, {
+                      live: 'live now',
+                      scheduled: 'registered',
+                      completed: 'completed',
+                    }),
                     Icon: UsersRound,
                   },
                 ].map(({ label, count, breakdown, Icon }) => (
@@ -127,22 +143,24 @@ export function DashboardView({
                       {count} {label}
                     </Text>
                     <Text variant="caption" tone="secondary">
-                      {breakdown.map((item, index) => (
-                        <span key={item.label}>
-                          {index > 0 && ', '}
-                          <strong className="font-semibold text-text-primary">
-                            {item.count}
-                          </strong>{' '}
-                          {item.label}
-                        </span>
-                      ))}
+                      {breakdown.length
+                        ? breakdown.map((item, index) => (
+                            <span key={item.label}>
+                              {index > 0 && ', '}
+                              <strong className="font-semibold text-text-primary">
+                                {item.count}
+                              </strong>{' '}
+                              {item.label}
+                            </span>
+                          ))
+                        : 'No quiz activity'}
                     </Text>
                   </div>
                 ))}
               </div>
             </Surface>
           </section>
-          <QuizList quizzes={quizzes} hostCount={hosting} />
+          <QuizList quizzes={uniqueQuizzes} />
           <section
             id="projects"
             aria-labelledby="projects-heading"
@@ -157,13 +175,13 @@ export function DashboardView({
                   Team spaces and question banks
                 </Text>
               </div>
-              <PreviewButton
-                action="New project"
-                variant="secondary"
+              <NavigationItem
+                href={APP_LINKS.WORKSPACE.NEW_PROJECT}
                 icon={<FolderPlus size={18} aria-hidden="true" />}
+                className="h-control bg-action-secondary text-accent hover:bg-action-secondary-hover hover:text-accent"
               >
                 New project
-              </PreviewButton>
+              </NavigationItem>
             </div>
             <div className="grid gap-gutter md:grid-cols-2 lg:grid-cols-3">
               {projects.map((project) => (

@@ -2,11 +2,8 @@ import { notFound } from 'next/navigation';
 import { DashboardView } from '@/features/dashboard/dashboard-view';
 import { CurrentUserProvider } from '@/contexts/current-user-context';
 import { WorkspaceShell } from '@/components/workspace/workspace-shell';
-import {
-  quizzes,
-  projects,
-  upcomingQuiz,
-} from '@/features/dashboard/mock-data';
+import { quizzes, projects } from '@/features/dashboard/mock-data';
+import { upcomingParticipantQuizzes } from '@/features/publishing/mock-data';
 
 // Static fixture preview for responsive UI work, never available in production.
 export default async function DashboardPreviewPage({
@@ -27,9 +24,8 @@ export default async function DashboardPreviewPage({
       <WorkspaceShell>
         <DashboardView
           user={user}
-          quizzes={populated ? quizzes : []}
+          quizzes={populated ? [...quizzes, ...upcomingParticipantQuizzes] : []}
           projects={populated ? projects : []}
-          upcomingQuiz={populated ? upcomingQuiz : null}
         />
       </WorkspaceShell>
     </CurrentUserProvider>

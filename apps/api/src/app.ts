@@ -9,7 +9,7 @@ import type { UsersService } from './modules/users/service.js';
 import { notFound } from './http/not-found.js';
 import { errorHandler } from './http/error-handler.js';
 import type { PrismaClient } from '@quizmb/database';
-import { authoringRoutes } from './modules/authoring.js';
+import { authoringRoutes, publicAuthoringRoutes } from './modules/authoring.js';
 import { authenticate } from './http/authenticate.js';
 import { csrf } from './http/csrf.js';
 import type { SupabaseStorage } from './modules/media/storage.js';
@@ -47,6 +47,7 @@ export function createApp({
   app.use(express.json({ limit: '128kb' }));
   if (auth && users)
     app.use('/api', authRoutes(auth, users, production, allowedOrigins));
+  if (database) app.use('/api', publicAuthoringRoutes(database, storage));
   if (auth && database)
     app.use(
       '/api',

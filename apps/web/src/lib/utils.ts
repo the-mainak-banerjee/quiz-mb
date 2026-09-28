@@ -47,3 +47,22 @@ export function getGreeting(date = new Date()) {
 
   return 'Hello Night Owl,';
 }
+
+export function getInitials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+export function pluralize(
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+) {
+  return count === 1 ? singular : plural;
+}

@@ -166,3 +166,62 @@ export type UploadDto = {
   mediaId: string;
   upload: { url: string; token: string; path: string };
 };
+
+export type PublicQuizDto = {
+  id: string;
+  publicId: string;
+  title: string;
+  description: string;
+  status: 'PUBLISHED' | 'LOBBY' | 'LIVE' | 'COMPLETED';
+  plannedStartAt: string;
+  registrationLimit: number;
+  registrationCount: number;
+  isFull: boolean;
+  project: { id: string; name: string };
+  host: { id: string; name: string };
+  cover: MediaDto | null;
+  questionCount: number;
+};
+
+export type RegistrationDto = {
+  registered: boolean;
+  registeredAt: string | null;
+  registrationCount: number;
+};
+
+export type HostRegistrationDto = {
+  id: string;
+  userId: string;
+  name: string;
+  registeredAt: string;
+};
+
+export type ParticipantDashboardDto = {
+  upcoming: PublicQuizDto[];
+  live: PublicQuizDto[];
+  history: PublicQuizDto[];
+};
+
+export type HostDashboardQuizDto = {
+  id: string;
+  publicId: string;
+  projectId: string;
+  projectName: string;
+  title: string;
+  description: string;
+  status: string;
+  plannedStartAt: string | null;
+  updatedAt: string;
+  questionCount: number;
+  registrationCount: number;
+};
+
+export type HostDashboardDto = {
+  projects: Array<{
+    id: string;
+    title: string;
+    quizzes: number;
+    members: number;
+  }>;
+  quizzes: HostDashboardQuizDto[];
+};

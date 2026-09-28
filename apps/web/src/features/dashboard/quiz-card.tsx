@@ -12,7 +12,9 @@ import {
 import { Badge, Surface, Text } from '@/components/ui';
 import { RoleIndicator } from './indicators';
 import { PreviewButton } from '@/components/workspace/preview-actions';
+import { NavigationItem } from '@/components/workspace/navigation-item';
 import type { Quiz } from './mock-data';
+import { cn } from '@/lib/utils';
 
 export function QuizCard({
   quiz,
@@ -90,16 +92,31 @@ export function QuizCard({
             </Text>
           )}
         </div>
-        <PreviewButton
-          action={quiz.action}
-          {...(actionHref ? { href: actionHref } : {})}
-          variant={quiz.status === 'live' ? 'primary' : 'secondary'}
-          icon={<ActionIcon size={16} aria-hidden="true" />}
-          iconPosition={quiz.status === 'live' ? 'right' : 'left'}
-          className="w-full"
-        >
-          {quiz.action}
-        </PreviewButton>
+        {actionHref ? (
+          <NavigationItem
+            href={actionHref}
+            icon={<ActionIcon size={16} aria-hidden="true" />}
+            iconPosition={quiz.status === 'live' ? 'right' : 'left'}
+            className={cn(
+              'h-control w-full',
+              quiz.status === 'live'
+                ? 'ds-primary-motion bg-action-primary text-action-on-primary hover:bg-action-primary-hover hover:text-action-on-primary'
+                : 'bg-action-secondary text-accent hover:bg-action-secondary-hover hover:text-accent',
+            )}
+          >
+            {quiz.action}
+          </NavigationItem>
+        ) : (
+          <PreviewButton
+            action={quiz.action}
+            variant={quiz.status === 'live' ? 'primary' : 'secondary'}
+            icon={<ActionIcon size={16} aria-hidden="true" />}
+            iconPosition={quiz.status === 'live' ? 'right' : 'left'}
+            className="w-full"
+          >
+            {quiz.action}
+          </PreviewButton>
+        )}
       </div>
     </Surface>
   );

@@ -1,6 +1,7 @@
 import { ClipboardCheck, SquarePen, Activity, ShieldCheck } from 'lucide-react';
 import { Surface, Text } from '@/components/ui';
-import { PreviewButton } from '@/components/workspace/preview-actions';
+import { NavigationItem } from '@/components/workspace/navigation-item';
+import { APP_LINKS } from '@/config/navigation';
 
 export function DashboardEmptyState() {
   return (
@@ -25,10 +26,13 @@ export function DashboardEmptyState() {
           your first quiz and bring your team together.
         </Text>
       </div>
-      <PreviewButton action="Create quiz" className="w-full md:w-auto">
-        <SquarePen size={18} aria-hidden="true" />
+      <NavigationItem
+        href={APP_LINKS.WORKSPACE.NEW_QUIZ}
+        icon={<SquarePen size={18} aria-hidden="true" />}
+        className="ds-primary-motion h-control w-full bg-action-primary text-action-on-primary hover:bg-action-primary-hover hover:text-action-on-primary md:w-auto"
+      >
         Create your first quiz
-      </PreviewButton>
+      </NavigationItem>
       <div className="flex flex-wrap justify-center gap-space-md pt-space-lg md:gap-space-lg">
         <Text
           variant="caption"

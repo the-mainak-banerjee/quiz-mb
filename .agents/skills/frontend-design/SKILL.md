@@ -231,6 +231,8 @@ Interactive elements must support keyboard use, visible focus states, disabled s
 
 Do not sacrifice semantics for visual abstraction.
 
+Use links for navigation and buttons for actions. If activating a control changes the route or opens another page, render a Next.js link through the existing navigation primitive; do not simulate navigation from a button click. Reserve buttons for operations performed on the current page, such as submitting, filtering, opening a dialog, or changing local state.
+
 ## Responsive Behavior
 
 Design intentionally for desktop, tablet, and mobile.

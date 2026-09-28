@@ -44,5 +44,25 @@ export function quizRoutes(service: QuizzesService) {
       ),
     });
   });
+  r.post('/quizzes/:id/publish', async (req, res) => {
+    res.json({
+      success: true,
+      data: await service.publish(
+        validate(z.uuid(), req.params.id),
+        res.locals.userId as string,
+      ),
+    });
+  });
   return r;
+}
+
+export function publicQuizRoutes(service: QuizzesService) {
+  return Router().get('/public/quizzes/:publicId', async (req, res) => {
+    res.json({
+      success: true,
+      data: await service.getPublic(
+        validate(z.string().min(16).max(64), req.params.publicId),
+      ),
+    });
+  });
 }

@@ -1,33 +1,22 @@
-import { Building2, GraduationCap, Palette, ChevronRight } from 'lucide-react';
+import { ChevronRight, FolderOpen } from 'lucide-react';
 import { Surface, Text } from '@/components/ui';
-import { PreviewButton } from '@/components/workspace/preview-actions';
-import { cn } from '@/lib/utils';
+import { NavigationItem } from '@/components/workspace/navigation-item';
 import { VisuallyHidden } from '@/components/visually-hidden';
+import { APP_LINKS } from '@/config/navigation';
 
 export function ProjectCard({
   project,
 }: {
   project: { id: string; title: string; quizzes: number; members: number };
 }) {
-  const Icon =
-    project.id === 'design'
-      ? Palette
-      : project.id === 'company'
-        ? Building2
-        : GraduationCap;
   return (
     <Surface
       as="article"
       className="flex min-w-0 items-center justify-between gap-space-xs"
     >
       <div className="flex min-w-0 items-center gap-space-sm">
-        <div
-          className={cn(
-            'flex size-control shrink-0 items-center justify-center rounded-control bg-surface-high text-text-secondary',
-            project.id === 'design' && 'bg-action-secondary text-accent',
-          )}
-        >
-          <Icon size={20} aria-hidden="true" />
+        <div className="flex size-control shrink-0 items-center justify-center rounded-control bg-action-secondary text-accent">
+          <FolderOpen size={20} aria-hidden="true" />
         </div>
         <div className="min-w-0">
           <Text as="h3" variant="card-title">
@@ -38,15 +27,14 @@ export function ProjectCard({
           </Text>
         </div>
       </div>
-      <PreviewButton
-        action={`Open ${project.title}`}
-        variant="ghost"
+      <NavigationItem
+        href={APP_LINKS.WORKSPACE.PROJECT(project.id)}
         aria-label={`Open ${project.title}`}
-        className="px-space-xs"
         icon={<ChevronRight size={18} aria-hidden="true" />}
+        className="px-space-xs"
       >
         <VisuallyHidden>Open {project.title}</VisuallyHidden>
-      </PreviewButton>
+      </NavigationItem>
     </Surface>
   );
 }

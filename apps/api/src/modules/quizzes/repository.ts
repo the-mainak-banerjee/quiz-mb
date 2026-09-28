@@ -12,6 +12,20 @@ export const quizInclude = {
   },
 } satisfies Prisma.QuizInclude;
 export type QuizRow = Prisma.QuizGetPayload<{ include: typeof quizInclude }>;
+export const publicQuizInclude = {
+  project: { select: { id: true, name: true } },
+  creator: { select: { id: true, name: true } },
+  cover: true,
+  _count: {
+    select: {
+      registrations: { where: { status: 'REGISTERED' } },
+      questions: true,
+    },
+  },
+} satisfies Prisma.QuizInclude;
+export type PublicQuizRow = Prisma.QuizGetPayload<{
+  include: typeof publicQuizInclude;
+}>;
 export async function lockEditableQuiz(
   tx: Prisma.TransactionClient,
   id: string,
@@ -103,6 +117,45 @@ export class QuizzesRepository {
         data: input,
         include: quizInclude,
       });
+    });
+  }
+  publish(id: string, userId: string) {
+    return this.db.$transaction(async (tx) => {
+      const locked = await lockEditableQuiz(tx, id, userId);
+      if (locked.status === 'PUBLISHED')
+        return tx.quiz.findUniqueOrThrow({
+          where: { id },
+          include: quizInclude,
+        });
+      if (locked.status !== 'DRAFT')
+        throw new ApiError(
+          409,
+          'QUIZ_LOCKED',
+          'This quiz cannot be published.',
+        );
+      if (!locked.plannedStartAt)
+        throw new ApiError(
+          422,
+          'VALIDATION_ERROR',
+          'Choose a planned date and time before publishing.',
+          {
+            plannedStartAt: 'Choose a planned date and time before publishing.',
+          },
+        );
+      return tx.quiz.update({
+        where: { id },
+        data: { status: 'PUBLISHED', publishedAt: new Date() },
+        include: quizInclude,
+      });
+    });
+  }
+  publicById(publicId: string) {
+    return this.db.quiz.findFirst({
+      where: {
+        publicId,
+        status: { in: ['PUBLISHED', 'LOBBY', 'LIVE', 'COMPLETED'] },
+      },
+      include: publicQuizInclude,
     });
   }
 }

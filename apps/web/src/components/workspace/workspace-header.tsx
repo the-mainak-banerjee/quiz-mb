@@ -109,19 +109,19 @@ export function WorkspaceHeader() {
                   <DropdownMenu.Group className="flex flex-col gap-space-xs">
                     <DropdownMenu.Item asChild>
                       <NavigationItem
-                        className="w-full gap-space-xs data-highlighted:bg-surface-low"
+                        className="w-full justify-start data-highlighted:bg-surface-low"
                         href={APP_LINKS.ACCOUNT.SETTINGS}
+                        icon={<Settings2 size={18} aria-hidden="true" />}
                       >
-                        <Settings2 size={18} aria-hidden="true" />
                         Settings
                       </NavigationItem>
                     </DropdownMenu.Item>
                     <DropdownMenu.Item asChild>
                       <NavigationItem
-                        className="w-full gap-space-xs data-highlighted:bg-surface-low"
+                        className="w-full justify-start data-highlighted:bg-surface-low"
                         href={APP_LINKS.ACCOUNT.PLANS}
+                        icon={<Award size={18} aria-hidden="true" />}
                       >
-                        <Award size={18} aria-hidden="true" />
                         Workspace plan
                       </NavigationItem>
                     </DropdownMenu.Item>
@@ -174,7 +174,7 @@ export function WorkspaceHeader() {
                   key={href}
                   href={href}
                   active={isActiveRoute(pathname, href)}
-                  className="w-full"
+                  className="w-full justify-start"
                   onClick={() => setMobileNavigationOpen(false)}
                 >
                   {label}

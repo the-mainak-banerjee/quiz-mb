@@ -6,15 +6,16 @@ import { VisuallyHidden } from '@/components/visually-hidden';
 import { cn } from '@/lib/utils';
 import { QuizCard } from './quiz-card';
 import { EmptyState } from './empty-state';
-import { PreviewButton } from '@/components/workspace/preview-actions';
+import { NavigationItem } from '@/components/workspace/navigation-item';
 import type { Quiz } from './mock-data';
+import { APP_LINKS } from '@/config/navigation';
 
 export function QuizList({
   quizzes,
-  hostCount,
+  showViewAll = true,
 }: {
   quizzes: Quiz[];
-  hostCount: number;
+  showViewAll?: boolean;
 }) {
   const [filter, setFilter] = useState<'all' | 'host' | 'participant'>('all');
   const [query, setQuery] = useState('');
@@ -26,9 +27,12 @@ export function QuizList({
   const filters = [
     {
       value: 'all',
-      label: `All (${hostCount + quizzes.filter((q) => q.role === 'participant').length})`,
+      label: `All (${quizzes.length})`,
     },
-    { value: 'host', label: `Hosting (${hostCount})` },
+    {
+      value: 'host',
+      label: `Hosting (${quizzes.filter((quiz) => quiz.role === 'host').length})`,
+    },
     {
       value: 'participant',
       label: `Participating (${quizzes.filter((q) => q.role === 'participant').length})`,
@@ -43,28 +47,29 @@ export function QuizList({
   );
   return (
     <section
-      id="recent-quizzes"
+      id="my-quizzes"
       aria-labelledby="quizzes-heading"
       className="scroll-mt-space-2xl space-y-space-md"
     >
       <div className="flex items-start justify-between gap-space-sm">
         <div>
           <Text as="h2" id="quizzes-heading" variant="section-heading">
-            Recent quizzes
+            My quizzes
           </Text>
           <Text variant="caption" tone="secondary">
-            Draft, ready, and completed sessions across your teams
+            Every quiz you host or participate in, across all statuses
           </Text>
         </div>
-        <PreviewButton
-          action="View all quizzes"
-          variant="ghost"
-          icon={<ArrowRight size={16} aria-hidden="true" />}
-          iconPosition="right"
-          className="shrink-0"
-        >
-          View all
-        </PreviewButton>
+        {showViewAll && (
+          <NavigationItem
+            href={APP_LINKS.WORKSPACE.QUIZZES}
+            icon={<ArrowRight size={16} aria-hidden="true" />}
+            iconPosition="right"
+            className="shrink-0 px-space-xs"
+          >
+            View all
+          </NavigationItem>
+        )}
       </div>
       <div className="flex flex-col gap-space-sm md:flex-row md:items-center md:justify-between">
         <div className="relative h-control-large w-full min-w-0 md:flex-1">
@@ -138,19 +143,32 @@ export function QuizList({
       </div>
       {visible.length ? (
         <div className="grid grid-cols-1 gap-gutter md:grid-cols-2 lg:grid-cols-3">
-          {visible.map((quiz) => (
-            <QuizCard key={quiz.id} quiz={quiz} />
-          ))}
+          {visible.map((quiz) => {
+            const actionHref =
+              quiz.role === 'host' && quiz.status === 'scheduled'
+                ? APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id)
+                : quiz.role === 'host' && quiz.status === 'draft'
+                  ? APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)
+                  : quiz.role === 'participant'
+                    ? APP_LINKS.PUBLIC_QUIZ(quiz.publicId ?? quiz.id)
+                    : undefined;
+
+            return (
+              <QuizCard
+                key={quiz.id}
+                quiz={quiz}
+                {...(actionHref ? { actionHref } : {})}
+              />
+            );
+          })}
         </div>
       ) : (
         <EmptyState
-          title={
-            quizzes.length ? 'No matching quizzes' : 'No quizzes hosted yet'
-          }
+          title={quizzes.length ? 'No matching quizzes' : 'No quizzes yet'}
           description={
             quizzes.length
               ? 'Try another search or switch your role filter.'
-              : 'Build questions from scratch or start with our thoughtfully crafted templates.'
+              : 'Create a quiz or register for one to see it here.'
           }
           create={!quizzes.length}
         />

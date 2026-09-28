@@ -15,4 +15,15 @@ export const API_ROUTES = {
     QUIZZES: (projectId: string) =>
       `${API_PREFIX}/projects/${projectId}/quizzes`,
   },
+  QUIZZES: {
+    DETAIL: (quizId: string) => `${API_PREFIX}/quizzes/${quizId}`,
+    REGISTRATIONS: (quizId: string) =>
+      `${API_PREFIX}/quizzes/${quizId}/registrations`,
+    ALL_REGISTRATIONS: (quizId: string) =>
+      `${API_PREFIX}/quizzes/${quizId}/registrations/all`,
+  },
+  DASHBOARD: {
+    HOST: `${API_PREFIX}/dashboard/host`,
+    PARTICIPANT: `${API_PREFIX}/dashboard/participant`,
+  },
 } as const;

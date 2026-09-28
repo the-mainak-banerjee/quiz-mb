@@ -17,8 +17,10 @@ export const APP_LINKS = {
     NEW_PROJECT_QUIZ: (projectId: string) =>
       `/quizzes/new?projectId=${projectId}`,
     EDIT_QUIZ: (quizId: string) => `/quizzes/${quizId}/edit`,
+    MANAGE_QUIZ: (quizId: string) => `/quizzes/${quizId}/manage`,
     HISTORY: '/history',
   },
+  PUBLIC_QUIZ: (slug: string) => `/quiz/${slug}`,
   ACCOUNT: {
     SETTINGS: '/settings',
     PLANS: '/plans',

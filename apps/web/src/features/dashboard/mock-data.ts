@@ -1,5 +1,6 @@
 export type Quiz = {
   id: string;
+  publicId?: string;
   project: string;
   role: 'host' | 'participant';
   status: 'live' | 'scheduled' | 'draft' | 'completed';
@@ -87,19 +88,6 @@ export const quizzes: Quiz[] = [
     action: 'View My Results',
   },
 ];
-
-export const upcomingQuiz: Quiz = {
-  id: 'product-sync',
-  project: 'Core Product Team',
-  role: 'host',
-  status: 'scheduled',
-  statusLabel: 'Scheduled Today · 3:00 PM',
-  title: 'Product Design Sync',
-  description: 'Core Product Team · 18 registered peers',
-  timing: 'Starts in 45m',
-  detail: '12 questions',
-  action: 'Launch Room',
-};
 
 export const projects = [
   { id: 'design', title: 'Design Systems Team', quizzes: 4, members: 6 },
