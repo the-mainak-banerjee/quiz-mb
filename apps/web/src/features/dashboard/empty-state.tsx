@@ -21,8 +21,10 @@ export function EmptyState({
       </Text>
       <Text tone="secondary">{description}</Text>
       {create && (
-        <PreviewButton action="Create quiz">
-          <Plus size={18} aria-hidden="true" />
+        <PreviewButton
+          action="Create quiz"
+          icon={<Plus size={18} aria-hidden="true" />}
+        >
           Create your first quiz
         </PreviewButton>
       )}

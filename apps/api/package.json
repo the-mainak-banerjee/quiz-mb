@@ -13,10 +13,13 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.tests.json",
     "test": "node --import tsx --test tests/*.test.ts",
-    "test:integration": "node --env-file=.env --import tsx --test tests/auth.integration.test.ts"
+    "test:integration": "node --env-file=.env --import tsx --test tests/*.integration.test.ts",
+    "storage:setup": "node --env-file=.env --import tsx scripts/setup-storage.ts"
   },
   "dependencies": {
+    "@quizmb/contracts": "workspace:*",
     "@quizmb/database": "workspace:*",
+    "@supabase/storage-js": "2.117.2",
     "argon2": "0.45.1",
     "cookie": "2.0.1",
     "cors": "2.8.6",

@@ -17,6 +17,9 @@ model User {
   createdAt    DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
   sessions     AuthSession[]
+  projects     Project[]
+  quizzes      Quiz[]
+  media        MediaAsset[]
 
   @@map("users")
 }
@@ -37,4 +40,122 @@ model AuthSession {
   @@index([expiresAt])
   @@index([familyId])
   @@map("auth_sessions")
+}
+
+enum QuizStatus {
+  DRAFT
+  PUBLISHED
+  LOBBY
+  LIVE
+  COMPLETED
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  DESCRIPTIVE
+}
+
+enum MediaPurpose {
+  QUIZ_COVER
+  QUESTION_IMAGE
+}
+
+enum MediaStatus {
+  PENDING
+  READY
+  DELETED
+}
+
+model Project {
+  id          String   @id @default(uuid()) @db.Uuid
+  ownerUserId String   @db.Uuid
+  name        String   @db.VarChar(60)
+  description String   @default("") @db.VarChar(240)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  owner       User     @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  quizzes     Quiz[]
+
+  @@index([ownerUserId, createdAt])
+  @@map("projects")
+}
+
+model Quiz {
+  id                             String       @id @default(uuid()) @db.Uuid
+  publicId                       String       @unique
+  projectId                      String       @db.Uuid
+  creatorUserId                  String       @db.Uuid
+  title                          String       @db.VarChar(90)
+  description                    String       @default("")
+  registrationLimit              Int
+  defaultQuestionDurationSeconds Int
+  allowLateJoin                  Boolean      @default(true)
+  plannedStartAt                 DateTime?    @db.Timestamptz(3)
+  status                         QuizStatus   @default(DRAFT)
+  coverMediaId                   String?      @db.Uuid
+  createdAt                      DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt                      DateTime     @updatedAt @db.Timestamptz(3)
+  project                        Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  creator                        User         @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
+  cover                          MediaAsset?  @relation("QuizCover", fields: [coverMediaId], references: [id], onDelete: SetNull)
+  media                          MediaAsset[] @relation("QuizUploads")
+  questions                      Question[]
+
+  @@index([projectId, status])
+  @@index([creatorUserId, createdAt])
+  @@map("quizzes")
+}
+
+model Question {
+  id                      String           @id @default(uuid()) @db.Uuid
+  quizId                  String           @db.Uuid
+  type                    QuestionType
+  text                    String
+  position                Int
+  durationOverrideSeconds Int?
+  imageMediaId            String?          @db.Uuid
+  createdAt               DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime         @updatedAt @db.Timestamptz(3)
+  quiz                    Quiz             @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  image                   MediaAsset?      @relation("QuestionImage", fields: [imageMediaId], references: [id], onDelete: SetNull)
+  options                 QuestionOption[]
+
+  @@unique([quizId, position])
+  @@map("questions")
+}
+
+model QuestionOption {
+  id         String   @id @default(uuid()) @db.Uuid
+  questionId String   @db.Uuid
+  text       String
+  position   Int
+  isCorrect  Boolean
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, position])
+  @@map("question_options")
+}
+
+model MediaAsset {
+  id          String       @id @default(uuid()) @db.Uuid
+  ownerUserId String       @db.Uuid
+  quizId      String       @db.Uuid
+  purpose     MediaPurpose
+  status      MediaStatus  @default(PENDING)
+  bucket      String
+  objectPath  String
+  fileName    String
+  mimeType    String
+  sizeBytes   Int
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  readyAt     DateTime?    @db.Timestamptz(3)
+  owner       User         @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  quiz        Quiz         @relation("QuizUploads", fields: [quizId], references: [id], onDelete: Cascade)
+  covers      Quiz[]       @relation("QuizCover")
+  images      Question[]   @relation("QuestionImage")
+
+  @@unique([bucket, objectPath])
+  @@index([ownerUserId, quizId])
+  @@map("media_assets")
 }

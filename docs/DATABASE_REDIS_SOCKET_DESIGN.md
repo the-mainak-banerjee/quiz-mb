@@ -249,7 +249,6 @@ QuizStatus
 ---------
 DRAFT
 PUBLISHED
-SCHEDULED
 LOBBY
 LIVE
 COMPLETED
@@ -510,7 +509,7 @@ title
 description?
 coverMediaId?
 status
-scheduledAt?
+plannedStartAt?
 registrationLimit
 defaultQuestionDurationSeconds
 allowLateJoin
@@ -541,7 +540,7 @@ Indexes:
 (projectId)
 (creatorUserId)
 (status)
-(scheduledAt)
+(plannedStartAt)
 (projectId, status)
 (creatorUserId, status)
 ```
@@ -549,8 +548,9 @@ Indexes:
 Rules:
 
 - `creatorUserId` must own the parent project in MVP.
-- `scheduledAt` may be null for immediately published quizzes.
-- Schedule does not automatically start a quiz.
+- `plannedStartAt` may be null while the quiz is a draft, but is required before publishing.
+- `plannedStartAt` is participant-facing metadata only. It does not open the lobby, start a live session, or cause an automatic lifecycle transition.
+- `LiveQuizSession.startedAt` remains the authoritative server timestamp for the host's manual live start.
 - Once quiz becomes live, question content should be immutable.
 
 ---
@@ -2142,7 +2142,7 @@ Then:
 Create AskedQuestion
 Persist timing
 Update Redis
-Schedule expiry
+Arrange expiry handling
 Broadcast question:started
 ```
 
@@ -2391,7 +2391,7 @@ Server rejects answers at or after authoritative expiry.
 Primary trigger:
 
 ```text
-Backend schedules a timer when question starts.
+Backend starts an expiry timer when the question starts.
 ```
 
 At expiry:
@@ -2869,7 +2869,7 @@ Signup/login
 Create/edit project
 Create/edit quiz
 Create/edit questions
-Publish/schedule quiz
+Publish quiz
 Register/unregister
 Load dashboard
 Load history
@@ -3061,7 +3061,7 @@ Quiz
 - projectId
 - creatorUserId
 - status
-- scheduledAt
+- plannedStartAt
 - projectId + status
 - creatorUserId + status
 

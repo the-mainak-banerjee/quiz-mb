@@ -43,8 +43,8 @@ export function ProjectCard({
         variant="ghost"
         aria-label={`Open ${project.title}`}
         className="px-space-xs"
+        icon={<ChevronRight size={18} aria-hidden="true" />}
       >
-        <ChevronRight size={18} aria-hidden="true" />
         <VisuallyHidden>Open {project.title}</VisuallyHidden>
       </PreviewButton>
     </Surface>

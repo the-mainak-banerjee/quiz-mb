@@ -8,7 +8,14 @@ export function csrf(allowedOrigins: readonly string[]): RequestHandler {
       return next(
         new ApiError(403, 'FORBIDDEN', 'Request origin is not allowed.'),
       );
-    if (!req.is('application/json'))
+    // DELETE intentionally has no body; req.is() returns null for empty bodies.
+    const emptyJsonDelete =
+      req.method === 'DELETE' &&
+      req.headers['content-type']?.split(';')[0]?.trim().toLowerCase() ===
+        'application/json' &&
+      !req.headers['transfer-encoding'] &&
+      (!req.headers['content-length'] || req.headers['content-length'] === '0');
+    if (!req.is('application/json') && !emptyJsonDelete)
       return next(
         new ApiError(415, 'VALIDATION_ERROR', 'Expected application/json.'),
       );

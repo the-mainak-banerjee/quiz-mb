@@ -497,7 +497,7 @@ Contains:
 
 - Projects
 - Quiz builder
-- Scheduled quizzes
+- Published quizzes
 - Live quizzes
 - Completed quizzes
 - Live host controls
@@ -2308,7 +2308,7 @@ quizzes.creatorUserId
 
 quizzes.status
 
-quizzes.scheduledAt
+quizzes.plannedStartAt
 
 registrations.quizId + userId
 
@@ -2777,19 +2777,21 @@ The public identifier is not a substitute for authorization.
 
 ---
 
-# 101. Scheduled Quiz Architecture
+# 101. Planned Quiz Timing Architecture
 
-A scheduled quiz stores:
+A quiz stores its participant-facing planned date/time as:
 
 ```text
-scheduledAt
+plannedStartAt
 ```
 
-The scheduled time is informational and controls upcoming-state presentation.
+`plannedStartAt` is required before the quiz can be published and controls upcoming-state presentation independently from lifecycle status.
 
-It does **not** automatically start the live quiz.
+It does **not** automatically publish the quiz, open the lobby, start the live quiz, or cause any lifecycle transition.
 
-Only the host starts the session.
+Only the host manually opens and starts the live experience. `LiveQuizSession.startedAt` records the actual server timestamp of that manual start and is distinct from `plannedStartAt`.
+
+There is no scheduler or cron requirement for publishing or starting quizzes.
 
 ---
 
@@ -2824,7 +2826,7 @@ MVP does not require:
 If later features introduce:
 
 - emails,
-- scheduled reminders,
+- timed reminders,
 - heavy report generation,
 
 a background job architecture can be introduced.

@@ -22,6 +22,7 @@ apps/
   api/              Express application
 packages/
   config/           Shared TypeScript and ESLint configuration
+  contracts/        Shared authoring DTOs and validation schemas
   database/         Prisma configuration and database tooling
 docs/               Product, architecture, API, and progress documents
 ```
@@ -51,6 +52,7 @@ Set the API's `DATABASE_URL` and a random `AUTH_ACCESS_SECRET` (at least 32 rand
 ```sh
 pnpm --filter @quizmb/database db:migrate
 pnpm --filter @quizmb/database build
+pnpm --filter @quizmb/contracts build
 ```
 
 Local environment files are ignored by Git. Start both applications:
@@ -80,7 +82,7 @@ Stop local servers with Ctrl+C.
 - `pnpm test` — run automated tests.
 - `pnpm build` — build the web and API applications for production.
 - `pnpm db:check` — run the read-only database connectivity probe.
-- `pnpm --filter @quizmb/api test:integration` — exercise the auth lifecycle against the development database; creates and removes uniquely named test accounts. Never use production credentials.
+- `pnpm --filter @quizmb/api test:integration` — exercise authentication and authoring against development PostgreSQL and Storage; creates and removes isolated test fixtures. Never use production credentials.
 
 `pnpm --filter @quizmb/web test` runs the global API client's isolated unit tests without a server or database.
 
@@ -112,6 +114,13 @@ Browser requests go directly to Express using the global [API client](apps/web/s
 - `AUTH_ACCESS_TTL_SECONDS` — access credential lifetime, default 900 seconds (15 minutes).
 - `AUTH_SESSION_TTL_SECONDS` — absolute refresh-session lifetime, default 2592000 seconds (30 days).
 - `AUTH_COOKIE_DOMAIN` — required in production: `quizmb.com`. Shares only the access cookie across web/API; omit on localhost.
+- `SUPABASE_URL` — development Supabase project origin for private image storage.
+- `SUPABASE_SERVICE_ROLE_KEY` — server-only Storage credential. Never expose it to the web application.
+- `SUPABASE_STORAGE_BUCKET` — private image bucket, default `quizmb-media`.
+
+For local image uploads, configure these Storage variables in `apps/api/.env`, then run `pnpm --filter @quizmb/api storage:setup`. The development-only command creates the bucket if absent, or checks an existing bucket without changing it. It requires private access, PNG/JPEG/WebP MIME types, and a 10 MiB limit. Browsers receive short-lived upload/read URLs, never a service-role key.
+
+Open `/projects` to create or edit projects, or `/quizzes/new` to choose a project and create a quiz draft. Save quiz basics explicitly before uploading artwork or adding questions. Question prompts support Markdown; previews omit raw HTML and remote Markdown images. Use explicit saves before navigating away.
 
 Signup creates an active account immediately. Passwords accept 15–128 Unicode characters, including spaces, and are hashed with Argon2id. Express sets HttpOnly, SameSite=Lax cookies directly. Production access uses `__Secure-quizmb-access` with Domain=quizmb.com; refresh uses API-host-only `__Host-quizmb-refresh`. Both are Secure. Tokens are never stored in browser JavaScript storage.
 
@@ -143,7 +152,7 @@ Use two independent Vercel projects with Node.js 24 and the repository's pnpm lo
 
 - Root directory: `apps/web`.
 - Framework preset: Next.js.
-- Build command: `pnpm build`.
+- Build command: `pnpm --filter @quizmb/web... build` (includes shared contracts).
 - Planned domain: `app.quizmb.com`.
 - Production environment: `NEXT_PUBLIC_API_URL=https://api.quizmb.com`.
 

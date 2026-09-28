@@ -17,9 +17,11 @@ import type { Quiz } from './mock-data';
 export function QuizCard({
   quiz,
   featured = false,
+  actionHref,
 }: {
   quiz: Quiz;
   featured?: boolean;
+  actionHref?: string;
 }) {
   const ActionIcon =
     quiz.status === 'live'
@@ -90,16 +92,13 @@ export function QuizCard({
         </div>
         <PreviewButton
           action={quiz.action}
+          {...(actionHref ? { href: actionHref } : {})}
           variant={quiz.status === 'live' ? 'primary' : 'secondary'}
+          icon={<ActionIcon size={16} aria-hidden="true" />}
+          iconPosition={quiz.status === 'live' ? 'right' : 'left'}
           className="w-full"
         >
-          {quiz.status !== 'live' && (
-            <ActionIcon size={16} aria-hidden="true" />
-          )}
           {quiz.action}
-          {quiz.status === 'live' && (
-            <ArrowRight size={16} aria-hidden="true" />
-          )}
         </PreviewButton>
       </div>
     </Surface>

@@ -54,6 +54,17 @@ Before creating a component:
 
 Prefer `<Button variant="secondary">Create quiz</Button>` over feature-specific button components.
 
+## Same Product Concept, One Component
+
+The same product concept must always use one reusable foundational component.
+
+- Search the full frontend before implementing a visual pattern.
+- If the concept already exists, reuse or extend that component instead of repeating its markup or class names.
+- If the same concept appears in two places, extract the shared component as part of the current task.
+- Keep state and context-specific behavior in the consumer, while the shared component owns the common structure, styling, and accessibility behavior.
+- Do not copy an existing component and rename it for another screen.
+- During review, treat repeated UI markup for the same product concept as a defect.
+
 ## Component Design
 
 Use compound components when several related parts share state or benefit from flexible composition.
@@ -127,10 +138,7 @@ Prefer composition when children naturally represent structure.
 Good:
 
 ```tsx
-<Button>
-  <Icon />
-  Create quiz
-</Button>
+<Button icon={<Icon />}>Create quiz</Button>
 ```
 
 Avoid excessive props controlling every visual detail.
@@ -157,6 +165,8 @@ Use:
 - `Button` instead of raw `<button>`
 - `Input` instead of raw `<input>`
 - existing shared primitives for cards, badges, form fields, dialogs, etc.
+
+Buttons with icons must use the reusable Button `icon` and `iconPosition` API. Do not place decorative icons directly among Button children. Icon-only buttons must still include a `VisuallyHidden` accessible label.
 
 Do not recreate existing primitives with local Tailwind classes.
 
@@ -263,3 +273,7 @@ Before finishing frontend work, verify:
 - mobile layout is intentional
 - related QuizMB product objects remain visually consistent
 - no unapproved UI or state-management library was introduced
+
+## Reusable Create/Edit Forms
+
+Use one form component per entity for both creation and editing. Initialize it with existing data for edits, and keep fields, validation, dirty-state handling, and submission feedback shared. Route pages and inline dialogs compose the same form; do not fork separate create/edit implementations. Project creation from a quiz flow and from a standalone Create Project action must reuse the same project form.

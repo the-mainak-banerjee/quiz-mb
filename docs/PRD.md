@@ -14,7 +14,7 @@ The product is a host-controlled live quiz platform where users can:
 - create accounts,
 - create projects,
 - create quizzes inside projects,
-- schedule or immediately run quizzes,
+- choose a required planned date/time and publish quizzes,
 - share quiz links and QR codes,
 - register participants,
 - run live questions one at a time,
@@ -78,7 +78,7 @@ A host can:
 - create projects,
 - create quizzes,
 - add questions,
-- schedule quizzes,
+- choose or change a quiz's planned date/time while it is a draft,
 - publish quizzes,
 - share links and QR codes,
 - see registered participants,
@@ -151,7 +151,7 @@ Project: Weekly Product Club
 
 A participant who joins a quiz belonging to a project becomes associated with that project.
 
-Future scheduled quizzes from the same project should appear on that participant's dashboard.
+Future published quizzes from the same project may be discoverable to that participant, but they appear in Upcoming only after registration.
 
 ---
 
@@ -161,7 +161,7 @@ A quiz can have the following states:
 
 ```text
 DRAFT
-→ PUBLISHED / SCHEDULED
+→ PUBLISHED
 → LOBBY
 → LIVE
 → COMPLETED
@@ -172,12 +172,12 @@ DRAFT
 - Only the host can access it.
 - Host can add/edit quiz details and questions.
 
-## 7.2 Published / Scheduled
+## 7.2 Published
 
 - Quiz can accept registrations.
 - Quiz has a shareable link and QR code.
-- Scheduled quizzes display their date/time.
-- Scheduled time does **not** automatically start the quiz.
+- Quiz displays its required planned date/time independently from lifecycle status.
+- `plannedStartAt` communicates when the quiz is expected to take place. It never automatically opens the lobby or starts the quiz.
 
 ## 7.3 Lobby
 
@@ -208,14 +208,13 @@ Required/available fields:
 - Optional cover image
 - Maximum participant capacity
 - Default question duration
-- Optional scheduled date/time
+- Required planned date/time before publish (`plannedStartAt`)
 - Questions
 - Quiz status
 
-The host can either:
+The host can keep a quiz as Draft or publish it after required metadata, `plannedStartAt`, and question validation pass. Publishing opens registration; the host still opens the lobby and starts the quiz manually.
 
-- publish/start now,
-- schedule for later.
+This requirement does not define which quiz fields, including `plannedStartAt`, may be changed after publishing but before the live start. Preserve existing pre-live edit behavior until a separate product decision defines any restrictions.
 
 ---
 
@@ -348,7 +347,7 @@ Participant sees:
 - Quiz title
 - Project name
 - Host / organizer
-- Scheduled time if relevant
+- Planned date/time
 - Waiting state
 - Basic live-session status
 
@@ -856,8 +855,8 @@ Sections:
 
 ### Upcoming
 
-- Registered future quizzes
-- Upcoming quizzes belonging to projects the user has joined
+- Registered `PUBLISHED` quizzes that have not started
+- Planned date/time displayed independently from lifecycle status
 
 ### Live
 
@@ -876,7 +875,7 @@ Sections:
 
 - Projects
 - Draft quizzes
-- Scheduled quizzes
+- Published quizzes
 - Live quiz
 - Completed quizzes
 
@@ -888,7 +887,7 @@ Inside a project, host can see all quizzes belonging to that project.
 
 When a participant joins/registers for a quiz, associate the participant with the quiz's project.
 
-Future scheduled quizzes from that project may appear automatically in the participant's dashboard.
+Future published quizzes from that project may be discoverable to the participant. Project association alone does not place an unregistered quiz in Upcoming.
 
 MVP does not require a complex social "follow" system.
 
@@ -964,7 +963,7 @@ title
 description
 cover_image
 status
-scheduled_at
+planned_start_at
 registration_limit
 default_question_duration
 allow_late_join
@@ -1338,7 +1337,7 @@ Hosts can fully prepare a quiz before anything goes live.
 - Cover image
 - Registration limit
 - Default question timer
-- Schedule date/time
+- Planned date/time (`plannedStartAt`)
 - Quiz status
 - Create/edit/delete questions
 - Single-choice MCQ
@@ -1376,7 +1375,7 @@ Participants can discover a published quiz and register.
 ## Build
 
 - Publish quiz
-- Scheduled quiz
+- Required planned date/time before publish
 - Unique quiz URL
 - QR code
 - Quiz public landing page
@@ -1390,6 +1389,7 @@ Participants can discover a published quiz and register.
 
 ## Acceptance Criteria
 
+- Quiz cannot be published without a planned date/time.
 - Published quiz has working unique URL.
 - QR code resolves to the quiz.
 - Logged-out user returns to quiz after authentication.
@@ -1399,6 +1399,9 @@ Participants can discover a published quiz and register.
 - Unregistration releases a slot before start.
 - Registered quiz appears in participant dashboard.
 - Participant becomes associated with quiz project.
+- Registration begins only after publish.
+- Planned date/time does not automatically open the lobby or start the quiz.
+- Host manually starts the quiz.
 
 ## Do Not Build Yet
 
@@ -1654,7 +1657,7 @@ Validate the complete product as a real live quiz.
 2. User creates project.
 3. User creates quiz.
 4. User adds MCQ, multi-answer and descriptive questions.
-5. User publishes/schedules quiz.
+5. User chooses the planned date/time and publishes the quiz.
 6. Participant opens link.
 7. Participant registers.
 8. Participant waits in lobby.
@@ -1762,7 +1765,7 @@ The MVP is complete when:
 - hosts can create projects,
 - hosts can create quizzes,
 - all MVP question types work,
-- quizzes can be scheduled/published,
+- quizzes require a planned date/time before they can be published,
 - participants can register through link/QR/dashboard,
 - registration capacity works,
 - lobby works,

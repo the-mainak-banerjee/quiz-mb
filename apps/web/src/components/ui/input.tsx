@@ -2,7 +2,16 @@ import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
 export type InputProps = Omit<ComponentProps<'input'>, 'type' | 'size'> & {
-  type?: 'text' | 'email' | 'password' | 'search' | 'tel' | 'url' | 'number';
+  type?:
+    | 'text'
+    | 'email'
+    | 'password'
+    | 'search'
+    | 'tel'
+    | 'url'
+    | 'number'
+    | 'datetime-local'
+    | 'file';
 };
 
 export function Input({ type = 'text', className, ...props }: InputProps) {

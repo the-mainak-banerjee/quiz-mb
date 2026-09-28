@@ -49,8 +49,10 @@ export function DashboardView({
           </Text>
         </div>
         <div className="flex flex-wrap gap-space-xs">
-          <PreviewButton action="Create quiz">
-            <Plus size={18} aria-hidden="true" />
+          <PreviewButton
+            action="Create quiz"
+            icon={<Plus size={18} aria-hidden="true" />}
+          >
             Create quiz
           </PreviewButton>
         </div>
@@ -155,8 +157,11 @@ export function DashboardView({
                   Team spaces and question banks
                 </Text>
               </div>
-              <PreviewButton action="New project" variant="secondary">
-                <FolderPlus size={18} aria-hidden="true" />
+              <PreviewButton
+                action="New project"
+                variant="secondary"
+                icon={<FolderPlus size={18} aria-hidden="true" />}
+              >
                 New project
               </PreviewButton>
             </div>

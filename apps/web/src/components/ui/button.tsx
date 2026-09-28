@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 type Appearance =
@@ -7,7 +7,11 @@ type Appearance =
       variant: 'secondary' | 'outline' | 'ghost' | 'danger';
       size?: 'default';
     };
-export type ButtonProps = ComponentProps<'button'> & Appearance;
+export type ButtonProps = ComponentProps<'button'> &
+  Appearance & {
+    icon?: ReactNode;
+    iconPosition?: 'left' | 'right';
+  };
 
 const variants = {
   primary:
@@ -26,6 +30,9 @@ export function Button({
   size = 'default',
   type = 'button',
   className,
+  icon,
+  iconPosition = 'left',
+  children,
   ...props
 }: ButtonProps) {
   return (
@@ -38,6 +45,10 @@ export function Button({
         variants[variant],
         className,
       )}
-    />
+    >
+      {icon && iconPosition === 'left' && icon}
+      {children}
+      {icon && iconPosition === 'right' && icon}
+    </button>
   );
 }

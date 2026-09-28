@@ -1,4 +1,5 @@
-import Link from 'next/link';
+'use client';
+import { NavigationGuardLink as Link } from 'nextjs-nav-guard';
 import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 

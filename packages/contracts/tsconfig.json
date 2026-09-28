@@ -1,0 +1,9 @@
+{
+  "extends": "@quizmb/config/typescript/node",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true
+  },
+  "include": ["src/**/*.ts"]
+}

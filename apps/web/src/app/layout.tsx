@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
+import { NavigationGuardProvider } from '@/components/forms/navigation-provider';
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
   display: 'swap',
@@ -16,7 +17,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={jakarta.variable}>
       <body className="min-h-screen font-sans bg-canvas text-text-primary">
-        {children}
+        <NavigationGuardProvider>{children}</NavigationGuardProvider>
       </body>
     </html>
   );

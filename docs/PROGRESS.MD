@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phase 0, authentication, and the dashboard UI are complete. Dashboard product data is mocked; product backend features have not been started. No deployment has been performed.
+Phase 0, authentication, dashboard UI, and project/quiz draft authoring are implemented. Dashboard product data remains mocked. Publishing and realtime are deferred. No deployment has been performed.
 
 This document records implementation progress, verification results, limitations, and approved scope adjustments. Project setup and usage instructions belong in the root README.
 
@@ -201,3 +201,35 @@ These decisions were approved before implementation and remain guidance for late
 - Account menu and mobile drawer close on outside click and Escape; focus returns to their triggers. Mobile navigation traps focus and locks background scrolling.
 - Logout accepts an optional action renderer so it participates in menu keyboard navigation while keeping existing request, pending, and error behavior. The menu stays open during logout to preserve error feedback.
 - Verified outside clicks, Escape, focus restoration, mobile focus wrapping, and scroll locking in the development preview. Existing nine frontend tests pass; lint, typecheck, and production build pass.
+
+## Project and quiz authoring — September 28, 2026
+
+### Implemented
+
+- Owned project creation/editing and draft quiz creation/editing. Every quiz has a required project; reassignment is rejected.
+- One reusable ProjectForm for standalone and inline creation plus editing; one QuizForm and one QuestionForm for create/edit. Added this rule to the frontend-design skill.
+- Protected server-loaded project lists/details, project selection/empty state, quiz basics, three question types, ordering/duplication/deletion, saved-content preview, and review screen.
+- React Hook Form with shared Zod contracts, safe lazy-loaded Markdown rendering, existing semantic primitives, reusable Radix modals, accessible native select/choice/textarea primitives.
+- Explicit saves only. Dirty forms warn for route changes, editor transitions, closing the project modal, and logout. Refresh/tab close uses the browser's native warning; browsers may suppress unload warnings.
+- Express projects/quizzes/questions/media modules, authentication and owner checks, strict validation, transaction locks and atomic bulk question ordering. No answer keys are exposed through public endpoints.
+- Prisma Project, Quiz, Question, QuestionOption, MediaAsset models and authoring migration; applied to development PostgreSQL. RLS enabled on new tables; backend remains the data authority.
+- Private Supabase bucket quizmb-media created and verified: PNG/JPEG/WebP only, maximum 10 MiB. Signed browser uploads, server completion checks (type/size/signature), signed reads, and deletion guards. Credentials remain server-only local environment values.
+- Shared contracts package, Storage setup script and placeholder-only environment documentation. Fixed JSON/origin middleware to support authenticated bodyless DELETE requests.
+
+### Scope and defaults
+
+- Publishing remains deferred to Phase 4. `plannedStartAt` is persisted only as draft metadata in the approved contract; all created quizzes remain DRAFT until publishing is implemented.
+- No live sessions, Redis/Socket.IO, registration, scoring/results, autosave, project reassignment, or cohosts.
+- Project names/descriptions and quiz titles follow design counters (60/240/90). Central protective authoring defaults: quiz description 4,000 characters, question prompt 10,000, option 1,000, 20 options, 200 questions, 3,600-second timers, 10,000 participant capacity. These are implementation limits, not previously specified product limits.
+- Lists use cursor pagination with 25 rows. Read URLs expire after one hour; reloading the editor obtains fresh URLs. Draft write conflicts are last-saved-wins across separate browser tabs; mutations within a quiz are serialized.
+- Images require an explicitly saved quiz first. Unattached/abandoned uploads are retained; an automated cleanup policy is not implemented. Removing artwork detaches it on the next explicit save. The media DELETE endpoint rejects referenced assets.
+- Project artwork and project/quiz deletion UI are outside this authoring implementation. Existing dashboard fixtures and unrelated placeholder routes remain unchanged; saved drafts are available from Projects.
+- nextjs-nav-guard supports the current Next.js version but depends on App Router internals; include navigation-warning regression checks when upgrading Next.js.
+
+### Verification
+
+- Shared validation/unit tests cover question answer-key rules, ungraded descriptive questions, forbidden lifecycle/project writes, image limits, and file signatures.
+- Development integration tests cover authentication, cross-owner rejection, simultaneous question creation, reorder/delete compaction, live content locking, RLS, and private Storage upload/read/attachment/deletion. Test-owned resources are removed after each run.
+- Browser checks exercise project creation, keep-editing warning, quiz draft save, question save without timer override, all three question type controls, Markdown preview, review, and navigation warnings. Desktop, tablet and narrow mobile layouts inspected; fixed step wrapping and smallest-screen header overflow.
+- Final checks passed: pnpm format:check, pnpm lint, pnpm typecheck, pnpm test (9 web + 14 API unit/foundation tests), and pnpm build. Database integration tests run separately passed for authentication and authoring including real Storage. No lint warnings in changed packages. A pg driver deprecation warning appeared during concurrent integration operations; it did not affect results.
+- Browser logout cancellation retained the unsaved form. Discarded route edits were verified absent in PostgreSQL. Browser QA project/quiz and integration fixtures were removed. Publishing, production deployment, and realtime behavior were not exercised.

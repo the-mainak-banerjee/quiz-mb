@@ -8,6 +8,11 @@ import type { AuthService } from './modules/auth/service.js';
 import type { UsersService } from './modules/users/service.js';
 import { notFound } from './http/not-found.js';
 import { errorHandler } from './http/error-handler.js';
+import type { PrismaClient } from '@quizmb/database';
+import { authoringRoutes } from './modules/authoring.js';
+import { authenticate } from './http/authenticate.js';
+import { csrf } from './http/csrf.js';
+import type { SupabaseStorage } from './modules/media/storage.js';
 
 export function createApp({
   allowedOrigins,
@@ -15,12 +20,16 @@ export function createApp({
   auth,
   users,
   production = false,
+  database,
+  storage,
 }: {
   allowedOrigins: readonly string[];
   logger: Logger;
   auth?: AuthService;
   users?: UsersService;
   production?: boolean;
+  database?: PrismaClient;
+  storage?: SupabaseStorage | undefined;
 }) {
   const app = express();
   app.disable('x-powered-by');
@@ -35,9 +44,16 @@ export function createApp({
     }),
   );
   app.get('/api/health', health);
-  app.use(express.json({ limit: '16kb' }));
+  app.use(express.json({ limit: '128kb' }));
   if (auth && users)
     app.use('/api', authRoutes(auth, users, production, allowedOrigins));
+  if (auth && database)
+    app.use(
+      '/api',
+      authenticate(auth, production),
+      csrf(allowedOrigins),
+      authoringRoutes(database, storage),
+    );
   app.use(notFound);
   app.use(errorHandler(logger));
   return app;

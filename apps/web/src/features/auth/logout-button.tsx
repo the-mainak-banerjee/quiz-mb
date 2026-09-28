@@ -6,12 +6,14 @@ import { api } from '@/lib/api/browser';
 import { apiError } from '@/lib/api/client';
 import { API_ROUTES } from '@/lib/api/routes';
 import { APP_LINKS } from '@/config/navigation';
+import { useGuardedAction } from '@/components/forms/navigation-provider';
 export function LogoutButton({
   renderAction = (props) => <Button {...props} />,
 }: {
   renderAction?: (props: ButtonProps) => ReactNode;
 }) {
   const [pending, setPending] = useState(false);
+  const guard = useGuardedAction();
   const [error, setError] = useState('');
   async function logout() {
     setPending(true);
@@ -30,13 +32,12 @@ export function LogoutButton({
         variant: 'danger',
         className: 'w-full',
         disabled: pending,
-        onClick: logout,
-        children: (
-          <>
-            <LogOut size={18} aria-hidden="true" />
-            {pending ? 'Signing out…' : 'Logout'}
-          </>
-        ),
+        icon: <LogOut size={18} aria-hidden="true" />,
+        onClick: () =>
+          guard(() => {
+            void logout();
+          }),
+        children: pending ? 'Signing out…' : 'Logout',
       })}
       {error && (
         <Text role="alert" variant="body-secondary" className="text-danger">

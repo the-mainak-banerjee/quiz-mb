@@ -24,8 +24,11 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
           <Text role="status" variant="body-secondary">
             {notice}
           </Text>
-          <Button variant="ghost" onClick={() => setNotice('')}>
-            <X size={18} aria-hidden="true" />
+          <Button
+            variant="ghost"
+            icon={<X size={18} aria-hidden="true" />}
+            onClick={() => setNotice('')}
+          >
             <VisuallyHidden>Dismiss message</VisuallyHidden>
           </Button>
         </div>

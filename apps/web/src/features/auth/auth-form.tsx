@@ -183,16 +183,18 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           <Button
             type="button"
             variant="ghost"
+            icon={
+              visible ? (
+                <EyeOff aria-hidden="true" size={16} />
+              ) : (
+                <Eye aria-hidden="true" size={16} />
+              )
+            }
             aria-label={visible ? 'Hide password' : 'Show password'}
             aria-pressed={visible}
             onClick={() => setVisible(!visible)}
             className="absolute right-space-xs top-1/2 -translate-y-1/2 px-space-xs text-caption"
           >
-            {visible ? (
-              <EyeOff aria-hidden="true" size={16} />
-            ) : (
-              <Eye aria-hidden="true" size={16} />
-            )}
             <VisuallyHidden>
               {visible ? 'Hide password' : 'Show password'}
             </VisuallyHidden>
@@ -217,15 +219,21 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           {message}
         </Text>
       )}
-      <Button type="submit" size="hero" className="w-full" disabled={pending}>
+      <Button
+        type="submit"
+        size="hero"
+        className="w-full"
+        icon={<ArrowRight aria-hidden="true" size={16} />}
+        iconPosition="right"
+        disabled={pending}
+      >
         {pending
           ? signup
             ? 'Creating account…'
             : 'Verifying…'
           : signup
             ? 'Create account'
-            : 'Sign in to QuizMB'}{' '}
-        <ArrowRight aria-hidden="true" size={16} />
+            : 'Sign in to QuizMB'}
       </Button>
       {signup && (
         <Text variant="caption" tone="secondary" className="text-center">

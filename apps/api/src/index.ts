@@ -3,6 +3,7 @@ import { parseEnv } from './config/env.js';
 import { createLogger } from './infrastructure/logger.js';
 import { createDatabase } from '@quizmb/database';
 import { parseAuthEnv } from './modules/auth/config.js';
+import { createStorage } from './modules/media/storage.js';
 import { AuthRepository } from './modules/auth/repository.js';
 import { AuthService } from './modules/auth/service.js';
 import { UsersService } from './modules/users/service.js';
@@ -19,4 +20,6 @@ export default createApp({
   auth: new AuthService(new AuthRepository(database), authConfig),
   users: new UsersService(database),
   production: env.NODE_ENV === 'production',
+  database,
+  storage: createStorage(process.env),
 });

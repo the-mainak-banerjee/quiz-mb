@@ -9,7 +9,14 @@ export const APP_LINKS = {
   WORKSPACE: {
     DASHBOARD: '/dashboard',
     PROJECTS: '/projects',
+    PROJECT: (projectId: string) => `/projects/${projectId}`,
+    EDIT_PROJECT: (projectId: string) => `/projects/${projectId}/edit`,
+    NEW_PROJECT: '/projects/new',
     QUIZZES: '/quizzes',
+    NEW_QUIZ: '/quizzes/new',
+    NEW_PROJECT_QUIZ: (projectId: string) =>
+      `/quizzes/new?projectId=${projectId}`,
+    EDIT_QUIZ: (quizId: string) => `/quizzes/${quizId}/edit`,
     HISTORY: '/history',
   },
   ACCOUNT: {

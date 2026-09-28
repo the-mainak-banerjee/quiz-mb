@@ -9,4 +9,10 @@ export const API_ROUTES = {
     LOGOUT: `${API_PREFIX}/auth/logout`,
     ME: `${API_PREFIX}/me`,
   },
+  PROJECTS: {
+    LIST: `${API_PREFIX}/projects`,
+    DETAIL: (projectId: string) => `${API_PREFIX}/projects/${projectId}`,
+    QUIZZES: (projectId: string) =>
+      `${API_PREFIX}/projects/${projectId}/quizzes`,
+  },
 } as const;

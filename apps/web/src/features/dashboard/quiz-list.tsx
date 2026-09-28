@@ -59,16 +59,18 @@ export function QuizList({
         <PreviewButton
           action="View all quizzes"
           variant="ghost"
+          icon={<ArrowRight size={16} aria-hidden="true" />}
+          iconPosition="right"
           className="shrink-0"
         >
           View all
-          <ArrowRight size={16} aria-hidden="true" />
         </PreviewButton>
       </div>
       <div className="flex flex-col gap-space-sm md:flex-row md:items-center md:justify-between">
         <div className="relative h-control-large w-full min-w-0 md:flex-1">
           <Button
             variant="ghost"
+            icon={<Search size={18} aria-hidden="true" />}
             aria-expanded={searchOpen}
             aria-controls="quiz-search"
             onClick={() => setSearchOpen(true)}
@@ -79,7 +81,6 @@ export function QuizList({
                 : 'translate-y-0 opacity-100',
             )}
           >
-            <Search size={18} aria-hidden="true" />
             Search quizzes
           </Button>
           <div

@@ -41,15 +41,18 @@ export function WorkspaceHeader() {
         <div className="relative mx-auto flex max-w-content items-center justify-between gap-space-xs px-margin-sm py-space-xs md:px-margin lg:px-space-xl">
           <div className="flex items-center gap-space-xs">
             <Dialog.Trigger asChild>
-              <Button variant="ghost" className="px-space-xs md:hidden">
-                <Menu size={22} aria-hidden="true" />
+              <Button
+                variant="ghost"
+                className="px-space-xs md:hidden"
+                icon={<Menu size={22} aria-hidden="true" />}
+              >
                 <VisuallyHidden>Open navigation</VisuallyHidden>
               </Button>
             </Dialog.Trigger>
             <Link
               href={APP_LINKS.HOME}
               aria-label="QuizMB home"
-              className="ds-focus shrink-0 [&_svg]:h-space-lg"
+              className="ds-focus shrink-0 [&_svg]:h-space-md sm:[&_svg]:h-space-lg"
             >
               <Brand />
             </Link>
@@ -76,11 +79,12 @@ export function WorkspaceHeader() {
                 variant="ghost"
                 aria-label="Account options"
                 className="gap-space-xs px-0"
+                icon={<ChevronDown size={16} aria-hidden="true" />}
+                iconPosition="right"
               >
                 <div className="flex size-control items-center justify-center rounded-pill bg-action-primary text-action-on-primary">
                   <UserRound size={18} aria-hidden="true" />
                 </div>
-                <ChevronDown size={16} aria-hidden="true" />
               </Button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
@@ -152,8 +156,11 @@ export function WorkspaceHeader() {
             <div className="flex items-center justify-between gap-space-sm px-space-md">
               <Brand />
               <Dialog.Close asChild>
-                <Button variant="ghost" className="px-space-xs">
-                  <X size={22} aria-hidden="true" />
+                <Button
+                  variant="ghost"
+                  className="px-space-xs"
+                  icon={<X size={22} aria-hidden="true" />}
+                >
                   <VisuallyHidden>Close navigation</VisuallyHidden>
                 </Button>
               </Dialog.Close>

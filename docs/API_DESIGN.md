@@ -62,7 +62,7 @@ Use REST for:
 - Projects
 - Quiz creation/editing
 - Question management
-- Quiz publishing/scheduling
+- Quiz publishing and planned date/time metadata
 - Registration
 - Dashboard reads
 - Quiz history
@@ -390,7 +390,6 @@ GET    /api/quizzes/:quizId
 PATCH  /api/quizzes/:quizId
 DELETE /api/quizzes/:quizId
 POST   /api/quizzes/:quizId/publish
-POST   /api/quizzes/:quizId/schedule
 GET    /api/public/quizzes/:publicId
 ```
 
@@ -406,6 +405,7 @@ POST /api/projects/:projectId/quizzes
   "description": "Weekly live PM challenge",
   "registrationLimit": 500,
   "defaultQuestionDurationSeconds": 20,
+  "plannedStartAt": "2026-10-10T13:30:00.000Z",
   "allowLateJoin": true,
   "coverMediaId": null
 }
@@ -444,29 +444,17 @@ Editable while pre-live.
 
 Once live starts, question content and answer keys become immutable.
 
-## 8.4 Schedule Quiz
+Create and update payloads use `plannedStartAt` for the participant-facing date/time. A draft may omit or change this field, but it must exist before publish. It is metadata only and never triggers a lifecycle transition.
 
-```http
-POST /api/quizzes/:quizId/schedule
-```
-
-```json
-{
-  "scheduledAt": "2026-10-10T13:30:00.000Z"
-}
-```
-
-Scheduling never automatically starts the quiz.
-
-## 8.5 Publish Quiz
+## 8.4 Publish Quiz
 
 ```http
 POST /api/quizzes/:quizId/publish
 ```
 
-Validate quiz and all question structures before publishing.
+Validate required quiz metadata, `plannedStartAt`, and all question structures before publishing. On success, status becomes `PUBLISHED`, registration opens, and the public URL and QR registration flow are available. Publishing does not open the lobby, start a live session, or create an automatic server action.
 
-## 8.6 Public Quiz Metadata
+## 8.5 Public Quiz Metadata
 
 ```http
 GET /api/public/quizzes/:publicId
@@ -589,7 +577,7 @@ GET    /api/quizzes/:quizId/registrations
 POST /api/quizzes/:quizId/register
 ```
 
-Server performs concurrency-safe capacity transaction.
+Server permits registration only when the quiz is eligible and has status `PUBLISHED`, then performs a concurrency-safe capacity transaction. Registration creates the participant's project association when needed.
 
 Success:
 
@@ -659,10 +647,7 @@ Response shape:
 }
 ```
 
-Upcoming may include:
-
-- explicitly registered quizzes
-- future quizzes from associated projects
+Upcoming includes only registered `PUBLISHED` quizzes that have not started. Project association may support discovery of future published quizzes, but does not itself add an unregistered quiz to Upcoming.
 
 ## 11.2 Host Dashboard
 
@@ -676,7 +661,7 @@ GET /api/dashboard/host
   "data": {
     "projects": [],
     "draftQuizzes": [],
-    "scheduledQuizzes": [],
+    "publishedQuizzes": [],
     "liveQuiz": null,
     "completedQuizzes": []
   }
@@ -1796,7 +1781,6 @@ quiz CRUD
 question CRUD
 reorder
 publish
-schedule
 ```
 
 ## Phase 4 — Registration
@@ -1911,3 +1895,15 @@ The API implementation is complete when:
 ---
 
 **End of API Design Document**
+
+## Authoring implementation notes — 2026-09-28
+
+The current authoring slice implements the project list/create/read/update, project quiz list/create, host quiz read/update, question create/update/delete/reorder, and media upload-request/complete/delete routes above. Project/quiz deletion, public quiz views, and publishing remain deferred.
+
+- Explicit-save clients submit complete editable field sets on PATCH. Strict validation rejects lifecycle writes, quiz project reassignment, and unknown fields.
+- Quiz draft create/update includes nullable `plannedStartAt` as planned-date metadata only. It does not transition status. New quizzes always remain `DRAFT`; publishing must reject a missing `plannedStartAt`.
+- Host quiz responses and question mutation responses return the current owned quiz with ordered questions and answer keys. They must never be reused as participant DTOs.
+- Media completion returns `{ id, fileName, url }`, where `url` is a one-hour private read URL. Media deletion returns 204 and is rejected while any quiz/question references the asset.
+- PNG/JPEG/WebP uploads up to 10 MiB are supported. Uploads require an existing owned, editable quiz; project covers are not part of this slice.
+- List responses include `meta.nextCursor` with a page size of 25. Cursors are UUIDs interpreted as stable ascending keyset positions.
+- Runtime schemas and DTOs live in `packages/contracts/src/index.ts`; centralized protective input limits are documented in PROGRESS.MD.
