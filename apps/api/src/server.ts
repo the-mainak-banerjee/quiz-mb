@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import type { Server } from 'socket.io';
-import app, { database, live, redis } from './index.js';
+import app, { database, events, live, redis } from './index.js';
 import { parseEnv } from './config/env.js';
 import { createLogger } from './infrastructure/logger.js';
 import {
@@ -19,7 +19,7 @@ async function start() {
   if (live && redis) {
     await redis.connect();
     io = createSocketServer(server, env.ALLOWED_ORIGINS);
-    attachLiveRealtime(io, live, logger);
+    attachLiveRealtime(io, live, logger, events);
   } else {
     logger.warn('REDIS_URL is not set; live sessions are disabled');
   }

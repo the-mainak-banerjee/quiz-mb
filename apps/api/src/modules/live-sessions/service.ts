@@ -228,7 +228,31 @@ export class LiveSessionsService {
 
   /** Current role-safe state for an already joined socket. */
   async sync(liveSessionId: string, userId: string, role: LiveRole) {
-    return this.snapshotFor(await this.load(liveSessionId), role);
+    const session = await this.load(liveSessionId);
+    // Re-derive the role: a participant who unregistered is refused here.
+    const current = await this.roleFor(session, userId);
+    if (current !== role) throw notFound();
+    return this.snapshotFor(session, role);
+  }
+
+  /**
+   * Applies a registration change to the quiz's open session, if any. An
+   * unregistered participant loses presence and attendance; the returned
+   * socket (if connected) must be removed by the transport.
+   */
+  async applyRegistrationChange(
+    quizId: string,
+    userId: string,
+    registered: boolean,
+  ) {
+    const session = await this.repository.findActiveForQuiz(quizId);
+    if (!session) return null;
+    let removedSocketId: string | null = null;
+    if (!registered) {
+      removedSocketId = await this.store.evictPresence(session.id, userId);
+      await this.repository.removeParticipation(session.id, userId);
+    }
+    return { session, removedSocketId };
   }
 
   isActiveSocket(liveSessionId: string, userId: string, socketId: string) {

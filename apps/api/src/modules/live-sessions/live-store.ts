@@ -31,6 +31,12 @@ if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2] then
 end
 return 0`;
 
+// Remove a user's presence whatever socket holds it; returns that socket.
+const EVICT_SCRIPT = `
+local socket = redis.call('HGET', KEYS[1], ARGV[1])
+redis.call('HDEL', KEYS[1], ARGV[1])
+return socket`;
+
 const UNLOCK_SCRIPT = `
 if redis.call('GET', KEYS[1]) == ARGV[1] then
   return redis.call('DEL', KEYS[1])
@@ -90,6 +96,14 @@ export class LiveStore {
       ),
     );
     return removed === 1;
+  }
+
+  /** Removes the user's presence; returns the socket that held it. */
+  async evictPresence(liveSessionId: string, userId: string) {
+    const socket = await guard(
+      this.redis.eval(EVICT_SCRIPT, 1, presenceKey(liveSessionId), userId),
+    );
+    return typeof socket === 'string' ? socket : null;
   }
 
   async activeSocket(liveSessionId: string, userId: string) {

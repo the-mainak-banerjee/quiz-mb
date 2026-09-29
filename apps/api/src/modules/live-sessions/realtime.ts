@@ -8,10 +8,12 @@ import {
   lateJoinCommandSchema,
   liveSessionCommandSchema,
   type LivePresenceDto,
+  type LiveRemovedDto,
   type LiveRole,
   type SocketAck,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
+import type { DomainEvents } from '../../infrastructure/domain-events.js';
 import type { LiveSessionRow } from './repository.js';
 import type { LiveSessionsService } from './service.js';
 
@@ -71,6 +73,7 @@ export function attachLiveRealtime(
   io: Server,
   service: LiveSessionsService,
   logger: Logger,
+  events?: DomainEvents,
 ) {
   const nsp: Namespace = io.of(LIVE_SOCKET_NAMESPACE);
 
@@ -102,6 +105,36 @@ export function attachLiveRealtime(
       .to(room(session.id, 'participants'))
       .emit(LIVE_EVENTS.snapshot, participant);
   }
+
+  // Registration can change while the lobby is open: keep the host's roster
+  // and counts current, and remove participants who unregistered.
+  events?.on('registrationChanged', ({ quizId, userId, registered }) => {
+    service
+      .applyRegistrationChange(quizId, userId, registered)
+      .then(async (result) => {
+        if (!result) return;
+        if (result.removedSocketId) {
+          const removed: LiveRemovedDto = {
+            code: 'REGISTRATION_REQUIRED',
+            message: 'You unregistered from this quiz, so you left its lobby.',
+          };
+          nsp.to(result.removedSocketId).emit(LIVE_EVENTS.removed, removed);
+          nsp.in(result.removedSocketId).disconnectSockets(true);
+        }
+        nsp
+          .to(room(result.session.id, 'host'))
+          .emit(
+            LIVE_EVENTS.snapshot,
+            await service.hostSnapshot(result.session),
+          );
+      })
+      .catch(() =>
+        logger.warn(
+          { quizId, code: 'LIVE_UNAVAILABLE' },
+          'Live registration update failed',
+        ),
+      );
+  });
 
   nsp.on('connection', (raw) => {
     const socket = raw as unknown as LiveSocket;

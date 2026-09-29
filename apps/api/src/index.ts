@@ -8,6 +8,7 @@ import { AuthRepository } from './modules/auth/repository.js';
 import { AuthService } from './modules/auth/service.js';
 import { UsersService } from './modules/users/service.js';
 import { createRedis } from './infrastructure/redis.js';
+import { DomainEvents } from './infrastructure/domain-events.js';
 import { LiveSessionsRepository } from './modules/live-sessions/repository.js';
 import { LiveSessionsService } from './modules/live-sessions/service.js';
 import { LiveStore } from './modules/live-sessions/live-store.js';
@@ -19,6 +20,7 @@ export const database = createDatabase(
   authConfig.DATABASE_URL,
   authConfig.DATABASE_SSL_CA_BASE64,
 );
+export const events = new DomainEvents();
 // Live sessions need Redis; without REDIS_URL the REST-only API still runs.
 export const redis = env.REDIS_URL ? createRedis(env.REDIS_URL) : undefined;
 export const live = redis
@@ -37,4 +39,5 @@ export default createApp({
   database,
   storage: createStorage(process.env),
   live,
+  events,
 });

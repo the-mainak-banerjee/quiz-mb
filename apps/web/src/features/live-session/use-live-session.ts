@@ -6,6 +6,7 @@ import {
   LIVE_EVENTS,
   LIVE_SOCKET_NAMESPACE,
   type LivePresenceDto,
+  type LiveRemovedDto,
   type LiveSnapshotDto,
   type SocketAck,
 } from '@quizmb/contracts';
@@ -24,6 +25,19 @@ export type LiveFailure = { code: string; message: string };
  * reconnecting screen so the displayed counter never exceeds it.
  */
 export const MAX_RECONNECT_ATTEMPTS = 10;
+
+/**
+ * Join refusals that retrying cannot fix. Anything else (timeouts,
+ * LIVE_UNAVAILABLE, INTERNAL_ERROR, OPERATION_IN_PROGRESS) is retried.
+ */
+const PERMANENT_JOIN_ERRORS = new Set([
+  'REGISTRATION_REQUIRED',
+  'LATE_JOIN_DISABLED',
+  'QUIZ_COMPLETED',
+  'SESSION_NOT_FOUND',
+  'FORBIDDEN',
+  'VALIDATION_ERROR',
+]);
 
 function applyPresence(
   snapshot: LiveSnapshotDto | null,
@@ -54,13 +68,18 @@ export function useLiveSession(liveSessionId: string) {
   const [failure, setFailure] = useState<LiveFailure | null>(null);
   const [attempt, setAttempt] = useState(0);
   const socketRef = useRef<Socket | null>(null);
+  // True only after the server accepted session:join on the current socket.
+  const joinedRef = useRef(false);
   // Bumped by a manual retry to start a fresh connection with reset counters.
   const [generation, setGeneration] = useState(0);
 
   useEffect(() => {
     let handshakeRetries = 0;
+    let joinRetries = 0;
     let retryTimer: number | undefined;
+    let joinTimer: number | undefined;
     let stopped = false;
+    joinedRef.current = false;
     const socket = io(`${API_ORIGIN}${LIVE_SOCKET_NAMESPACE}`, {
       transports: ['websocket'],
       reconnectionDelayMax: 5_000,
@@ -83,29 +102,61 @@ export function useLiveSession(liveSessionId: string) {
     });
     socketRef.current = socket;
 
+    function fail(problem: LiveFailure | null) {
+      stopped = true;
+      joinedRef.current = false;
+      window.clearTimeout(joinTimer);
+      if (problem) setFailure(problem);
+      setConnection((current) => (current === 'replaced' ? current : 'failed'));
+      socket.disconnect();
+    }
+
     async function join() {
       const ack = (await socket
         .timeout(10_000)
         .emitWithAck(LIVE_EVENTS.join, { liveSessionId })
         .catch(() => null)) as SocketAck<LiveSnapshotDto> | null;
-      if (!ack) return;
-      if (ack.ok) {
+      // Disconnected meanwhile: the next 'connect' joins again.
+      if (!socket.connected || stopped) return;
+      if (ack?.ok) {
         handshakeRetries = 0;
+        joinRetries = 0;
+        joinedRef.current = true;
+        setAttempt(0);
         setFailure(null);
         setSnapshot(ack.data);
         setConnection('connected');
-      } else {
-        stopped = true;
-        setFailure(ack.error);
-        setConnection('failed');
-        socket.disconnect();
+        return;
       }
+      if (ack && PERMANENT_JOIN_ERRORS.has(ack.error.code)) {
+        fail(ack.error);
+        return;
+      }
+      // Timeout or temporary server problem (e.g. Redis or a busy row
+      // lock): retry with backoff, then offer a manual retry.
+      joinRetries += 1;
+      setAttempt(Math.min(joinRetries, MAX_RECONNECT_ATTEMPTS));
+      setConnection((current) =>
+        current === 'connecting' ? current : 'reconnecting',
+      );
+      if (joinRetries >= MAX_RECONNECT_ATTEMPTS) {
+        fail(null);
+        return;
+      }
+      joinTimer = window.setTimeout(
+        () => {
+          if (socket.connected && !stopped) void join();
+        },
+        Math.min(joinRetries * 1_000, 5_000),
+      );
     }
 
     socket.on('connect', () => {
       setAttempt(0);
+      joinRetries = 0;
       void join();
     });
+    socket.on(LIVE_EVENTS.removed, (removed: LiveRemovedDto) => fail(removed));
     socket.on(LIVE_EVENTS.snapshot, (next: LiveSnapshotDto) =>
       setSnapshot(next),
     );
@@ -114,6 +165,8 @@ export function useLiveSession(liveSessionId: string) {
     );
     socket.on(LIVE_EVENTS.replaced, () => setConnection('replaced'));
     socket.on('disconnect', (reason) => {
+      joinedRef.current = false;
+      window.clearTimeout(joinTimer);
       setConnection((current) =>
         current === 'replaced' || current === 'failed'
           ? current
@@ -155,6 +208,7 @@ export function useLiveSession(liveSessionId: string) {
 
     return () => {
       window.clearTimeout(retryTimer);
+      window.clearTimeout(joinTimer);
       socket.removeAllListeners();
       socket.io.removeAllListeners();
       socket.disconnect();
@@ -190,9 +244,12 @@ export function useLiveSession(liveSessionId: string) {
     [liveSessionId],
   );
 
-  /** Manual retry: replaces the socket so attempts start again from 1. */
+  /**
+   * Manual retry: replaces the socket so attempts start again from 1. Also
+   * recovers a socket that is connected but never managed to join.
+   */
   const reconnect = useCallback(() => {
-    if (socketRef.current?.connected) return;
+    if (joinedRef.current) return;
     setFailure(null);
     setAttempt(0);
     setConnection('reconnecting');

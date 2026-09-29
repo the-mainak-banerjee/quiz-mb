@@ -15,7 +15,12 @@ import type { SupabaseStorage } from './media/storage.js';
 import { RegistrationsRepository } from './registrations/repository.js';
 import { RegistrationsService } from './registrations/service.js';
 import { registrationRoutes } from './registrations/routes.js';
-export function authoringRoutes(db: PrismaClient, storage?: SupabaseStorage) {
+import type { DomainEvents } from '../infrastructure/domain-events.js';
+export function authoringRoutes(
+  db: PrismaClient,
+  storage?: SupabaseStorage,
+  events?: DomainEvents,
+) {
   const projects = new ProjectsService(new ProjectsRepository(db));
   const media = new MediaService(db, storage);
   const quizzes = new QuizzesService(
@@ -27,6 +32,7 @@ export function authoringRoutes(db: PrismaClient, storage?: SupabaseStorage) {
   const registrations = new RegistrationsService(
     new RegistrationsRepository(db),
     quizzes,
+    events,
   );
   return Router().use(
     projectRoutes(projects),

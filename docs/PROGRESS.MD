@@ -34,7 +34,7 @@ Branch `phase-5-live`. Built on the approved frontend screens, assuming the web 
 
 - End quiz is minimal: it completes the session and quiz without results; Phase 10 replaces it. A host cannot end a quiz from the lobby without starting it first.
 - Presence has no heartbeat TTL (to save Upstash commands); if the API process crashes, stale presence can remain until the 24-hour key expiry. Presence is best effort; attendance is durable in `ParticipantSession`.
-- Single API instance only: device replacement and broadcasts rely on one Socket.IO server. Horizontal scaling needs the Redis adapter (and its pub/sub command cost).
+- Single API instance only: device replacement, broadcasts and registration-change events (in-process `DomainEvents`) rely on one Socket.IO server. Horizontal scaling needs the Redis adapter (and its pub/sub command cost).
 - Participant lobby connected counts refresh on join and on each state change rather than continuously.
 - Cross-domain REST auth is still pending (docs/TODO.md), so a deployed web app cannot yet sign in against a Render-hosted API. Socket authentication already works cross-domain.
 - Rate limiting (auth, registration, uploads, live sockets) is not implemented; tracked in docs/TODO.md.

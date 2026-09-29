@@ -1975,3 +1975,4 @@ Socket.IO (`/quiz` namespace) as implemented:
 - Acknowledgements use `{ ok: true, data } | { ok: false, error: { code, message } }`.
 - Additional codes: `REGISTRATION_CLOSED` also applies once the quiz is `LIVE` (registration stays open in `LOBBY`), `LIVE_UNAVAILABLE` (503, Redis unreachable), `NOT_JOINED`, `OPERATION_IN_PROGRESS`.
 - `GET /api/dashboard/participant` now fills `live` with registered quizzes in `LOBBY` or `LIVE`.
+- Registration changes while a session is open (registration stays open in `LOBBY`): every register/unregister pushes a fresh host `session:snapshot` (roster and counts). An unregistering participant's presence and lobby attendance are removed, and their socket receives `session:removed { code: 'REGISTRATION_REQUIRED', message }` before being disconnected. `session:sync` re-checks registration.

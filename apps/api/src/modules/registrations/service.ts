@@ -4,6 +4,7 @@ import type {
   ParticipantDashboardDto,
   RegistrationDto,
 } from '@quizmb/contracts';
+import type { DomainEvents } from '../../infrastructure/domain-events.js';
 import type { QuizzesService } from '../quizzes/service.js';
 import type { RegistrationsRepository } from './repository.js';
 
@@ -11,10 +12,16 @@ export class RegistrationsService {
   constructor(
     private repository: RegistrationsRepository,
     private quizzes: QuizzesService,
+    private events?: DomainEvents,
   ) {}
 
   async register(quizId: string, userId: string): Promise<RegistrationDto> {
     const result = await this.repository.register(quizId, userId);
+    this.events?.emit('registrationChanged', {
+      quizId,
+      userId,
+      registered: true,
+    });
     return {
       registered: true,
       registeredAt: result.registration.registeredAt.toISOString(),
@@ -24,6 +31,11 @@ export class RegistrationsService {
 
   async unregister(quizId: string, userId: string): Promise<RegistrationDto> {
     const result = await this.repository.unregister(quizId, userId);
+    this.events?.emit('registrationChanged', {
+      quizId,
+      userId,
+      registered: false,
+    });
     return {
       registered: false,
       registeredAt: null,

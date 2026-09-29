@@ -252,6 +252,8 @@ export const LIVE_EVENTS = {
   quizEnd: 'host:quiz-end',
   snapshot: 'session:snapshot',
   replaced: 'session:replaced',
+  /** The server removed this participant (e.g. they unregistered). */
+  removed: 'session:removed',
   presence: 'host:presence-updated',
 } as const;
 
@@ -346,6 +348,8 @@ export type LivePresenceDto = {
 };
 
 export type LiveReplacedDto = { reason: string };
+
+export type LiveRemovedDto = { code: string; message: string };
 
 export type SocketAck<T> =
   | { ok: true; data: T }

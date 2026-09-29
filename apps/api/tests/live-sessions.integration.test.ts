@@ -20,6 +20,7 @@ import {
 import { createApp } from '../src/app.js';
 import { createLogger } from '../src/infrastructure/logger.js';
 import { createRedis } from '../src/infrastructure/redis.js';
+import { DomainEvents } from '../src/infrastructure/domain-events.js';
 import { AuthRepository } from '../src/modules/auth/repository.js';
 import { AuthService } from '../src/modules/auth/service.js';
 import { parseAuthEnv } from '../src/modules/auth/config.js';
@@ -73,6 +74,7 @@ test(
     );
     const origin = 'http://localhost:3000';
     const logger = createLogger('silent');
+    const events = new DomainEvents();
     const server = createServer(
       createApp({
         allowedOrigins: [origin],
@@ -81,15 +83,16 @@ test(
         users: new UsersService(db),
         database: db,
         live,
+        events,
       }),
     );
     const io = createSocketServer(server, [origin]);
-    attachLiveRealtime(io, live, logger);
+    attachLiveRealtime(io, live, logger, events);
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
-    const roles = ['host', 'a', 'b', 'c', 'late', 'outsider'] as const;
+    const roles = ['host', 'a', 'b', 'c', 'late', 'outsider', 'drop'] as const;
     const emails = roles.map(
       (role) => `live-${role}-${randomUUID()}@example.invalid`,
     );
@@ -472,6 +475,86 @@ test(
 
     const phoneB = await open('b');
     ok(await join(phoneB));
+
+    // ---- Registration changes in the lobby reach the host and evict leavers.
+    const hostSnapshotAfter = (
+      predicate: (snapshot: HostLiveSnapshotDto) => boolean,
+    ) =>
+      new Promise<HostLiveSnapshotDto>((resolve) => {
+        const listener = (snapshot: HostLiveSnapshotDto) => {
+          if (!predicate(snapshot)) return;
+          host.off(LIVE_EVENTS.snapshot, listener);
+          resolve(snapshot);
+        };
+        host.on(LIVE_EVENTS.snapshot, listener);
+      });
+    const registeredBefore = hostSnapshot.counts.registered;
+    const afterRegister = hostSnapshotAfter(
+      (snapshot) => snapshot.counts.registered === registeredBefore + 1,
+    );
+    await data(
+      await request(`/quizzes/${quiz.id}/register`, 'POST', {}, cookies.drop),
+      201,
+    );
+    const registeredSnapshot = await afterRegister;
+    assert.ok(
+      registeredSnapshot.roster.some((entry) => entry.name === 'Live drop'),
+      'a lobby registration appears in the host roster',
+    );
+    const dropSocket = await open('drop');
+    ok(await join(dropSocket));
+    const removed = nextEvent<{ code: string }>(
+      dropSocket,
+      LIVE_EVENTS.removed,
+    );
+    const evicted = nextEvent(dropSocket, 'disconnect');
+    const afterUnregister = hostSnapshotAfter(
+      (snapshot) => snapshot.counts.registered === registeredBefore,
+    );
+    await data(
+      await request(
+        `/quizzes/${quiz.id}/register`,
+        'DELETE',
+        undefined,
+        cookies.drop,
+      ),
+    );
+    assert.equal((await removed).code, 'REGISTRATION_REQUIRED');
+    await evicted;
+    const unregisteredSnapshot = await afterUnregister;
+    assert.equal(
+      unregisteredSnapshot.roster.some((entry) => entry.name === 'Live drop'),
+      false,
+    );
+    assert.equal(
+      unregisteredSnapshot.counts.connected,
+      2,
+      'the unregistered participant no longer counts as connected',
+    );
+    const dropUserId = (
+      await db.user.findUniqueOrThrow({ where: { email: emails[6]! } })
+    ).id;
+    assert.equal(
+      await db.participantSession.count({
+        where: { liveSessionId: session.id, userId: dropUserId },
+      }),
+      0,
+      'lobby attendance is removed with the registration',
+    );
+    // Without registering again they cannot get a new socket ticket.
+    assert.equal(
+      (
+        await failure(
+          await request(
+            `/live-sessions/${session.id}/socket-ticket`,
+            'POST',
+            {},
+            cookies.drop,
+          ),
+        )
+      ).code,
+      'REGISTRATION_REQUIRED',
+    );
 
     // ---- Start: everyone receives the new state; registration closes.
     const participantUpdate = nextEvent<LiveSnapshotDto>(

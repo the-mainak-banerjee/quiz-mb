@@ -160,6 +160,13 @@ export class LiveSessionsRepository {
     });
   }
 
+  /** Unregistered users are no longer attendees of this session. */
+  removeParticipation(liveSessionId: string, userId: string) {
+    return this.db.participantSession.deleteMany({
+      where: { liveSessionId, userId },
+    });
+  }
+
   /** LOBBY → LIVE_IDLE. Closes registration and locks quiz content. */
   start(id: string) {
     return this.db.$transaction(async (tx) => {
