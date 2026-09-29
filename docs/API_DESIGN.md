@@ -1977,3 +1977,12 @@ Socket.IO (`/quiz` namespace) as implemented:
 - `GET /api/dashboard/participant` now fills `live` with registered quizzes in `LOBBY` or `LIVE`.
 - `host:lobby-close` (host only, `LOBBY` state only, else `INVALID_STATE_TRANSITION`): cancels an unstarted lobby. The session and its lobby attendance are deleted, presence is cleared and the quiz returns to `PUBLISHED` with registrations kept. Other sockets in the room receive `session:removed { code: 'LOBBY_CLOSED' }` and are disconnected; the ack carries no snapshot.
 - Registration changes while a session is open (registration stays open in `LOBBY`): every register/unregister pushes a fresh host `session:snapshot` (roster and counts). An unregistering participant's presence and lobby attendance are removed, and their socket receives `session:removed { code: 'REGISTRATION_REQUIRED', message }` before being disconnected. `session:sync` re-checks registration.
+
+## Quiz status socket — 2026-09-29
+
+Read-only lifecycle updates for the public quiz page, so registered participants see **Enter live room** (and lobby closed, started, ended) without reloading.
+
+- `POST /api/quizzes/:quizId/watch-ticket` → `{ ticket, expiresAt }` (60 seconds) for any signed-in user and any non-draft quiz (`404` for drafts). Lifecycle status is already public, so registration is not required. Watch tickets use their own audience: they cannot join `/quiz`, and live tickets cannot watch.
+- Namespace `/quiz-status`: the handshake verifies `auth.ticket`; the socket watches only the ticket's quiz, receives `quiz:status { quizId, status }` on connect and after every change. There are no client commands.
+- Status changes are published in-process when a lobby opens (`LOBBY`), closes (`PUBLISHED`), the quiz starts (`LIVE`) or ends (`COMPLETED`). No Redis commands are used; like other in-process events this assumes a single API instance.
+

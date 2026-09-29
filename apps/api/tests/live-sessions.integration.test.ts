@@ -9,6 +9,9 @@ import { createDatabase } from '@quizmb/database';
 import {
   LIVE_EVENTS,
   LIVE_SOCKET_NAMESPACE,
+  QUIZ_STATUS_EVENT,
+  QUIZ_STATUS_NAMESPACE,
+  type QuizStatusDto,
   type HostLiveSnapshotDto,
   type LiveCountDto,
   type LivePresenceDto,
@@ -35,6 +38,7 @@ import {
   attachLiveRealtime,
   createSocketServer,
 } from '../src/modules/live-sessions/realtime.js';
+import { attachQuizStatusRealtime } from '../src/modules/live-sessions/status-realtime.js';
 
 const quizBasics = {
   description: 'Live session fixture.',
@@ -69,14 +73,15 @@ test(
     );
     const redis = createRedis(process.env.REDIS_URL!);
     await redis.connect();
+    const events = new DomainEvents();
     const live = new LiveSessionsService(
       new LiveSessionsRepository(db),
       new LiveStore(redis),
       new SocketTickets(config.AUTH_ACCESS_SECRET),
+      events,
     );
     const origin = 'http://localhost:3000';
     const logger = createLogger('silent');
-    const events = new DomainEvents();
     const server = createServer(
       createApp({
         allowedOrigins: [origin],
@@ -90,6 +95,7 @@ test(
     );
     const io = createSocketServer(server, [origin]);
     attachLiveRealtime(io, live, logger, events);
+    attachQuizStatusRealtime(io, live, logger, events);
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -216,6 +222,67 @@ test(
         ),
         201,
       );
+
+    // ---- Quiz status watchers (public quiz page). Any signed-in user may
+    // watch a non-draft quiz; tickets are bound to the watch namespace.
+    const watchQuiz = async (role: (typeof roles)[number], quizId: string) => {
+      const { ticket: watchTicket } = await data<SocketTicketDto>(
+        await request(
+          `/quizzes/${quizId}/watch-ticket`,
+          'POST',
+          {},
+          cookies[role],
+        ),
+      );
+      const socket = connect(base + QUIZ_STATUS_NAMESPACE, {
+        auth: { ticket: watchTicket },
+        transports: ['websocket'],
+        reconnection: false,
+        forceNew: true,
+      });
+      sockets.push(socket);
+      const statuses: string[] = [];
+      let notify = () => {};
+      socket.on(QUIZ_STATUS_EVENT, (update: QuizStatusDto) => {
+        assert.equal(update.quizId, quizId);
+        statuses.push(update.status);
+        notify();
+      });
+      const untilCount = (count: number) =>
+        new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error(`statuses: ${statuses.join(',')}`)),
+            15_000,
+          );
+          const check = () => {
+            if (statuses.length < count) return;
+            clearTimeout(timer);
+            resolve();
+          };
+          notify = check;
+          check();
+        });
+      await untilCount(1);
+      return { statuses, untilCount, socket };
+    };
+    assert.equal(
+      (
+        await failure(
+          await request(
+            `/quizzes/${draft.id}/watch-ticket`,
+            'POST',
+            {},
+            cookies.a,
+          ),
+        )
+      ).status,
+      404,
+      'drafts cannot be watched',
+    );
+    const quizWatch = await watchQuiz('a', quiz.id);
+    const thirdWatch = await watchQuiz('outsider', third.id);
+    assert.deepEqual(quizWatch.statuses, ['PUBLISHED']);
+    assert.deepEqual(thirdWatch.statuses, ['PUBLISHED']);
 
     // ---- Opening lobbies: ownership, lifecycle and one live quiz per host.
     assert.equal(
@@ -416,6 +483,52 @@ test(
     sockets.push(foreign);
     await nextEvent(foreign, 'connect_error');
     assert.equal(foreign.connected, false, 'foreign origins are refused');
+
+    const watchOnLive = connect(base + LIVE_SOCKET_NAMESPACE, {
+      auth: {
+        ticket: (
+          await data<SocketTicketDto>(
+            await request(
+              `/quizzes/${quiz.id}/watch-ticket`,
+              'POST',
+              {},
+              cookies.a,
+            ),
+          )
+        ).ticket,
+      },
+      transports: ['websocket'],
+      reconnection: false,
+      forceNew: true,
+    });
+    sockets.push(watchOnLive);
+    assert.equal(
+      (
+        await nextEvent<Error & { data?: { code: string } }>(
+          watchOnLive,
+          'connect_error',
+        )
+      ).data?.code,
+      'UNAUTHENTICATED',
+      'a watch ticket cannot join the live room',
+    );
+    const liveOnWatch = connect(base + QUIZ_STATUS_NAMESPACE, {
+      auth: { ticket: await ticket('a') },
+      transports: ['websocket'],
+      reconnection: false,
+      forceNew: true,
+    });
+    sockets.push(liveOnWatch);
+    assert.equal(
+      (
+        await nextEvent<Error & { data?: { code: string } }>(
+          liveOnWatch,
+          'connect_error',
+        )
+      ).data?.code,
+      'UNAUTHENTICATED',
+      'a live ticket cannot watch quiz status',
+    );
 
     const host = await open('host');
     const hostSnapshot = ok(await join(host)) as HostLiveSnapshotDto;
@@ -771,5 +884,24 @@ test(
     sessionIds.add(reopened.id);
     assert.notEqual(reopened.id, next.id, 'the host can open a new lobby');
     await live.end(reopened.id, hostId);
+
+    // ---- Watchers saw every lifecycle change without reloading.
+    await quizWatch.untilCount(4);
+    const seen = quizWatch.statuses;
+    assert.equal(seen[0], 'PUBLISHED');
+    assert.ok(
+      seen.indexOf('LOBBY') > 0 &&
+        seen.indexOf('LIVE') > seen.indexOf('LOBBY') &&
+        seen.lastIndexOf('COMPLETED') > seen.indexOf('LIVE'),
+      seen.join(','),
+    );
+    await thirdWatch.untilCount(5);
+    assert.deepEqual(thirdWatch.statuses, [
+      'PUBLISHED',
+      'LOBBY',
+      'PUBLISHED',
+      'LOBBY',
+      'COMPLETED',
+    ]);
   },
 );

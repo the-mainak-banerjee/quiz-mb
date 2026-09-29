@@ -232,6 +232,9 @@ export type HostDashboardDto = {
 // host-only data (answer keys, roster) can never be sent to participants.
 
 export const LIVE_SOCKET_NAMESPACE = '/quiz';
+/** Read-only quiz lifecycle updates for the public quiz page. */
+export const QUIZ_STATUS_NAMESPACE = '/quiz-status';
+export const QUIZ_STATUS_EVENT = 'quiz:status';
 
 export const LIVE_SESSION_STATES = [
   'LOBBY',
@@ -293,6 +296,11 @@ export type ActiveHostSessionDto = {
 };
 
 export type SocketTicketDto = { ticket: string; expiresAt: string };
+
+export type QuizStatusDto = {
+  quizId: string;
+  status: 'PUBLISHED' | 'LOBBY' | 'LIVE' | 'COMPLETED';
+};
 
 export type LiveQuizInfoDto = {
   id: string;

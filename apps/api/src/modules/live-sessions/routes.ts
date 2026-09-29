@@ -23,6 +23,15 @@ export function liveSessionRoutes(service: LiveSessionsService) {
       ),
     });
   });
+  router.post('/quizzes/:id/watch-ticket', async (req, res) => {
+    res.json({
+      success: true,
+      data: await service.issueWatchTicket(
+        validate(z.uuid(), req.params.id),
+        res.locals.userId as string,
+      ),
+    });
+  });
   router.get('/live-sessions/active', async (_req, res) => {
     res.json({
       success: true,

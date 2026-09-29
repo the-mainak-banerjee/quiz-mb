@@ -12,6 +12,12 @@ export type RegistrationChange = {
  * Single-instance only: with several API instances these would need Redis
  * pub/sub alongside the Socket.IO Redis adapter.
  */
+export type QuizStatusChange = {
+  quizId: string;
+  status: 'PUBLISHED' | 'LOBBY' | 'LIVE' | 'COMPLETED';
+};
+
 export class DomainEvents extends EventEmitter<{
   registrationChanged: [RegistrationChange];
+  quizStatusChanged: [QuizStatusChange];
 }> {}
