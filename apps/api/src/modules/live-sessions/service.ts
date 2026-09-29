@@ -294,6 +294,19 @@ export class LiveSessionsService {
     );
   }
 
+  /** Host closes a lobby before starting; returns the quiz id. */
+  async closeLobby(liveSessionId: string, userId: string) {
+    const session = await this.load(liveSessionId);
+    this.requireHost(session, userId);
+    const quizId = await this.store.withLock(
+      'session-transition',
+      liveSessionId,
+      () => this.repository.closeLobby(liveSessionId),
+    );
+    await this.store.clearPresence(liveSessionId);
+    return quizId;
+  }
+
   async end(liveSessionId: string, userId: string) {
     const session = await this.hostTransition(liveSessionId, userId, () =>
       this.repository.end(liveSessionId),

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, CircleX, WifiOff } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { AlertTriangle, CircleX, DoorClosed, WifiOff } from 'lucide-react';
 import { LIVE_EVENTS, type HostLiveSnapshotDto } from '@quizmb/contracts';
 import { Button, Callout, Text } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
@@ -24,6 +25,25 @@ import {
   toRoster,
 } from './view-models';
 
+const confirmations = {
+  end: {
+    title: 'End this quiz?',
+    description:
+      'The live session closes for everyone and the quiz is marked completed. This cannot be undone.',
+    cancel: 'Keep quiz live',
+    confirm: 'End quiz',
+    event: LIVE_EVENTS.quizEnd,
+  },
+  close: {
+    title: 'Close this lobby?',
+    description:
+      'Everyone waiting is sent back to the quiz page. The quiz stays published with all registrations, and you can open the lobby again later.',
+    cancel: 'Keep lobby open',
+    confirm: 'Close lobby',
+    event: LIVE_EVENTS.lobbyClose,
+  },
+} as const;
+
 /** Host live console driven by the authoritative realtime snapshot. */
 export function HostLiveConsole({
   liveSessionId,
@@ -38,7 +58,10 @@ export function HostLiveConsole({
     useLiveSession(liveSessionId);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [confirmEnd, setConfirmEnd] = useState(false);
+  const [confirming, setConfirming] = useState<
+    keyof typeof confirmations | null
+  >(null);
+  const router = useRouter();
   const manageHref = APP_LINKS.WORKSPACE.MANAGE_QUIZ(quizId);
   const backToQuiz = (
     <NavigationItem href={manageHref} className="bg-surface-low">
@@ -55,6 +78,15 @@ export function HostLiveConsole({
     return ack.ok;
   }
 
+  if (connection === 'failed' && failure?.code === 'LOBBY_CLOSED')
+    return (
+      <LiveNotice
+        eyebrow="Lobby closed"
+        title="This lobby was closed"
+        description="It was closed from another tab. The quiz is still published, and you can open the lobby again from its page."
+        action={backToQuiz}
+      />
+    );
   if (connection === 'failed' && failure)
     return (
       <LiveNotice
@@ -154,6 +186,7 @@ export function HostLiveConsole({
           allowLateJoin={host.allowLateJoin}
           busy={busy || connection !== 'connected'}
           onStartQuiz={() => void run(LIVE_EVENTS.quizStart)}
+          onCloseLobby={() => setConfirming('close')}
           onLateJoinChange={onLateJoinChange}
         />
       ) : (
@@ -180,7 +213,7 @@ export function HostLiveConsole({
                 asked={0}
                 questionCount={quiz.questionCount}
                 questionLive={false}
-                onEndQuiz={() => setConfirmEnd(true)}
+                onEndQuiz={() => setConfirming('end')}
               />
               <LeaderboardPanel canShowParticipants />
               <ParticipantsPanel
@@ -198,24 +231,34 @@ export function HostLiveConsole({
       )}
 
       <Modal
-        open={confirmEnd}
-        onOpenChange={setConfirmEnd}
-        title="End this quiz?"
-        description="The live session closes for everyone and the quiz is marked completed. This cannot be undone."
+        open={confirming !== null}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title={confirmations[confirming ?? 'end'].title}
+        description={confirmations[confirming ?? 'end'].description}
       >
         <div className="flex flex-col-reverse gap-space-xs sm:flex-row sm:justify-end">
-          <Button variant="ghost" onClick={() => setConfirmEnd(false)}>
-            Keep quiz live
+          <Button variant="ghost" onClick={() => setConfirming(null)}>
+            {confirmations[confirming ?? 'end'].cancel}
           </Button>
           <Button
             variant="danger"
             disabled={busy}
-            icon={<CircleX size={18} aria-hidden="true" />}
+            icon={
+              confirming === 'close' ? (
+                <DoorClosed size={18} aria-hidden="true" />
+              ) : (
+                <CircleX size={18} aria-hidden="true" />
+              )
+            }
             onClick={async () => {
-              if (await run(LIVE_EVENTS.quizEnd)) setConfirmEnd(false);
+              const action = confirming;
+              if (!action) return;
+              if (!(await run(confirmations[action].event))) return;
+              setConfirming(null);
+              if (action === 'close') router.push(manageHref);
             }}
           >
-            End quiz
+            {confirmations[confirming ?? 'end'].confirm}
           </Button>
         </div>
         {error && (

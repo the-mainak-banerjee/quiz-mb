@@ -14,6 +14,7 @@ import {
   type LiveSessionRefDto,
   type LiveSnapshotDto,
   type QuizDto,
+  type RegistrationDto,
   type SocketAck,
   type SocketTicketDto,
 } from '@quizmb/contracts';
@@ -661,6 +662,107 @@ test(
       201,
     );
     sessionIds.add(next.id);
-    await live.end(next.id, hostId);
+
+    // ---- Close lobby: host-only and lobby-only; the quiz returns to
+    // PUBLISHED with registrations kept, and waiting sockets are told.
+    assert.equal(
+      errorCode(
+        await emit(host, LIVE_EVENTS.lobbyClose, { liveSessionId: session.id }),
+      ),
+      'INVALID_STATE_TRANSITION',
+      'a started or completed session cannot be closed as a lobby',
+    );
+    await data(
+      await request(`/quizzes/${third.id}/register`, 'POST', {}, cookies.c),
+      201,
+    );
+    const joinSession = async (
+      role: (typeof roles)[number],
+      liveSessionId: string,
+    ) => {
+      const { ticket: sessionTicket } = await data<SocketTicketDto>(
+        await request(
+          `/live-sessions/${liveSessionId}/socket-ticket`,
+          'POST',
+          {},
+          cookies[role],
+        ),
+      );
+      const socket = connect(base + LIVE_SOCKET_NAMESPACE, {
+        auth: { ticket: sessionTicket },
+        transports: ['websocket'],
+        reconnection: false,
+        forceNew: true,
+      });
+      sockets.push(socket);
+      await nextEvent(socket, 'connect');
+      ok(await emit(socket, LIVE_EVENTS.join, { liveSessionId }));
+      return socket;
+    };
+    const lobbyHost = await joinSession('host', next.id);
+    const lobbyGuest = await joinSession('c', next.id);
+    assert.equal(
+      errorCode(
+        await emit(lobbyGuest, LIVE_EVENTS.lobbyClose, {
+          liveSessionId: next.id,
+        }),
+      ),
+      'FORBIDDEN',
+    );
+    const closedNotice = nextEvent<{ code: string }>(
+      lobbyGuest,
+      LIVE_EVENTS.removed,
+    );
+    const closedDisconnect = nextEvent(lobbyGuest, 'disconnect');
+    ok(
+      await emit(lobbyHost, LIVE_EVENTS.lobbyClose, { liveSessionId: next.id }),
+    );
+    assert.equal((await closedNotice).code, 'LOBBY_CLOSED');
+    await closedDisconnect;
+    assert.equal(await db.liveQuizSession.count({ where: { id: next.id } }), 0);
+    assert.equal(
+      (await db.quiz.findUniqueOrThrow({ where: { id: third.id } })).status,
+      'PUBLISHED',
+    );
+    assert.equal(
+      (
+        await data<RegistrationDto>(
+          await request(
+            `/quizzes/${third.id}/registration`,
+            'GET',
+            undefined,
+            cookies.c,
+          ),
+        )
+      ).registered,
+      true,
+      'registrations survive a closed lobby',
+    );
+    assert.equal(await redis.exists(`lq:${next.id}:presence`), 0);
+    assert.equal(
+      (
+        await failure(
+          await request(
+            `/live-sessions/${next.id}/socket-ticket`,
+            'POST',
+            {},
+            cookies.c,
+          ),
+        )
+      ).status,
+      404,
+    );
+    const reopened = await data<LiveSessionRefDto>(
+      await request(
+        `/quizzes/${third.id}/live-session`,
+        'POST',
+        {},
+        cookies.host,
+      ),
+      201,
+    );
+    sessionIds.add(reopened.id);
+    assert.notEqual(reopened.id, next.id, 'the host can open a new lobby');
+    await live.end(reopened.id, hostId);
   },
 );

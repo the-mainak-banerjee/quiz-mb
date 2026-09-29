@@ -277,6 +277,27 @@ export function attachLiveRealtime(
       },
     );
 
+    on(
+      LIVE_EVENTS.lobbyClose,
+      liveSessionCommandSchema,
+      async ({ liveSessionId }) => {
+        requireHost();
+        await service.closeLobby(liveSessionId, userId);
+        logger.info({ liveSessionId }, 'Live lobby closed');
+        const closed: LiveRemovedDto = {
+          code: 'LOBBY_CLOSED',
+          message: 'The host closed the lobby before starting the quiz.',
+        };
+        // Everyone else in the room (participants and other host tabs) is
+        // told and disconnected; the closing socket gets the ack instead.
+        const others = nsp.to(room(liveSessionId)).except(socket.id);
+        others.emit(LIVE_EVENTS.removed, closed);
+        nsp.in(room(liveSessionId)).except(socket.id).disconnectSockets(true);
+        socket.data.role = undefined;
+        return null;
+      },
+    );
+
     async function release() {
       const liveSessionId = socket.data.ticketSessionId;
       if (socket.data.role !== 'PARTICIPANT') return;

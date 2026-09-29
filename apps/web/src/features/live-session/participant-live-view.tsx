@@ -23,6 +23,10 @@ const refusals: Record<string, { eyebrow: string; title: string }> = {
     title: 'Register for this quiz to join',
   },
   QUIZ_COMPLETED: { eyebrow: 'Quiz ended', title: 'This live quiz has ended' },
+  LOBBY_CLOSED: {
+    eyebrow: 'Lobby closed',
+    title: 'The host closed the lobby',
+  },
   SESSION_NOT_FOUND: {
     eyebrow: 'Not live',
     title: 'This quiz is not live right now',
@@ -74,7 +78,11 @@ export function ParticipantLiveView({
     return (
       <LiveNotice
         eyebrow={known?.eyebrow ?? 'Unable to join'}
-        tone={failure.code === 'QUIZ_COMPLETED' ? 'neutral' : 'danger'}
+        tone={
+          ['QUIZ_COMPLETED', 'LOBBY_CLOSED'].includes(failure.code)
+            ? 'neutral'
+            : 'danger'
+        }
         title={known?.title ?? 'We could not join the live room'}
         description={failure.message}
         action={backToQuiz}

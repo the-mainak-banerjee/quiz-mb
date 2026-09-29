@@ -195,6 +195,24 @@ export class LiveSessionsRepository {
     }, lockedTransaction);
   }
 
+  /**
+   * Cancels an unstarted lobby: nothing competitive exists yet, so the
+   * session (and its lobby attendance) is deleted and the quiz returns to
+   * PUBLISHED with registrations intact.
+   */
+  closeLobby(id: string) {
+    return this.db.$transaction(async (tx) => {
+      const session = await lockSession(tx, id);
+      if (session.state !== 'LOBBY') invalidTransition();
+      await tx.liveQuizSession.delete({ where: { id } });
+      await tx.quiz.update({
+        where: { id: session.quizId },
+        data: { status: 'PUBLISHED' },
+      });
+      return session.quizId;
+    }, lockedTransaction);
+  }
+
   /** Minimal Phase 5 end: marks the session and quiz completed. Idempotent. */
   end(id: string) {
     return this.db.$transaction(async (tx) => {

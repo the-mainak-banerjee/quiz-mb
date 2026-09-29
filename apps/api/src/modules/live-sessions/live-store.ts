@@ -118,6 +118,11 @@ export class LiveStore {
     return new Set(await guard(this.redis.hkeys(presenceKey(liveSessionId))));
   }
 
+  /** Drops all presence for a session that no longer exists. */
+  async clearPresence(liveSessionId: string) {
+    await guard(this.redis.del(presenceKey(liveSessionId)));
+  }
+
   /** Keep completed-session presence briefly for recovery, then expire it. */
   async expireCompleted(liveSessionId: string) {
     await guard(

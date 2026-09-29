@@ -3,6 +3,7 @@ import {
   ChevronRight,
   CircleCheck,
   Clock3,
+  DoorClosed,
   Info,
   Layers,
   Play,
@@ -33,6 +34,7 @@ export function HostLobby({
   publicUrl,
   allowLateJoin,
   onStartQuiz,
+  onCloseLobby,
   onLateJoinChange,
   busy = false,
 }: {
@@ -43,6 +45,8 @@ export function HostLobby({
   publicUrl: string;
   allowLateJoin: boolean;
   onStartQuiz?: (() => void) | undefined;
+  /** Cancels the unstarted lobby; the quiz stays published. */
+  onCloseLobby?: (() => void) | undefined;
   onLateJoinChange?: ((allowed: boolean) => void) | undefined;
   /** True while a host command is awaiting the server. */
   busy?: boolean;
@@ -202,6 +206,16 @@ export function HostLobby({
                 {quiz.defaultDurationSeconds}s default timer per question
               </span>
             </Text>
+            <ActionButton
+              onAction={onCloseLobby}
+              preview="Closing the lobby"
+              disabled={busy}
+              variant="ghost"
+              className="w-full text-action-secondary enabled:hover:bg-action-primary-hover enabled:hover:text-action-on-primary"
+              icon={<DoorClosed size={18} aria-hidden="true" />}
+            >
+              Close lobby without starting
+            </ActionButton>
           </div>
         </section>
       </div>

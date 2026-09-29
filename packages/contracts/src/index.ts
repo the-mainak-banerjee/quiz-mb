@@ -250,6 +250,8 @@ export const LIVE_EVENTS = {
   quizStart: 'host:quiz-start',
   lateJoinSet: 'host:late-join-set',
   quizEnd: 'host:quiz-end',
+  /** Host cancels an unstarted lobby; the quiz returns to PUBLISHED. */
+  lobbyClose: 'host:lobby-close',
   snapshot: 'session:snapshot',
   replaced: 'session:replaced',
   /** The server removed this participant (e.g. they unregistered). */

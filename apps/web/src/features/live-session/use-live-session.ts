@@ -238,7 +238,7 @@ export function useLiveSession(liveSessionId: string) {
             message: 'The live room did not respond. Please try again.',
           },
         }))) as SocketAck<LiveSnapshotDto>;
-      if (ack.ok) setSnapshot(ack.data);
+      if (ack.ok && ack.data) setSnapshot(ack.data);
       return ack;
     },
     [liveSessionId],
