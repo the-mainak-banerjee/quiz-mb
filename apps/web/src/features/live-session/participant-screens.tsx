@@ -9,7 +9,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Avatar, Badge, Callout, Surface, Text } from '@/components/ui';
-import { cn } from '@/lib/utils';
+import { cn, pluralize } from '@/lib/utils';
 import { ActionButton } from './action-button';
 import { AmbientGlow } from './live-session-shell';
 import type { LiveQuizSummary } from './types';
@@ -63,7 +63,7 @@ export function ParticipantLobby({
   quiz: LiveQuizSummary;
   connected: number;
 }) {
-  const others = connected - 1;
+  const others = Math.max(connected - 1, 0);
   return (
     <ParticipantStage glow={<AmbientGlow placement="top-center" />}>
       <div className="flex w-full max-w-2xl flex-col items-center text-center">
@@ -136,11 +136,20 @@ export function ParticipantLobby({
             >
               <UsersRound size={18} />
             </span>
-            <Text>
-              There are{' '}
-              <strong className="font-semibold">{others} participants</strong>{' '}
-              in the lobby with you. When the host starts the quiz, the room
-              moves to the live stage before the first question is asked.
+            <Text aria-live="polite">
+              {others > 0 ? (
+                <>
+                  There {others === 1 ? 'is' : 'are'}{' '}
+                  <strong className="font-semibold">
+                    {others} {pluralize(others, 'other participant')}
+                  </strong>{' '}
+                  in the lobby with you.
+                </>
+              ) : (
+                <>You&apos;re the first one here.</>
+              )}{' '}
+              When the host starts the quiz, the room moves to the live stage
+              before the first question is asked.
             </Text>
           </div>
         </Surface>

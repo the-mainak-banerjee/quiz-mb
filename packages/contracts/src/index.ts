@@ -257,6 +257,8 @@ export const LIVE_EVENTS = {
   /** The server removed this participant (e.g. they unregistered). */
   removed: 'session:removed',
   presence: 'host:presence-updated',
+  /** Throttled connected count for participant screens. */
+  count: 'session:connected-count',
 } as const;
 
 export const liveSessionCommandSchema = z
@@ -352,6 +354,8 @@ export type LivePresenceDto = {
 export type LiveReplacedDto = { reason: string };
 
 export type LiveRemovedDto = { code: string; message: string };
+
+export type LiveCountDto = { connectedCount: number };
 
 export type SocketAck<T> =
   | { ok: true; data: T }

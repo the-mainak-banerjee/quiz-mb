@@ -5,6 +5,7 @@ import { io, type Socket } from 'socket.io-client';
 import {
   LIVE_EVENTS,
   LIVE_SOCKET_NAMESPACE,
+  type LiveCountDto,
   type LivePresenceDto,
   type LiveRemovedDto,
   type LiveSnapshotDto,
@@ -162,6 +163,16 @@ export function useLiveSession(liveSessionId: string) {
     );
     socket.on(LIVE_EVENTS.presence, (presence: LivePresenceDto) =>
       setSnapshot((current) => applyPresence(current, presence)),
+    );
+    socket.on(LIVE_EVENTS.count, ({ connectedCount }: LiveCountDto) =>
+      setSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              counts: { ...current.counts, connected: connectedCount },
+            }
+          : current,
+      ),
     );
     socket.on(LIVE_EVENTS.replaced, () => setConnection('replaced'));
     socket.on('disconnect', (reason) => {

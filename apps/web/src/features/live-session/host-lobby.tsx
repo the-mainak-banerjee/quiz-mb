@@ -172,12 +172,6 @@ export function HostLobby({
             className="pointer-events-none absolute -top-16 -right-16 -z-10 size-44 rounded-pill bg-accent opacity-40 blur-2xl"
           />
           <div className="space-y-space-xs">
-            <Text
-              variant="label"
-              className="tracking-widest text-action-secondary uppercase"
-            >
-              Host control
-            </Text>
             <Text as="h2" variant="card-title" tone="inverse">
               Start the quiz
             </Text>
@@ -197,21 +191,12 @@ export function HostLobby({
             >
               Start quiz now
             </ActionButton>
-            <Text
-              variant="caption"
-              className="flex flex-wrap justify-between gap-space-xs px-1 text-action-secondary"
-            >
-              <span>{quiz.questionCount} questions ready</span>
-              <span>
-                {quiz.defaultDurationSeconds}s default timer per question
-              </span>
-            </Text>
             <ActionButton
               onAction={onCloseLobby}
               preview="Closing the lobby"
               disabled={busy}
-              variant="ghost"
-              className="w-full text-action-secondary enabled:hover:bg-action-primary-hover enabled:hover:text-action-on-primary"
+              variant="danger"
+              className="w-full"
               icon={<DoorClosed size={18} aria-hidden="true" />}
             >
               Close lobby without starting

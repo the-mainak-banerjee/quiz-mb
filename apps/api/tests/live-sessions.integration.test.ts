@@ -10,6 +10,7 @@ import {
   LIVE_EVENTS,
   LIVE_SOCKET_NAMESPACE,
   type HostLiveSnapshotDto,
+  type LiveCountDto,
   type LivePresenceDto,
   type LiveSessionRefDto,
   type LiveSnapshotDto,
@@ -474,8 +475,14 @@ test(
       'a replaced device does not remove the active presence',
     );
 
+    const countForA = nextEvent<LiveCountDto>(laptopA, LIVE_EVENTS.count);
     const phoneB = await open('b');
     ok(await join(phoneB));
+    assert.equal(
+      (await countForA).connectedCount,
+      2,
+      'participants receive the updated connected count',
+    );
 
     // ---- Registration changes in the lobby reach the host and evict leavers.
     const hostSnapshotAfter = (

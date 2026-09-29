@@ -7,6 +7,7 @@ import {
   LIVE_SOCKET_NAMESPACE,
   lateJoinCommandSchema,
   liveSessionCommandSchema,
+  type LiveCountDto,
   type LivePresenceDto,
   type LiveRemovedDto,
   type LiveRole,
@@ -106,6 +107,35 @@ export function attachLiveRealtime(
       .emit(LIVE_EVENTS.snapshot, participant);
   }
 
+  // Participants see the connected count too. Updates are throttled per
+  // session (first change immediately, then at most one per interval with
+  // the latest value) so a burst of joins does not fan out N² messages.
+  // In-memory only: this costs no Redis commands.
+  const COUNT_INTERVAL_MS = 2_000;
+  const countTimers = new Map<string, NodeJS.Timeout>();
+  const latestCounts = new Map<string, number>();
+  function sendCount(liveSessionId: string, connectedCount: number) {
+    const payload: LiveCountDto = { connectedCount };
+    nsp
+      .to(room(liveSessionId, 'participants'))
+      .emit(LIVE_EVENTS.count, payload);
+  }
+  function publishCount(liveSessionId: string, connectedCount: number) {
+    if (countTimers.has(liveSessionId)) {
+      latestCounts.set(liveSessionId, connectedCount);
+      return;
+    }
+    sendCount(liveSessionId, connectedCount);
+    const timer = setTimeout(() => {
+      countTimers.delete(liveSessionId);
+      const latest = latestCounts.get(liveSessionId);
+      latestCounts.delete(liveSessionId);
+      if (latest !== undefined) publishCount(liveSessionId, latest);
+    }, COUNT_INTERVAL_MS);
+    timer.unref();
+    countTimers.set(liveSessionId, timer);
+  }
+
   // Registration can change while the lobby is open: keep the host's roster
   // and counts current, and remove participants who unregistered.
   events?.on('registrationChanged', ({ quizId, userId, registered }) => {
@@ -121,12 +151,12 @@ export function attachLiveRealtime(
           nsp.to(result.removedSocketId).emit(LIVE_EVENTS.removed, removed);
           nsp.in(result.removedSocketId).disconnectSockets(true);
         }
+        const hostSnapshot = await service.hostSnapshot(result.session);
         nsp
           .to(room(result.session.id, 'host'))
-          .emit(
-            LIVE_EVENTS.snapshot,
-            await service.hostSnapshot(result.session),
-          );
+          .emit(LIVE_EVENTS.snapshot, hostSnapshot);
+        if (result.removedSocketId)
+          publishCount(result.session.id, hostSnapshot.counts.connected);
       })
       .catch(() =>
         logger.warn(
@@ -219,6 +249,7 @@ export function attachLiveRealtime(
           nsp
             .to(room(liveSessionId, 'host'))
             .emit(LIVE_EVENTS.presence, presence);
+          publishCount(liveSessionId, presence.connectedCount);
         }
         return result.snapshot;
       },
@@ -314,6 +345,7 @@ export function attachLiveRealtime(
         connectedCount,
       };
       nsp.to(room(liveSessionId, 'host')).emit(LIVE_EVENTS.presence, presence);
+      publishCount(liveSessionId, connectedCount);
     }
 
     on(
