@@ -20,7 +20,7 @@ import { Modal } from '@/components/ui/modal';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
 import { QuizCard } from '@/features/dashboard/quiz-card';
-import type { Quiz } from '@/features/dashboard/mock-data';
+import type { Quiz } from '@/features/dashboard/types';
 import { ProjectForm } from '@/features/projects/project-form';
 import { api } from '@/lib/api/browser';
 import { apiError } from '@/lib/api/client';
@@ -115,8 +115,6 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
   const [more, setMore] = useState(initial.length === 25);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-
-
 
   const createModal = (
     <Modal

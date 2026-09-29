@@ -2,9 +2,50 @@
 
 ## Current status
 
-Phase 0, authentication, dashboard UI, and project/quiz draft authoring are implemented. Dashboard product data remains mocked. Publishing and realtime are deferred. No deployment has been performed.
+Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Lobby, realtime, and Redis/Socket.IO (Phase 5 onward) are not started. No deployment has been performed.
 
 This document records implementation progress, verification results, limitations, and approved scope adjustments. Project setup and usage instructions belong in the root README.
+
+## Phase 4 — Publishing, registration, link and QR — September 29, 2026
+
+Implemented in commit `419a5eb` (September 28); verified and cleaned up on September 29.
+
+### Implemented
+
+- `POST /api/quizzes/:id/publish` moves a valid `DRAFT` to `PUBLISHED` and sets `publishedAt`. It requires `plannedStartAt` and at least one question passing the shared question schema. Publishing opens registration only; it never opens a lobby or starts a session.
+- Stable random `publicId` links (`/quiz/[publicId]`) backed by participant-safe `GET /api/public/quizzes/:publicId`; drafts return 404 and no answer keys are exposed. QR codes and a downloadable event poster are generated client-side from the public URL; no QR image is stored.
+- Register, unregister before live start, own registration, paginated host roster, and the full host roster `GET /api/quizzes/:id/registrations/all` (kept and documented in API_DESIGN 10.5). Hosts cannot register for their own quiz; a migration cancelled any earlier host self-registrations and removed owner project associations.
+- Registration re-activates cancelled rows instead of duplicating them, and creates the participant's `ProjectAssociation`, which is kept on unregister.
+- Host and participant dashboard endpoints replaced dashboard fixtures on `/dashboard` and `/quizzes`; project pages load their quizzes from the project API. Participant Upcoming lists registered `PUBLISHED` quizzes by planned date.
+- Web: review-and-publish panel, published-quiz management page (share link, QR, capacity, roster), public quiz landing page with logged-out/open/registered/full/closed states, and login/signup return-to-quiz redirects.
+- Database: `QuizRegistration`, `ProjectAssociation`, `RegistrationStatus`, `Quiz.publishedAt`; migrations `20260928020000_publishing_registration` and `20260928030000_prevent_host_registration` applied to development PostgreSQL with RLS enabled.
+
+### Verification of Phase 4 acceptance items — September 29
+
+- **Publishing is blocked without a planned date/time: verified.** The service and the locked publish transaction both reject a missing `plannedStartAt` with `422 VALIDATION_ERROR` and `details.plannedStartAt`. The API contract now requires `plannedStartAt` on create/update, so it cannot be cleared before or after publishing. A new integration test sets it to `null` directly (simulating a draft saved before it was required) and confirms publishing is rejected, the quiz stays `DRAFT` with no `publishedAt`, the public link returns 404, registration returns `REGISTRATION_CLOSED`, and publishing succeeds once the date is restored. The previous test's 422 assertion was caused by the quiz having no questions, so it did not actually cover this rule.
+- **Capacity holds under concurrent registrations: verified, after a fix.** Registration locks the quiz row (`FOR UPDATE`) before counting, which correctly serializes the capacity check. A new integration test fires 9 simultaneous registrations (8 participants plus one duplicate) at a 3-seat quiz: exactly 3 succeed, the rest receive `409 QUIZ_FULL` or `ALREADY_REGISTERED`, and the database and public count both show 3. Releasing one seat and racing the 5 waiting participants admits exactly one.
+- **Bug found and fixed:** under that burst, requests waiting on the lock failed with `500 INTERNAL_ERROR` (Prisma `P2028`, "Unable to start a transaction in the given time") because the 3-connection pool combined with Prisma's default 2s/5s interactive-transaction limits. Capacity was never exceeded, but valid requests failed. Register/unregister transactions now wait up to 15 seconds (`capacityTransaction` in `apps/api/src/modules/registrations/repository.ts`).
+
+### Cleanup — September 29
+
+- Moved the dashboard `Quiz` view type to `features/dashboard/types.ts` and the publishing view types to `features/publishing/types.ts`. Product code no longer imports from `mock-data.ts`; the remaining fixtures are used only by the development-only `/dev/dashboard` preview. Removed unused publishing fixtures (`publishedQuiz`, `registeredParticipants`).
+- Added one server-side `toPublishedQuizViewModel` mapper shared by the public quiz page and the management page, replacing two diverging inline mappings.
+- Removed hard-coded values: the public page's `quizmb.com` share URL and the management page's `quizmb.com` host fallback (both now use `getAppOrigin()` from the request), the unused placeholder `outline` bullet list, and the per-page `hostRole`/`'You'` host fields. The management view model now carries the host's real name. Added `API_ROUTES.PUBLIC_QUIZ` for the public quiz endpoint.
+
+### Checks
+
+- `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (9 web + 14 API unit/foundation tests), and `pnpm build` passed.
+- `pnpm --filter @quizmb/api test:integration` against development PostgreSQL/Storage passed all 6 tests (auth, authoring, and the 3 publishing tests, including the new planned-date and concurrency tests). Test-owned fixtures were removed.
+- HTTP smoke check against local dev servers: the management page (200) renders the request-origin share URL, title, and registered participant with no `quizmb.com` link; the public page (200) renders for anonymous and registered users with the real host name and "Quiz host" label. Smoke fixtures were removed.
+
+### Known limitations
+
+- Registration capacity is serialized per quiz through one row lock, and each registration makes several round trips to the remote database while holding it. Small bursts now queue successfully, but a large simultaneous burst (hundreds of participants the moment a link is shared) can still exceed the 15-second wait and return 500. A throughput-oriented approach (fewer round trips inside the lock, a larger pool, or a retryable error code) should be decided before load testing in Phase 11.
+- There is no database constraint requiring `plannedStartAt` on non-draft quizzes; the rule is enforced in the service, the publish transaction, and the request contract. A `CHECK (status = 'DRAFT' OR "plannedStartAt" IS NOT NULL)` migration would harden it if approved.
+- Planned date/time strings on the public and management pages are formatted during server rendering, so they use the server's locale and time zone rather than the viewer's. In production (UTC) viewers may see a different local time than expected.
+- `/registrations/all` is unpaginated; its size is bounded by the registration limit (maximum 10,000).
+- The development database driver still emits the known `pg` concurrent `client.query()` deprecation warning during concurrent integration operations; results are unaffected.
+- No interactive browser run was performed for this cleanup (register/unregister clicks, QR poster download); verification was by build, integration tests, and server-rendered HTML checks.
 
 ## Dashboard UI
 

@@ -18,7 +18,7 @@ import { Badge, Button, Surface, Text } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
-import type { PublishedQuizViewModel } from './mock-data';
+import type { PublishedQuizViewModel } from './types';
 import { downloadQuizPoster, QuizQrCode } from './quiz-qr-code';
 import { QuizCover } from './quiz-cover';
 import { pluralize } from '@/lib/utils';

@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { QuizCard } from './quiz-card';
 import { EmptyState } from './empty-state';
 import { NavigationItem } from '@/components/workspace/navigation-item';
-import type { Quiz } from './mock-data';
+import type { Quiz } from './types';
 import { APP_LINKS } from '@/config/navigation';
 
 export function QuizList({

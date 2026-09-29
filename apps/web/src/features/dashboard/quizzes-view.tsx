@@ -2,7 +2,7 @@ import { ListChecks, Plus } from 'lucide-react';
 import { Text } from '@/components/ui';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
-import type { Quiz } from './mock-data';
+import type { Quiz } from './types';
 import { QuizList } from './quiz-list';
 
 export function QuizzesView({ quizzes }: { quizzes: Quiz[] }) {

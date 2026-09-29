@@ -569,6 +569,7 @@ POST   /api/quizzes/:quizId/register
 DELETE /api/quizzes/:quizId/register
 GET    /api/quizzes/:quizId/registration
 GET    /api/quizzes/:quizId/registrations
+GET    /api/quizzes/:quizId/registrations/all
 ```
 
 ## 10.1 Register
@@ -623,6 +624,30 @@ GET /api/quizzes/:quizId/registrations?cursor=...&limit=50
 Creator only.
 
 Do not expose unnecessary participant email addresses.
+
+## 10.5 Host Full Registration Roster
+
+```http
+GET /api/quizzes/:quizId/registrations/all
+```
+
+Creator only. Returns every active (`REGISTERED`) registration in one unpaginated array, ordered by `registeredAt` ascending, for the host's published-quiz management screen.
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "registration_...",
+      "userId": "user_...",
+      "name": "Priya",
+      "registeredAt": "..."
+    }
+  ]
+}
+```
+
+Uses the same `HostRegistrationDto` as the paginated list and never includes email addresses. The roster size is bounded by `registrationLimit` (protective maximum 10,000). Prefer the paginated `GET /api/quizzes/:quizId/registrations` for any consumer that may render large rosters.
 
 ---
 
@@ -1907,3 +1932,14 @@ The current authoring slice implements the project list/create/read/update, proj
 - PNG/JPEG/WebP uploads up to 10 MiB are supported. Uploads require an existing owned, editable quiz; project covers are not part of this slice.
 - List responses include `meta.nextCursor` with a page size of 25. Cursors are UUIDs interpreted as stable ascending keyset positions.
 - Runtime schemas and DTOs live in `packages/contracts/src/index.ts`; centralized protective input limits are documented in PROGRESS.MD.
+
+## Publishing and registration implementation notes — 2026-09-29
+
+The publishing slice implements `POST /api/quizzes/:quizId/publish`, `GET /api/public/quizzes/:publicId`, the registration routes in section 10 (including the `/registrations/all` roster in 10.5), and both dashboard routes in section 11. This supersedes the "publishing remain deferred" statement in the authoring notes above.
+
+- Publishing requires `DRAFT` status, `plannedStartAt`, and at least one question that passes the shared question schema. A missing `plannedStartAt` returns `422 VALIDATION_ERROR` with `details.plannedStartAt`; the check is repeated inside the locked publish transaction. Publishing an already published quiz returns it unchanged.
+- Quiz create/update payloads now require `plannedStartAt`, so it cannot be cleared through the API; drafts saved before it became required can still hold `null` and cannot be published until it is set.
+- Registration locks the quiz row (`SELECT … FOR UPDATE`) before counting `REGISTERED` rows, so concurrent requests are serialized and capacity cannot be exceeded. Waiting requests queue for up to 15 seconds instead of failing.
+- Additional error codes beyond section 5: `HOST_CANNOT_REGISTER` (403, host registering for their own quiz), `REGISTRATION_CLOSED` (409, quiz not `PUBLISHED`), `UNREGISTRATION_CLOSED` (409, quiz `LIVE` or `COMPLETED`), `NOT_REGISTERED` (404 on unregister), and `QUIZ_LOCKED` (409, publishing a non-draft quiz).
+- `GET /api/public/quizzes/:publicId` returns `PublicQuizDto` for `PUBLISHED`, `LOBBY`, `LIVE`, and `COMPLETED` quizzes only; drafts return 404. It never includes options or answer keys.
+- `GET /api/dashboard/host` currently returns `{ projects, quizzes }` (quizzes of every status, grouped by the web client) rather than the per-status lists sketched in 11.2. `GET /api/dashboard/participant` returns `upcoming`; `live` and `history` are empty until later phases.

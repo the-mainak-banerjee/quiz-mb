@@ -2,6 +2,11 @@ import { Prisma, type PrismaClient } from '@quizmb/database';
 import { ApiError } from '../../http/api-error.js';
 import { publicQuizInclude } from '../quizzes/repository.js';
 
+// Registration writes queue on the quiz row lock, so a burst for one quiz
+// waits longer than Prisma's 2s/5s defaults with the small connection pool.
+// Waiting keeps capacity checks serialized instead of failing with P2028.
+const capacityTransaction = { maxWait: 15_000, timeout: 15_000 };
+
 export class RegistrationsRepository {
   constructor(readonly db: PrismaClient) {}
 
@@ -72,7 +77,7 @@ export class RegistrationsRepository {
         update: {},
       });
       return { registration, registrationCount: registrationCount + 1 };
-    });
+    }, capacityTransaction);
   }
 
   unregister(quizId: string, userId: string) {
@@ -102,7 +107,7 @@ export class RegistrationsRepository {
         where: { quizId, status: 'REGISTERED' },
       });
       return { registrationCount };
-    });
+    }, capacityTransaction);
   }
 
   async own(quizId: string, userId: string) {

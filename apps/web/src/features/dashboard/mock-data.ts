@@ -1,16 +1,4 @@
-export type Quiz = {
-  id: string;
-  publicId?: string;
-  project: string;
-  role: 'host' | 'participant';
-  status: 'live' | 'scheduled' | 'draft' | 'completed';
-  statusLabel?: string;
-  title: string;
-  description: string;
-  timing: string;
-  detail: string;
-  action: string;
-};
+import type { Quiz } from './types';
 
 // Presentation fixtures only: no live state, scoring, or product API integration.
 export const quizzes: Quiz[] = [

@@ -1,11 +1,10 @@
 import { PublicQuizView } from '@/features/publishing/public-quiz-view';
-import type {
-  PublicQuizState,
-  PublishedQuizViewModel,
-} from '@/features/publishing/mock-data';
+import type { PublicQuizState } from '@/features/publishing/types';
+import { toPublishedQuizViewModel } from '@/features/publishing/view-model';
 import { currentUser } from '@/lib/auth/session';
 import { loadApi, serverApi } from '@/lib/api/server';
-import { APP_LINKS } from '@/config/navigation';
+import { getAppOrigin } from '@/lib/app-origin';
+import { API_ROUTES } from '@/lib/api/routes';
 import type { PublicQuizDto, RegistrationDto } from '@quizmb/contracts';
 
 export default async function PublicQuizPage({
@@ -14,9 +13,10 @@ export default async function PublicQuizPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const [quiz, user] = await Promise.all([
-    loadApi<PublicQuizDto>(`/api/public/quizzes/${encodeURIComponent(slug)}`),
+  const [quiz, user, appOrigin] = await Promise.all([
+    loadApi<PublicQuizDto>(API_ROUTES.PUBLIC_QUIZ(slug)),
     currentUser(false),
+    getAppOrigin(),
   ]);
   const registration = user
     ? await (
@@ -34,45 +34,10 @@ export default async function PublicQuizPage({
           : user
             ? 'open'
             : 'logged-out';
-  const planned = new Date(quiz.plannedStartAt);
-  const viewQuiz: PublishedQuizViewModel = {
-    id: quiz.id,
-    slug: quiz.publicId,
-    title: quiz.title,
-    description: quiz.description,
-    project: quiz.project.name,
-    host: quiz.host.name,
-    hostRole: 'Quiz host',
-    plannedStartAt: quiz.plannedStartAt,
-    date: planned.toLocaleDateString(undefined, {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    }),
-    dateTileMonth: planned
-      .toLocaleDateString(undefined, { month: 'short' })
-      .toUpperCase(),
-    dateTileDay: planned.toLocaleDateString(undefined, { day: 'numeric' }),
-    time: planned.toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZoneName: 'short',
-    }),
-    cover: quiz.cover,
-    registrationLimit: quiz.registrationLimit,
-    registeredCount: quiz.registrationCount,
-    publicUrl: `quizmb.com${APP_LINKS.PUBLIC_QUIZ(quiz.publicId)}`,
-    outline: [
-      'Live knowledge challenge',
-      'Synchronous participation',
-      'Host-led debrief',
-    ],
-  };
 
   return (
     <PublicQuizView
-      quiz={viewQuiz}
+      quiz={toPublishedQuizViewModel(quiz, appOrigin)}
       initialState={initialState}
       user={user}
       isHost={isHost}

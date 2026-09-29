@@ -13,7 +13,7 @@ import { Badge, Surface, Text } from '@/components/ui';
 import { RoleIndicator } from './indicators';
 import { PreviewButton } from '@/components/workspace/preview-actions';
 import { NavigationItem } from '@/components/workspace/navigation-item';
-import type { Quiz } from './mock-data';
+import type { Quiz } from './types';
 import { cn } from '@/lib/utils';
 
 export function QuizCard({

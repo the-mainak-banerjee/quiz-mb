@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { Text } from '@/components/ui';
-import type { PublishedQuizViewModel } from './mock-data';
+import type { PublishedQuizViewModel } from './types';
 
 export function QuizQrCode({ url }: { url: string }) {
   const [source, setSource] = useState('');

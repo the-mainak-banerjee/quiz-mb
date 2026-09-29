@@ -22,6 +22,8 @@ export const API_ROUTES = {
     ALL_REGISTRATIONS: (quizId: string) =>
       `${API_PREFIX}/quizzes/${quizId}/registrations/all`,
   },
+  PUBLIC_QUIZ: (publicId: string) =>
+    `${API_PREFIX}/public/quizzes/${encodeURIComponent(publicId)}`,
   DASHBOARD: {
     HOST: `${API_PREFIX}/dashboard/host`,
     PARTICIPANT: `${API_PREFIX}/dashboard/participant`,

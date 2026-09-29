@@ -8,7 +8,7 @@ import type {
 } from '@quizmb/contracts';
 import { API_ROUTES } from '@/lib/api/routes';
 import { loadApi } from '@/lib/api/server';
-import type { Quiz } from './mock-data';
+import type { Quiz } from './types';
 
 function hostQuiz(quiz: HostDashboardQuizDto): Quiz {
   const status: Quiz['status'] =

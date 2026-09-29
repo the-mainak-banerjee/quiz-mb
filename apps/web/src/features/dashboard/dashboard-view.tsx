@@ -3,7 +3,7 @@ import { Surface, Text } from '@/components/ui';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { QuizList } from './quiz-list';
 import { ProjectCard } from './project-card';
-import type { Quiz } from './mock-data';
+import type { Quiz } from './types';
 import { DashboardEmptyState } from './dashboard-empty-state';
 import { getGreeting } from '@/lib/utils';
 import { APP_LINKS } from '@/config/navigation';

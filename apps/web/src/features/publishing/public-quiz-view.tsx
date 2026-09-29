@@ -25,7 +25,7 @@ import { apiError } from '@/lib/api/client';
 import { publishingApi } from '@/lib/api/publishing';
 import { authLink } from '@/lib/auth/return-to';
 import { getInitials, pluralize } from '@/lib/utils';
-import type { PublicQuizState, PublishedQuizViewModel } from './mock-data';
+import type { PublicQuizState, PublishedQuizViewModel } from './types';
 import { PublicQuizHeader } from './public-quiz-header';
 import { QuizCover } from './quiz-cover';
 
@@ -360,7 +360,7 @@ export function PublicQuizView({
                   <div>
                     <Text variant="label">{quiz.host}</Text>
                     <Text variant="caption" tone="secondary">
-                      {quiz.hostRole}
+                      Quiz host
                     </Text>
                   </div>
                 </div>
