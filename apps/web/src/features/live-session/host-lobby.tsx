@@ -12,8 +12,8 @@ import {
 } from 'lucide-react';
 import { Badge, ProgressBar, Surface, Text } from '@/components/ui';
 import { CopyLinkButton } from '@/components/copy-link-button';
-import { PreviewButton } from '@/components/workspace/preview-actions';
 import { APP_LINKS } from '@/config/navigation';
+import { ActionButton } from './action-button';
 import { LateJoinToggle } from './late-join-toggle';
 import { ParticipantRoster } from './participant-roster';
 import { StatTile } from './stat-tile';
@@ -32,6 +32,9 @@ export function HostLobby({
   registered,
   publicUrl,
   allowLateJoin,
+  onStartQuiz,
+  onLateJoinChange,
+  busy = false,
 }: {
   quiz: LiveQuizSummary;
   roster: LiveParticipant[];
@@ -39,6 +42,10 @@ export function HostLobby({
   registered: number;
   publicUrl: string;
   allowLateJoin: boolean;
+  onStartQuiz?: (() => void) | undefined;
+  onLateJoinChange?: ((allowed: boolean) => void) | undefined;
+  /** True while a host command is awaiting the server. */
+  busy?: boolean;
 }) {
   const offline = registered - connected;
   const connectedShare = Math.round((connected / registered) * 1000) / 10;
@@ -175,14 +182,16 @@ export function HostLobby({
             </Text>
           </div>
           <div className="space-y-space-xs">
-            <PreviewButton
-              action="Starting the quiz"
+            <ActionButton
+              onAction={onStartQuiz}
+              preview="Starting the quiz"
+              disabled={busy}
               variant="outline"
               className="h-control-large w-full border-transparent text-card-title text-action-primary"
               icon={<Play size={20} aria-hidden="true" />}
             >
               Start quiz now
-            </PreviewButton>
+            </ActionButton>
             <Text
               variant="caption"
               className="flex flex-wrap justify-between gap-space-xs px-1 text-action-secondary"
@@ -200,6 +209,8 @@ export function HostLobby({
         <LateJoinToggle
           layout="banner"
           initialAllowed={allowLateJoin}
+          onAllowedChange={onLateJoinChange}
+          disabled={busy}
           description="Let registered participants join after the quiz starts. They enter the current question with only its remaining time."
         />
       </Surface>

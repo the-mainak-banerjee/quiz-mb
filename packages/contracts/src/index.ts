@@ -225,3 +225,128 @@ export type HostDashboardDto = {
   }>;
   quizzes: HostDashboardQuizDto[];
 };
+
+// ---------------------------------------------------------------------------
+// Live sessions (Phase 5). Socket.IO namespace, events, payloads and
+// role-safe snapshots. Host and participant snapshots are separate types so
+// host-only data (answer keys, roster) can never be sent to participants.
+
+export const LIVE_SOCKET_NAMESPACE = '/quiz';
+
+export const LIVE_SESSION_STATES = [
+  'LOBBY',
+  'LIVE_IDLE',
+  'QUESTION_ACTIVE',
+  'QUESTION_RESULT',
+  'LEADERBOARD',
+  'COMPLETED',
+] as const;
+export type LiveSessionState = (typeof LIVE_SESSION_STATES)[number];
+
+export const LIVE_EVENTS = {
+  join: 'session:join',
+  sync: 'session:sync',
+  leave: 'session:leave',
+  quizStart: 'host:quiz-start',
+  lateJoinSet: 'host:late-join-set',
+  quizEnd: 'host:quiz-end',
+  snapshot: 'session:snapshot',
+  replaced: 'session:replaced',
+  presence: 'host:presence-updated',
+} as const;
+
+export const liveSessionCommandSchema = z
+  .object({ liveSessionId: z.uuid() })
+  .strict();
+export const lateJoinCommandSchema = z
+  .object({ liveSessionId: z.uuid(), allow: z.boolean() })
+  .strict();
+export type LiveSessionCommand = z.infer<typeof liveSessionCommandSchema>;
+export type LateJoinCommand = z.infer<typeof lateJoinCommandSchema>;
+
+export type LiveRole = 'HOST' | 'PARTICIPANT';
+
+export type LiveSessionRefDto = {
+  id: string;
+  quizId: string;
+  state: LiveSessionState;
+  role: LiveRole;
+};
+
+export type ActiveHostSessionDto = {
+  id: string;
+  quizId: string;
+  quizTitle: string;
+  projectName: string;
+  state: LiveSessionState;
+  createdAt: string;
+  startedAt: string | null;
+  connected: number;
+  registered: number;
+  questionCount: number;
+};
+
+export type SocketTicketDto = { ticket: string; expiresAt: string };
+
+export type LiveQuizInfoDto = {
+  id: string;
+  publicId: string;
+  title: string;
+  projectName: string;
+  hostName: string;
+  plannedStartAt: string | null;
+  registrationLimit: number;
+  questionCount: number;
+  defaultQuestionDurationSeconds: number;
+};
+
+export type LiveRosterEntryDto = {
+  userId: string;
+  name: string;
+  connected: boolean;
+  registeredAt: string;
+};
+
+export type HostLiveQuestionDto = {
+  id: string;
+  position: number;
+  type: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'DESCRIPTIVE';
+  text: string;
+  durationSeconds: number;
+  options: Array<{ id: string; text: string; isCorrect: boolean }>;
+};
+
+type LiveSnapshotBase = {
+  liveSessionId: string;
+  state: LiveSessionState;
+  allowLateJoin: boolean;
+  startedAt: string | null;
+  endedAt: string | null;
+  quiz: LiveQuizInfoDto;
+  counts: { connected: number; registered: number };
+};
+
+export type HostLiveSnapshotDto = LiveSnapshotBase & {
+  role: 'HOST';
+  /** First registrations by time; `counts.registered` is the full total. */
+  roster: LiveRosterEntryDto[];
+  questions: HostLiveQuestionDto[];
+};
+
+export type ParticipantLiveSnapshotDto = LiveSnapshotBase & {
+  role: 'PARTICIPANT';
+};
+
+export type LiveSnapshotDto = HostLiveSnapshotDto | ParticipantLiveSnapshotDto;
+
+export type LivePresenceDto = {
+  userId: string;
+  connected: boolean;
+  connectedCount: number;
+};
+
+export type LiveReplacedDto = { reason: string };
+
+export type SocketAck<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { code: string; message: string } };

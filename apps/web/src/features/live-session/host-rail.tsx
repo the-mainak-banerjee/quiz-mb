@@ -16,6 +16,7 @@ import {
   Text,
 } from '@/components/ui';
 import { PreviewButton } from '@/components/workspace/preview-actions';
+import { ActionButton } from './action-button';
 import { percentOf } from './format';
 import { LateJoinToggle } from './late-join-toggle';
 import type { LiveParticipant } from './types';
@@ -29,6 +30,7 @@ export function ParticipantsPanel({
   registered,
   submitted,
   allowLateJoin,
+  onLateJoinChange,
 }: {
   participants: LiveParticipant[];
   connected: number;
@@ -36,6 +38,7 @@ export function ParticipantsPanel({
   /** Present while a question is live. */
   submitted?: number | undefined;
   allowLateJoin: boolean;
+  onLateJoinChange?: ((allowed: boolean) => void) | undefined;
 }) {
   const live = submitted !== undefined;
   const shown = participants.slice(0, PRESENCE_PREVIEW);
@@ -129,6 +132,7 @@ export function ParticipantsPanel({
       <LateJoinToggle
         layout="panel"
         initialAllowed={allowLateJoin}
+        onAllowedChange={onLateJoinChange}
         description="Registered participants can still join"
       />
     </Surface>
@@ -191,10 +195,12 @@ export function QuizProgressPanel({
   asked,
   questionCount,
   questionLive,
+  onEndQuiz,
 }: {
   asked: number;
   questionCount: number;
   questionLive: boolean;
+  onEndQuiz?: (() => void) | undefined;
 }) {
   return (
     <Surface as="section" className="flex flex-col gap-space-sm">
@@ -218,14 +224,15 @@ export function QuizProgressPanel({
           </dd>
         </div>
       </dl>
-      <PreviewButton
-        action="Ending the quiz"
+      <ActionButton
+        onAction={onEndQuiz}
+        preview="Ending the quiz"
         variant="outline"
         className="w-full border-danger-surface text-danger enabled:hover:border-danger enabled:hover:bg-danger-surface"
         icon={<CircleX size={18} aria-hidden="true" />}
       >
         End quiz
-      </PreviewButton>
+      </ActionButton>
       <Text variant="caption" tone="secondary" className="text-center">
         {questionLive
           ? 'Ending now closes the live question. Missing answers count as not attempted.'

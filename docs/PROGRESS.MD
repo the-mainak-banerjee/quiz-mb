@@ -2,9 +2,43 @@
 
 ## Current status
 
-Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Phase 5 has started with frontend-only live screens on fixture data; the Phase 5 backend (live sessions, Redis, Socket.IO) is not started. No deployment has been performed.
+Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Phase 5 (lobby and live-session foundation) is implemented end to end on branch `phase-5-live`, including a minimal End quiz; question delivery, scoring and results remain for Phases 6–10. No deployment has been performed.
 
 This document records implementation progress, verification results, limitations, and approved scope adjustments. Project setup and usage instructions belong in the root README.
+
+## Phase 5 — Lobby and live-session backend — September 29, 2026
+
+Branch `phase-5-live`. Built on the approved frontend screens, assuming the web (Vercel) and API (Render) are on different sites.
+
+### Implemented
+
+- Database: `LiveSessionState`, `LiveQuizSession`, `ParticipantSession`; migration `20260929000000_live_sessions` applied to development PostgreSQL with RLS. Partial unique indexes guarantee one unfinished session per host and per quiz.
+- API `live-sessions` module (transport → service → repository/Redis): open lobby, current session, host's active session, 60-second socket tickets, and the `/quiz` Socket.IO namespace with join/sync/leave, start, late-join toggle and minimal end. Details in API_DESIGN "Live session implementation notes".
+- Server-side rules: host-only commands; registration required to join; late join applies to first-time entrants only; returning attendees always reconnect; registration open in the lobby and closed at start; quiz content locked once live; one live quiz per host (checked in the service, the transaction and the database); the newest participant device replaces the older one; completed sessions refuse joins.
+- Redis (Upstash free tier): one TLS connection with no ready check, no offline queue and bounded retries; a presence hash per session (the newest socket id per user doubles as the one-device record) and owner-checked locks. Writes happen only on join/leave and lifecycle changes; no polling, heartbeats, KEYS/SCAN or pub/sub. PostgreSQL remains the source of truth for lifecycle state.
+- Web: host console `/quizzes/[quizId]/live` (lobby → live idle → ended), participant room `/quiz/[slug]/live` (lobby, live idle, reconnecting, replaced, refused, ended), conflict screen `/quizzes/[quizId]/live-conflict`, **Open live lobby / Open host console** on the manage page (the 15-minute start rule is removed), **Enter live room** on the public quiz page, and live links from dashboard and project cards. A `useLiveSession` hook fetches a fresh ticket for every (re)connect and renders only server snapshots. Live dates are formatted in the viewer's browser.
+- `REDIS_URL` added to the API configuration (required in production). New dependencies: `socket.io`, `ioredis`, and `socket.io-client` (web, plus API tests).
+
+### Checks
+
+- `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (9 web + 17 API unit/foundation) and `pnpm build` passed.
+- `pnpm --filter @quizmb/api test:integration` passed all 7 tests against development PostgreSQL, Upstash Redis and Storage. The new live test covers: non-owner and draft lobby refusal; concurrent lobby opens across two quizzes (exactly one wins); idempotent reopen; lobby registration; ticket refusal for unregistered users; unauthenticated and foreign-origin sockets refused; role-safe host/participant snapshots; host presence updates; host commands from participants refused; cross-session commands refused; newest-device replacement without losing presence; start broadcast; repeat start rejected; registration closed and content locked after start; late join off/on for first-time entrants versus returning attendees; reconnect restoring state; idempotent end; joins refused after end; and a new lobby allowed after ending. Test data and Redis keys are removed afterwards.
+- No manual browser testing was done in this session, as agreed.
+
+### QA fixes
+
+- Concurrent lobby opens returned intermittent `500 INTERNAL_ERROR` (reproduced with 8 simultaneous requests across two quizzes): Prisma `P2028` ("Unable to start a transaction in the given time"), because requests queued on row locks behind the 3-connection pool beyond Prisma's 2-second default wait. Lobby opens now lock the host's user row before the quiz row, so one host's opens run one at a time and later ones see the committed session (409 `ACTIVE_SESSION_EXISTS`, or the idempotent 201 for the same quiz). All live-session and registration transactions share one `lockedTransaction` option (15-second wait) in `apps/api/src/infrastructure/transactions.ts`. The integration test now fires the 8-request race and asserts only 201/409 responses.
+- The reconnect counter exceeded its maximum ("7 / 5"): Socket.IO retried indefinitely while the screen showed a fixed 5, and the manual retry continued the old run of attempts. One `MAX_RECONNECT_ATTEMPTS` (10) now drives Socket.IO, refused-handshake retries and the display. After the last attempt, participants see "We couldn't reconnect you" and the host sees a "Connection lost" banner, each with a manual retry that starts a fresh connection counting from 1.
+
+### Known limitations
+
+- End quiz is minimal: it completes the session and quiz without results; Phase 10 replaces it. A host cannot end a quiz from the lobby without starting it first.
+- Presence has no heartbeat TTL (to save Upstash commands); if the API process crashes, stale presence can remain until the 24-hour key expiry. Presence is best effort; attendance is durable in `ParticipantSession`.
+- Single API instance only: device replacement and broadcasts rely on one Socket.IO server. Horizontal scaling needs the Redis adapter (and its pub/sub command cost).
+- Participant lobby connected counts refresh on join and on each state change rather than continuously.
+- Cross-domain REST auth is still pending (docs/TODO.md), so a deployed web app cannot yet sign in against a Render-hosted API. Socket authentication already works cross-domain.
+- Rate limiting (auth, registration, uploads, live sockets) is not implemented; tracked in docs/TODO.md.
+- Pre-existing schema drift: the `quizzes_status_plannedStartAt_idx` index exists in migrations but not in `schema.prisma`.
 
 ## Phase 5 — Live screens, frontend only — September 29, 2026
 
@@ -244,7 +278,7 @@ Phase 1 and later work requires separate authorization. The following remain uni
 
 These decisions were approved before implementation and remain guidance for later phases:
 
-- Web and API remain separate Vercel applications, with planned production domains `app.quizmb.com` and `api.quizmb.com`.
+- Web and API remain separate applications. Updated September 29, 2026: the web app deploys to Vercel and the API (REST + Socket.IO, a long-running Node process) to Render, both on their free platform domains with no custom domain. Socket.IO cannot run on Vercel functions. **All new work must assume the web and API are on different sites:** never rely on cookies being shared between them, and authenticate Socket.IO with a short-lived ticket rather than cookies (API_DESIGN §17). Making the existing cookie-based REST auth work across the two domains is tracked in `docs/TODO.md`.
 - Use separate development Supabase/Upstash resources; no dedicated staging/preview infrastructure is required initially.
 - Redis coordination belongs in the realtime architecture from its first implementation phase.
 - Live-session states include `LOBBY`, `LIVE_IDLE`, `QUESTION_ACTIVE`, `QUESTION_RESULT`, `LEADERBOARD`, and `COMPLETED`, with explicit lobby creation.

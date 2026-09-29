@@ -5,6 +5,7 @@ export type PublicQuizState =
 
 export type PublishedQuizViewModel = {
   id: string;
+  status: 'PUBLISHED' | 'LOBBY' | 'LIVE' | 'COMPLETED';
   slug: string;
   title: string;
   description: string;

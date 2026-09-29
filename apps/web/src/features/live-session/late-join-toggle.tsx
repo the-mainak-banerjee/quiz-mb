@@ -6,20 +6,26 @@ import { Switch, Text } from '@/components/ui';
 import { cn } from '@/lib/utils';
 
 /**
- * Host control for the PRD "Allow New Participants" setting. Local state only
- * until the host:late-join-set socket command is implemented.
+ * Host control for the PRD "Allow New Participants" setting. Controlled by
+ * the live session when `onAllowedChange` is given; local-only in previews.
  */
 export function LateJoinToggle({
   initialAllowed,
   description,
   layout,
+  onAllowedChange,
+  disabled = false,
 }: {
   initialAllowed: boolean;
   description: string;
   /** banner: full-width lobby strip; panel: compact row inside a card. */
   layout: 'banner' | 'panel';
+  onAllowedChange?: ((allowed: boolean) => void) | undefined;
+  disabled?: boolean;
 }) {
-  const [allowed, setAllowed] = useState(initialAllowed);
+  const [localAllowed, setLocalAllowed] = useState(initialAllowed);
+  const allowed = onAllowedChange ? initialAllowed : localAllowed;
+  const setAllowed = onAllowedChange ?? setLocalAllowed;
   const labelId = useId();
   const descriptionId = useId();
   const banner = layout === 'banner';
@@ -63,6 +69,7 @@ export function LateJoinToggle({
         )}
         <Switch
           checked={allowed}
+          disabled={disabled}
           onCheckedChange={setAllowed}
           aria-labelledby={labelId}
           aria-describedby={descriptionId}

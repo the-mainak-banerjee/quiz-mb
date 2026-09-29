@@ -176,9 +176,7 @@ export function LivePreviewScreen({
             quiz={liveQuiz}
             attempt={2}
             maxAttempts={5}
-            score={850}
-            asked={3}
-            connected={48}
+            stats={{ score: 850, asked: 3, connected: 48 }}
           />
         </LiveSessionShell>
       );

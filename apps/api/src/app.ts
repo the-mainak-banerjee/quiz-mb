@@ -13,6 +13,8 @@ import { authoringRoutes, publicAuthoringRoutes } from './modules/authoring.js';
 import { authenticate } from './http/authenticate.js';
 import { csrf } from './http/csrf.js';
 import type { SupabaseStorage } from './modules/media/storage.js';
+import type { LiveSessionsService } from './modules/live-sessions/service.js';
+import { liveSessionRoutes } from './modules/live-sessions/routes.js';
 
 export function createApp({
   allowedOrigins,
@@ -22,6 +24,7 @@ export function createApp({
   production = false,
   database,
   storage,
+  live,
 }: {
   allowedOrigins: readonly string[];
   logger: Logger;
@@ -30,6 +33,7 @@ export function createApp({
   production?: boolean;
   database?: PrismaClient;
   storage?: SupabaseStorage | undefined;
+  live?: LiveSessionsService | undefined;
 }) {
   const app = express();
   app.disable('x-powered-by');
@@ -54,6 +58,7 @@ export function createApp({
       authenticate(auth, production),
       csrf(allowedOrigins),
       authoringRoutes(database, storage),
+      ...(live ? [liveSessionRoutes(live)] : []),
     );
   app.use(notFound);
   app.use(errorHandler(logger));

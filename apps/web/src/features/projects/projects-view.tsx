@@ -444,9 +444,11 @@ export function ProjectQuizzes({
                 key={quiz.id}
                 quiz={card}
                 actionHref={
-                  quiz.status === 'PUBLISHED' || quiz.status === 'LOBBY'
-                    ? APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id)
-                    : APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)
+                  quiz.status === 'LOBBY' || quiz.status === 'LIVE'
+                    ? APP_LINKS.WORKSPACE.LIVE_QUIZ(quiz.id)
+                    : quiz.status === 'DRAFT'
+                      ? APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)
+                      : APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id)
                 }
               />
             );

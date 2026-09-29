@@ -24,11 +24,13 @@ export default async function PublicQuizPage({
       ).get<RegistrationDto>(`/api/quizzes/${quiz.id}/registration`)
     : null;
   const isHost = user?.id === quiz.host.id;
+  // Registration stays open while the lobby is open; registered
+  // participants keep their panel (with the live-room link) once live.
   const initialState: PublicQuizState =
-    quiz.status !== 'PUBLISHED'
-      ? 'closed'
-      : !isHost && registration?.registered
-        ? 'registered'
+    !isHost && registration?.registered && quiz.status !== 'COMPLETED'
+      ? 'registered'
+      : quiz.status !== 'PUBLISHED' && quiz.status !== 'LOBBY'
+        ? 'closed'
         : quiz.isFull
           ? 'full'
           : user

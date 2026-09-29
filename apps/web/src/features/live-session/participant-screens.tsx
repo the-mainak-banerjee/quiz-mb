@@ -9,8 +9,8 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Avatar, Badge, Callout, Surface, Text } from '@/components/ui';
-import { PreviewButton } from '@/components/workspace/preview-actions';
 import { cn } from '@/lib/utils';
+import { ActionButton } from './action-button';
 import { AmbientGlow } from './live-session-shell';
 import type { LiveQuizSummary } from './types';
 
@@ -167,17 +167,31 @@ export function ParticipantReconnecting({
   quiz,
   attempt,
   maxAttempts,
-  score,
-  asked,
-  connected,
+  stats,
+  onRetry,
+  stopped = false,
 }: {
   quiz: LiveQuizSummary;
   attempt: number;
   maxAttempts: number;
-  score: number;
-  asked: number;
-  connected: number;
+  /** Last known figures; omitted when nothing has been received yet. */
+  stats?: { score?: number; asked?: number; connected?: number } | undefined;
+  onRetry?: (() => void) | undefined;
+  /** Automatic attempts are exhausted; only a manual retry continues. */
+  stopped?: boolean;
 }) {
+  const shownAttempt = Math.min(Math.max(attempt, 1), maxAttempts);
+  const figures = [
+    stats?.score !== undefined && [
+      'Your score',
+      `${stats.score.toLocaleString()} pts`,
+    ],
+    stats?.asked !== undefined && ['Questions asked', String(stats.asked)],
+    stats?.connected !== undefined && [
+      'In room',
+      `${stats.connected} participants`,
+    ],
+  ].filter((figure): figure is [string, string] => Boolean(figure));
   const circumference = 2 * Math.PI * 48;
   return (
     <ParticipantStage
@@ -191,8 +205,8 @@ export function ParticipantReconnecting({
       <div className="flex w-full max-w-xl flex-col items-center">
         <Surface className="flex w-full flex-col items-center text-center shadow-floating sm:p-space-lg">
           <Badge
-            variant="live"
-            label="Restoring connection"
+            variant={stopped ? 'danger' : 'live'}
+            label={stopped ? 'Connection lost' : 'Restoring connection'}
             className="mb-space-md uppercase"
           />
           <div className="relative my-space-xs flex size-28 items-center justify-center">
@@ -221,7 +235,9 @@ export function ParticipantReconnecting({
                 strokeWidth="3.5"
                 strokeLinecap="round"
                 strokeDasharray={circumference}
-                strokeDashoffset={circumference * (1 - attempt / maxAttempts)}
+                strokeDashoffset={
+                  circumference * (1 - shownAttempt / maxAttempts)
+                }
                 className="stroke-accent"
               />
             </svg>
@@ -238,7 +254,7 @@ export function ParticipantReconnecting({
                 className="mt-0.5 font-semibold"
               >
                 <span className="sr-only">Attempt </span>
-                {attempt} / {maxAttempts}
+                {shownAttempt} / {maxAttempts}
               </Text>
             </div>
           </div>
@@ -248,11 +264,14 @@ export function ParticipantReconnecting({
             className="mt-space-sm mb-space-md max-w-md space-y-space-xs"
           >
             <Text as="h1" variant="page-title">
-              Reconnecting to the live room…
+              {stopped
+                ? 'We couldn’t reconnect you'
+                : 'Reconnecting to the live room…'}
             </Text>
             <Text tone="secondary">
-              Hold tight while we reconnect you. You don&apos;t need to refresh
-              this page.
+              {stopped
+                ? 'Check your internet connection, then try again. Your place is still saved.'
+                : 'Hold tight while we reconnect you. You don’t need to refresh this page.'}
             </Text>
           </div>
 
@@ -288,7 +307,7 @@ export function ParticipantReconnecting({
                   aria-hidden="true"
                   className="ds-live-dot size-status-dot rounded-pill bg-accent"
                 />
-                Retrying automatically
+                {stopped ? 'Offline' : 'Retrying automatically'}
               </Text>
             </div>
             <div className="rounded-control bg-surface-muted p-3">
@@ -301,32 +320,68 @@ export function ParticipantReconnecting({
             </div>
           </div>
 
-          <PreviewButton
-            action="Reconnecting manually"
+          <ActionButton
+            onAction={onRetry}
+            preview="Reconnecting manually"
             className="w-full"
             icon={<RefreshCw size={18} aria-hidden="true" />}
           >
             Try reconnecting now
-          </PreviewButton>
+          </ActionButton>
         </Surface>
 
-        <dl className="mt-space-md grid w-full max-w-md grid-cols-3 gap-space-sm text-center">
-          {[
-            ['Your score', `${score.toLocaleString()} pts`],
-            ['Questions asked', String(asked)],
-            ['In room', `${connected} participants`],
-          ].map(([term, value]) => (
-            <div key={term} className="flex flex-col items-center">
-              <dt className="text-caption tracking-wider text-text-secondary uppercase">
-                {term}
-              </dt>
-              <dd className="mt-0.5 text-card-title text-text-primary">
-                {value}
-              </dd>
-            </div>
-          ))}
-        </dl>
+        {figures.length > 0 && (
+          <dl
+            className={cn(
+              'mt-space-md grid w-full max-w-md gap-space-sm text-center',
+              figures.length === 3 ? 'grid-cols-3' : 'grid-cols-2',
+            )}
+          >
+            {figures.map(([term, value]) => (
+              <div key={term} className="flex flex-col items-center">
+                <dt className="text-caption tracking-wider text-text-secondary uppercase">
+                  {term}
+                </dt>
+                <dd className="mt-0.5 text-card-title text-text-primary">
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </div>
+    </ParticipantStage>
+  );
+}
+
+/** Terminal, blocking or waiting live states (ended, replaced, refused, connecting). */
+export function LiveNotice({
+  eyebrow,
+  title,
+  description,
+  tone = 'neutral',
+  action,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  tone?: 'neutral' | 'danger';
+  action?: ReactNode;
+}) {
+  return (
+    <ParticipantStage glow={<AmbientGlow placement="top-center" />}>
+      <Surface className="flex w-full max-w-xl flex-col items-center gap-space-sm text-center shadow-raised sm:p-space-lg">
+        <Badge
+          variant={tone === 'danger' ? 'danger' : 'draft'}
+          label={eyebrow}
+          className="uppercase"
+        />
+        <Text as="h1" variant="page-title">
+          {title}
+        </Text>
+        <Text tone="secondary">{description}</Text>
+        {action && <div className="pt-space-xs">{action}</div>}
+      </Surface>
     </ParticipantStage>
   );
 }

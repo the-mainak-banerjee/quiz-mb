@@ -76,14 +76,15 @@ export class RegistrationsService {
   }
 
   async participantDashboard(userId: string): Promise<ParticipantDashboardDto> {
-    const registrations = await this.repository.upcoming(userId);
+    const [upcoming, live] = await Promise.all([
+      this.repository.upcoming(userId, ['PUBLISHED']),
+      this.repository.upcoming(userId, ['LOBBY', 'LIVE']),
+    ]);
+    const toDto = (rows: typeof upcoming) =>
+      Promise.all(rows.map((row) => this.quizzes.publicDto(row.quiz)));
     return {
-      upcoming: await Promise.all(
-        registrations.map((registration) =>
-          this.quizzes.publicDto(registration.quiz),
-        ),
-      ),
-      live: [],
+      upcoming: await toDto(upcoming),
+      live: await toDto(live),
       history: [],
     };
   }

@@ -10,3 +10,6 @@ dist/
 coverage/
 *.log
 packages/database/src/generated/
+
+# Local QA test accounts (never commit)
+docs/test-credentials.md

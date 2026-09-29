@@ -107,6 +107,7 @@ function RegistrationPanel({
   onUnregister: () => void;
 }) {
   if (state === 'registered') {
+    const liveOpen = quiz.status === 'LOBBY' || quiz.status === 'LIVE';
     return (
       <Surface className="space-y-space-md bg-action-secondary">
         <div className="flex items-start gap-space-sm">
@@ -120,11 +121,24 @@ function RegistrationPanel({
             </Text>
           </div>
         </div>
-        <div className="rounded-control bg-surface p-space-sm">
-          <Text variant="label">Live quiz room admission</Text>
-          <Text variant="body-secondary" tone="secondary">
-            Access appears here when the host manually starts the room.
-          </Text>
+        <div className="space-y-space-sm rounded-control bg-surface p-space-sm">
+          <div>
+            <Text variant="label">Live quiz room admission</Text>
+            <Text variant="body-secondary" tone="secondary">
+              {liveOpen
+                ? 'The host has opened the live room. Join now.'
+                : 'Access appears here when the host opens the live room.'}
+            </Text>
+          </div>
+          {liveOpen && (
+            <Link
+              href={APP_LINKS.PUBLIC_QUIZ_LIVE(quiz.slug)}
+              className="ds-focus ds-control-motion ds-primary-motion inline-flex h-control w-full items-center justify-center gap-space-xs rounded-control bg-action-primary px-control-x text-label text-action-on-primary hover:bg-action-primary-hover"
+            >
+              Enter live room
+              <ArrowRight size={18} aria-hidden="true" />
+            </Link>
+          )}
         </div>
         <div className="flex flex-wrap gap-space-xs">
           <Button
@@ -133,13 +147,15 @@ function RegistrationPanel({
           >
             Add to calendar
           </Button>
-          <Button
-            variant="ghost"
-            icon={<UserMinus size={18} aria-hidden="true" />}
-            onClick={onUnregister}
-          >
-            Unregister
-          </Button>
+          {quiz.status !== 'LIVE' && (
+            <Button
+              variant="ghost"
+              icon={<UserMinus size={18} aria-hidden="true" />}
+              onClick={onUnregister}
+            >
+              Unregister
+            </Button>
+          )}
         </div>
         <Text variant="caption" tone="secondary">
           Unregistration is available until the quiz starts.

@@ -20,6 +20,11 @@ const schema = z.object({
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
+  // Live sessions (Redis-backed presence and locks). Upstash: rediss:// URL.
+  REDIS_URL: z
+    .url()
+    .refine((value) => ['redis:', 'rediss:'].includes(new URL(value).protocol))
+    .optional(),
 });
 
 export function parseEnv(input: Record<string, string | undefined>) {
@@ -34,6 +39,9 @@ export function parseEnv(input: Record<string, string | undefined>) {
     throw new Error(
       'ALLOWED_ORIGINS must be explicitly configured in production',
     );
+  }
+  if (result.data.NODE_ENV === 'production' && !result.data.REDIS_URL) {
+    throw new Error('REDIS_URL must be configured in production');
   }
   return result.data;
 }

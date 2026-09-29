@@ -163,23 +163,28 @@ export function HostLiveConflict({
         </div>
       </Surface>
 
-      <div className="mt-space-lg flex flex-wrap items-center justify-center gap-space-sm text-caption text-text-secondary">
-        <span>In your live quiz:</span>
-        <div className="flex items-center -space-x-2">
-          {shown.map((participant) => (
-            <Avatar
-              key={participant.id}
-              name={participant.name}
-              size="small"
-              className="ring-2 ring-canvas"
-            />
-          ))}
-          <span className="flex size-7 items-center justify-center rounded-pill bg-surface-highest text-caption font-semibold text-text-secondary ring-2 ring-canvas">
-            +{connected - shown.length}
+      {connected > 0 && (
+        <div className="mt-space-lg flex flex-wrap items-center justify-center gap-space-sm text-caption text-text-secondary">
+          <span>In your live quiz:</span>
+          <div className="flex items-center -space-x-2">
+            {shown.map((participant) => (
+              <Avatar
+                key={participant.id}
+                name={participant.name}
+                size="small"
+                className="ring-2 ring-canvas"
+              />
+            ))}
+            <span className="flex size-7 items-center justify-center rounded-pill bg-surface-highest text-caption font-semibold text-text-secondary ring-2 ring-canvas">
+              {shown.length ? '+' : ''}
+              {connected - shown.length}
+            </span>
+          </div>
+          <span>
+            {connected === 1 ? 'participant' : 'participants'} waiting for you
           </span>
         </div>
-        <span>participants waiting for you</span>
-      </div>
+      )}
     </main>
   );
 }
