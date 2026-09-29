@@ -922,6 +922,17 @@ socket.data.userId
 
 Never trust a client-supplied userId in an event payload.
 
+### Cross-domain handshake (decided 2026-09-29)
+
+The web app and API are deployed on different sites (see PROGRESS, approved architecture clarifications), so the socket handshake must not depend on cookies:
+
+1. The signed-in client requests a ticket over REST: `POST /api/live-sessions/:liveSessionId/socket-ticket`.
+2. The server checks the user may access that session and returns a short-lived signed ticket (about 60 seconds, single purpose, bound to the user and live session).
+3. The client connects with `io(API_ORIGIN + "/quiz", { auth: { ticket } })`. The server verifies the ticket before the connection is accepted and sets `socket.data.userId` from it.
+4. Every reconnect requests a fresh ticket first.
+
+Socket.IO CORS allows the same configured web origins as REST. Tickets are never logged or stored in the browser beyond the connection attempt.
+
 ---
 
 # 18. Socket Acknowledgement Format
@@ -1943,3 +1954,26 @@ The publishing slice implements `POST /api/quizzes/:quizId/publish`, `GET /api/p
 - Additional error codes beyond section 5: `HOST_CANNOT_REGISTER` (403, host registering for their own quiz), `REGISTRATION_CLOSED` (409, quiz not `PUBLISHED`), `UNREGISTRATION_CLOSED` (409, quiz `LIVE` or `COMPLETED`), `NOT_REGISTERED` (404 on unregister), and `QUIZ_LOCKED` (409, publishing a non-draft quiz).
 - `GET /api/public/quizzes/:publicId` returns `PublicQuizDto` for `PUBLISHED`, `LOBBY`, `LIVE`, and `COMPLETED` quizzes only; drafts return 404. It never includes options or answer keys.
 - `GET /api/dashboard/host` currently returns `{ projects, quizzes }` (quizzes of every status, grouped by the web client) rather than the per-status lists sketched in 11.2. `GET /api/dashboard/participant` returns `upcoming`; `live` and `history` are empty until later phases.
+
+
+## Live session implementation notes — Phase 5 — 2026-09-29
+
+Implemented REST routes (authenticated, Origin-checked, owner/registration checks on the server):
+
+- `POST /api/quizzes/:quizId/live-session` — host opens the lobby for a `PUBLISHED` quiz (quiz → `LOBBY`, session `LOBBY`, `allowLateJoin` copied from the quiz). Idempotent for the same quiz (returns the existing session). `409 ACTIVE_SESSION_EXISTS` with `details.liveSessionId`/`details.quizId` when the host has another unfinished session; `409 QUIZ_NOT_OPEN` for drafts; `409 QUIZ_COMPLETED`; `404` for non-owners.
+- `GET /api/quizzes/:quizId/live-session` — the quiz's unfinished session as `LiveSessionRefDto { id, quizId, state, role }` for its host or a registered participant; `403 REGISTRATION_REQUIRED` otherwise; `404 SESSION_NOT_FOUND` when none is open.
+- `GET /api/live-sessions/active` — the host's unfinished session (`ActiveHostSessionDto`) or `null`; drives the conflict screen.
+- `POST /api/live-sessions/:liveSessionId/socket-ticket` — `{ ticket, expiresAt }` (60 seconds) for the host or a registered participant (see §17 cross-domain handshake).
+
+Socket.IO (`/quiz` namespace) as implemented:
+
+- Handshake: `auth.ticket` is verified before the connection is accepted; `allowRequest` also rejects WebSocket upgrades from origins outside `ALLOWED_ORIGINS` (requests without an Origin still need a ticket). Command payloads must target the ticket's live session.
+- `session:join` → role-safe snapshot (`HostLiveSnapshotDto` with roster ≤ 100 and host questions including answer keys; `ParticipantLiveSnapshotDto` with neither). Participants must be registered; after the quiz starts, first-time entrants need late join enabled (`403 LATE_JOIN_DISABLED`) while returning attendees always reconnect; completed sessions return `QUIZ_COMPLETED`. The newest participant socket replaces the previous one (`session:replaced`, then a forced disconnect). The host may keep several tabs connected.
+- `session:sync` (participants must still be the active device, else `SESSION_REPLACED`) and `session:leave`.
+- Host-only commands with server-side host checks and a short Redis lock: `host:quiz-start` (`LOBBY → LIVE_IDLE`, quiz → `LIVE`, closes registration and locks content), `host:late-join-set`, and a minimal `host:quiz-end` (session and quiz → `COMPLETED`, idempotent; results and leaderboard arrive in Phase 10). Invalid transitions return `INVALID_STATE_TRANSITION`; concurrent transitions `OPERATION_IN_PROGRESS`.
+- Server → client: after every lifecycle change the server broadcasts a full role-safe `session:snapshot` to the host and participant rooms (instead of separate `quiz:started`/`quiz:ended` events in Phase 5). `host:presence-updated { userId, connected, connectedCount }` goes to the host room only. Participants receive `session:connected-count { connectedCount }`, throttled to at most one update per 2 seconds per session (sent in memory, no Redis commands).
+- Acknowledgements use `{ ok: true, data } | { ok: false, error: { code, message } }`.
+- Additional codes: `REGISTRATION_CLOSED` also applies once the quiz is `LIVE` (registration stays open in `LOBBY`), `LIVE_UNAVAILABLE` (503, Redis unreachable), `NOT_JOINED`, `OPERATION_IN_PROGRESS`.
+- `GET /api/dashboard/participant` now fills `live` with registered quizzes in `LOBBY` or `LIVE`.
+- `host:lobby-close` (host only, `LOBBY` state only, else `INVALID_STATE_TRANSITION`): cancels an unstarted lobby. The session and its lobby attendance are deleted, presence is cleared and the quiz returns to `PUBLISHED` with registrations kept. Other sockets in the room receive `session:removed { code: 'LOBBY_CLOSED' }` and are disconnected; the ack carries no snapshot.
+- Registration changes while a session is open (registration stays open in `LOBBY`): every register/unregister pushes a fresh host `session:snapshot` (roster and counts). An unregistering participant's presence and lobby attendance are removed, and their socket receives `session:removed { code: 'REGISTRATION_REQUIRED', message }` before being disconnected. `session:sync` re-checks registration.

@@ -4,6 +4,7 @@ import type {
   ParticipantDashboardDto,
   RegistrationDto,
 } from '@quizmb/contracts';
+import type { DomainEvents } from '../../infrastructure/domain-events.js';
 import type { QuizzesService } from '../quizzes/service.js';
 import type { RegistrationsRepository } from './repository.js';
 
@@ -11,10 +12,16 @@ export class RegistrationsService {
   constructor(
     private repository: RegistrationsRepository,
     private quizzes: QuizzesService,
+    private events?: DomainEvents,
   ) {}
 
   async register(quizId: string, userId: string): Promise<RegistrationDto> {
     const result = await this.repository.register(quizId, userId);
+    this.events?.emit('registrationChanged', {
+      quizId,
+      userId,
+      registered: true,
+    });
     return {
       registered: true,
       registeredAt: result.registration.registeredAt.toISOString(),
@@ -24,6 +31,11 @@ export class RegistrationsService {
 
   async unregister(quizId: string, userId: string): Promise<RegistrationDto> {
     const result = await this.repository.unregister(quizId, userId);
+    this.events?.emit('registrationChanged', {
+      quizId,
+      userId,
+      registered: false,
+    });
     return {
       registered: false,
       registeredAt: null,
@@ -76,14 +88,15 @@ export class RegistrationsService {
   }
 
   async participantDashboard(userId: string): Promise<ParticipantDashboardDto> {
-    const registrations = await this.repository.upcoming(userId);
+    const [upcoming, live] = await Promise.all([
+      this.repository.upcoming(userId, ['PUBLISHED']),
+      this.repository.upcoming(userId, ['LOBBY', 'LIVE']),
+    ]);
+    const toDto = (rows: typeof upcoming) =>
+      Promise.all(rows.map((row) => this.quizzes.publicDto(row.quiz)));
     return {
-      upcoming: await Promise.all(
-        registrations.map((registration) =>
-          this.quizzes.publicDto(registration.quiz),
-        ),
-      ),
-      live: [],
+      upcoming: await toDto(upcoming),
+      live: await toDto(live),
       history: [],
     };
   }

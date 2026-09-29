@@ -1,11 +1,7 @@
 import { Prisma, type PrismaClient } from '@quizmb/database';
 import { ApiError } from '../../http/api-error.js';
 import { publicQuizInclude } from '../quizzes/repository.js';
-
-// Registration writes queue on the quiz row lock, so a burst for one quiz
-// waits longer than Prisma's 2s/5s defaults with the small connection pool.
-// Waiting keeps capacity checks serialized instead of failing with P2028.
-const capacityTransaction = { maxWait: 15_000, timeout: 15_000 };
+import { lockedTransaction } from '../../infrastructure/transactions.js';
 
 export class RegistrationsRepository {
   constructor(readonly db: PrismaClient) {}
@@ -30,7 +26,8 @@ export class RegistrationsRepository {
           'HOST_CANNOT_REGISTER',
           'Quiz hosts cannot register as participants in their own quiz.',
         );
-      if (quiz.status !== 'PUBLISHED')
+      // Registration stays open in the lobby and closes when the host starts.
+      if (quiz.status !== 'PUBLISHED' && quiz.status !== 'LOBBY')
         throw new ApiError(
           409,
           quiz.status === 'COMPLETED'
@@ -77,7 +74,7 @@ export class RegistrationsRepository {
         update: {},
       });
       return { registration, registrationCount: registrationCount + 1 };
-    }, capacityTransaction);
+    }, lockedTransaction);
   }
 
   unregister(quizId: string, userId: string) {
@@ -107,7 +104,7 @@ export class RegistrationsRepository {
         where: { quizId, status: 'REGISTERED' },
       });
       return { registrationCount };
-    }, capacityTransaction);
+    }, lockedTransaction);
   }
 
   async own(quizId: string, userId: string) {
@@ -160,12 +157,12 @@ export class RegistrationsRepository {
     });
   }
 
-  upcoming(userId: string) {
+  upcoming(userId: string, statuses: Array<'PUBLISHED' | 'LOBBY' | 'LIVE'>) {
     return this.db.quizRegistration.findMany({
       where: {
         userId,
         status: 'REGISTERED',
-        quiz: { status: 'PUBLISHED' },
+        quiz: { status: { in: statuses } },
       },
       orderBy: { quiz: { plannedStartAt: 'asc' } },
       include: { quiz: { include: publicQuizInclude } },

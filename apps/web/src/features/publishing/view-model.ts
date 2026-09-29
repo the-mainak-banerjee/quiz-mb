@@ -11,6 +11,7 @@ export function toPublishedQuizViewModel(
   const planned = new Date(quiz.plannedStartAt);
   return {
     id: quiz.id,
+    status: quiz.status,
     slug: quiz.publicId,
     title: quiz.title,
     description: quiz.description,

@@ -1,18 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   ArrowUpRight,
   CalendarDays,
-  Check,
-  Copy,
   Download,
   FileDown,
   Info,
   Link2,
   Pencil,
-  Play,
 } from 'lucide-react';
 import { Badge, Button, Surface, Text } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
@@ -22,8 +19,8 @@ import type { PublishedQuizViewModel } from './types';
 import { downloadQuizPoster, QuizQrCode } from './quiz-qr-code';
 import { QuizCover } from './quiz-cover';
 import { pluralize } from '@/lib/utils';
-
-const START_WINDOW_MS = 15 * 60 * 1000;
+import { CopyLinkButton } from '@/components/copy-link-button';
+import { HostLiveEntry } from './host-live-entry';
 
 type Participant = {
   id: string;
@@ -106,10 +103,8 @@ export function PublishedQuizManagement({
   quiz: PublishedQuizViewModel;
   participants: readonly Participant[];
 }) {
-  const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
-  const [now, setNow] = useState<number | null>(null);
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const participantPreview = participants.slice(0, 5);
   const remaining = Math.max(quiz.registrationLimit - quiz.registeredCount, 0);
@@ -117,24 +112,6 @@ export function PublishedQuizManagement({
     (quiz.registeredCount / quiz.registrationLimit) * 100,
     100,
   );
-  const planned = new Date(quiz.plannedStartAt);
-  const canStart =
-    now !== null &&
-    Number.isFinite(planned.getTime()) &&
-    planned.getTime() - now <= START_WINDOW_MS;
-
-  useEffect(() => {
-    const updateNow = () => setNow(Date.now());
-    updateNow();
-    const timer = window.setInterval(updateNow, 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  async function copyPublicUrl() {
-    await navigator.clipboard?.writeText(quiz.publicUrl);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
-  }
 
   async function downloadPoster() {
     setDownloading(true);
@@ -189,22 +166,12 @@ export function PublishedQuizManagement({
               <Badge variant="draft" label="Host control" />
             </div>
             <Text variant="body-secondary" tone="secondary">
-              The planned time never starts the quiz automatically. The start
-              control becomes available 15 minutes before the event.
+              The planned time never starts the quiz automatically. Open the
+              lobby whenever you are ready, then start from the host console.
             </Text>
           </div>
         </div>
-        <Button
-          icon={<Play size={18} aria-hidden="true" />}
-          disabled={!canStart}
-          title={
-            canStart
-              ? 'Start the session'
-              : 'Available 15 minutes before the scheduled time'
-          }
-        >
-          Start the session
-        </Button>
+        <HostLiveEntry quizId={quiz.id} status={quiz.status} />
       </Surface>
 
       <section className="w-full">
@@ -283,19 +250,7 @@ export function PublishedQuizManagement({
               >
                 {quiz.publicUrl}
               </Text>
-              <Button
-                variant="secondary"
-                icon={
-                  copied ? (
-                    <Check size={18} aria-hidden="true" />
-                  ) : (
-                    <Copy size={18} aria-hidden="true" />
-                  )
-                }
-                onClick={() => void copyPublicUrl()}
-              >
-                {copied ? 'Copied' : 'Copy link'}
-              </Button>
+              <CopyLinkButton url={quiz.publicUrl} />
             </div>
           </Surface>
 

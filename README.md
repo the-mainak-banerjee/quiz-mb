@@ -10,7 +10,7 @@ Quiz MB is a host-controlled live quiz platform designed for creating quizzes wi
 - **Realtime design:** Socket.IO with Upstash Redis coordination.
 - **Media storage design:** Supabase Storage.
 - **Workspace:** pnpm and Turborepo.
-- **Hosting:** Separate Vercel applications for web and API.
+- **Hosting:** Web on Vercel; the API (REST + Socket.IO) as a long-running Node service on Render. Both use their free platform domains, which are different sites (see [TODO](docs/TODO.md) for the cross-domain auth follow-up).
 
 The backend follows a modular monolith architecture. The web application accesses business data through the API rather than connecting directly to the database. Backend services remain independent of Next.js to support a future React Native client.
 
@@ -117,6 +117,7 @@ Browser requests go directly to Express using the global [API client](apps/web/s
 - `SUPABASE_URL` — development Supabase project origin for private image storage.
 - `SUPABASE_SERVICE_ROLE_KEY` — server-only Storage credential. Never expose it to the web application.
 - `SUPABASE_STORAGE_BUCKET` — private image bucket, default `quizmb-media`.
+- `REDIS_URL` — Upstash Redis TCP URL (`rediss://…`) for live-session presence, active-device tracking and locks. Required in production and for live sessions locally; without it the API serves REST only and logs that live sessions are disabled.
 
 For local image uploads, configure these Storage variables in `apps/api/.env`, then run `pnpm --filter @quizmb/api storage:setup`. The development-only command creates the bucket if absent, or checks an existing bucket without changing it. It requires private access, PNG/JPEG/WebP MIME types, and a 10 MiB limit. Browsers receive short-lived upload/read URLs, never a service-role key.
 
@@ -129,6 +130,8 @@ The access cookie is retained until session expiry so server pages can recognize
 Production requires trusted subdomains under the same site, such as app.quizmb.com and api.quizmb.com. A Domain cookie reaches all subdomains: do not host untrusted applications under quizmb.com. Unrelated Vercel preview domains cannot use this cookie setup. Existing production BFF sessions require a fresh login after switching cookie names; old web-host-only cookies are no longer read. Use localhost for both local applications (do not mix localhost and 127.0.0.1).
 
 Express owns authentication and profile data. Access credentials reference persisted sessions. Refresh rotates the stored token hash atomically; reuse revokes the session family. Simultaneous refreshes in different browser tabs may require signing in again under this strict replay policy. Logout revokes the current session family. Unsafe requests require an allowed Origin and JSON content type. Authentication rate limiting is intentionally deferred; add distributed limits before public rollout.
+
+Live sessions (Phase 5): run `pnpm dev` (the API's `src/server.ts` attaches Socket.IO when `REDIS_URL` is set). Publish a quiz, then use **Open live lobby** on its manage page to reach the host console at `/quizzes/:quizId/live`. Registered participants join from the quiz page or dashboard at `/quiz/:publicId/live`. The socket authenticates with a 60-second ticket from `POST /api/live-sessions/:id/socket-ticket` rather than cookies, because web and API are deployed on different sites. Redis usage is kept small for the Upstash free tier (writes only on join/leave and lifecycle changes; no polling, KEYS/SCAN or pub/sub). Fixture previews of every live screen remain at `/dev/live` in development.
 
 `GET /api/health` returns `{"status":"ok"}` to indicate application liveness, not database readiness. Responses include a server-generated `X-Request-ID` for correlation with application logs.
 
@@ -144,28 +147,28 @@ The probe executes `SELECT 1` inside a read-only transaction and rolls it back. 
 
 Keep development resources separate from production, and never commit credentials.
 
-## Vercel configuration
+## Hosting configuration
 
-Use two independent Vercel projects with Node.js 24 and the repository's pnpm lockfile. Allow access to workspace files outside each project's root directory so shared configuration resolves.
+Planned hosting (not yet deployed): the web app on Vercel and the API on Render, both on free platform domains. Socket.IO needs a persistent process, so the API cannot run as Vercel functions. Until the cross-domain auth item in [docs/TODO.md](docs/TODO.md) is done, the cookie settings below only work when web and API share a site.
+
+Use Node.js 24 and the repository's pnpm lockfile. Allow access to workspace files outside each project's root directory so shared configuration resolves.
 
 ### Web project
 
 - Root directory: `apps/web`.
 - Framework preset: Next.js.
 - Build command: `pnpm --filter @quizmb/web... build` (includes shared contracts).
-- Planned domain: `app.quizmb.com`.
-- Production environment: `NEXT_PUBLIC_API_URL=https://api.quizmb.com`.
+- Production environment: `NEXT_PUBLIC_API_URL` set to the Render API origin. The browser connects Socket.IO directly to this origin.
 
-### API project
+### API service (Render)
 
-- Root directory: `apps/api`.
-- Framework preset: Express.
-- Build command: `pnpm --filter @quizmb/api... build` (includes the database package and generated Prisma client).
-- Entry point: `src/index.ts`.
-- Planned domain: `api.quizmb.com`.
-- Production environment: `NODE_ENV=production`, `ALLOWED_ORIGINS=https://app.quizmb.com`, `AUTH_COOKIE_DOMAIN=quizmb.com`, `LOG_LEVEL=info`, `DATABASE_URL`, `AUTH_ACCESS_SECRET`, and optional `DATABASE_SSL_CA_BASE64`. Apply migrations separately with the tooling connection before release; builds do not migrate databases.
+- Root directory: repository root (workspace install), Node.js 24.
+- Build command: `pnpm install --frozen-lockfile && pnpm --filter @quizmb/api... build` (includes the database package and generated Prisma client).
+- Start command: `pnpm --filter @quizmb/api start` (runs `dist/server.js`, which serves REST and Socket.IO on one port).
+- Production environment: `NODE_ENV=production`, `ALLOWED_ORIGINS` (the web origin), `LOG_LEVEL=info`, `DATABASE_URL`, `AUTH_ACCESS_SECRET`, `REDIS_URL`, Storage variables, and optional `DATABASE_SSL_CA_BASE64`. `AUTH_COOKIE_DOMAIN` depends on the pending cross-domain auth change. Apply migrations separately with the tooling connection before release; builds do not migrate databases.
+- The free Render tier sleeps when idle; the first request after a pause can take up to a minute. It runs a single instance, so no Socket.IO Redis adapter is configured yet.
 
-`src/app.ts` constructs the Express application, `src/index.ts` exports it for Vercel, and `src/server.ts` starts the local listener. Do not use the local listener as the Vercel entry point.
+`src/app.ts` constructs the Express application, `src/index.ts` wires dependencies (and still exports the app for serverless REST-only use), and `src/server.ts` starts the long-running HTTP + Socket.IO server.
 
 Keep production secrets out of preview environments. Preview origins require explicit CORS configuration.
 

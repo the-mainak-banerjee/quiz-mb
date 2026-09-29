@@ -100,13 +100,17 @@ function RegistrationPanel({
   state,
   onRegister,
   onUnregister,
+  registering,
 }: {
   quiz: PublishedQuizViewModel;
   state: PublicQuizState;
   onRegister: () => void;
   onUnregister: () => void;
+  /** A registration request is in flight; blocks repeat clicks. */
+  registering: boolean;
 }) {
   if (state === 'registered') {
+    const liveOpen = quiz.status === 'LOBBY' || quiz.status === 'LIVE';
     return (
       <Surface className="space-y-space-md bg-action-secondary">
         <div className="flex items-start gap-space-sm">
@@ -120,11 +124,24 @@ function RegistrationPanel({
             </Text>
           </div>
         </div>
-        <div className="rounded-control bg-surface p-space-sm">
-          <Text variant="label">Live quiz room admission</Text>
-          <Text variant="body-secondary" tone="secondary">
-            Access appears here when the host manually starts the room.
-          </Text>
+        <div className="space-y-space-sm rounded-control bg-surface p-space-sm">
+          <div>
+            <Text variant="label">Live quiz room admission</Text>
+            <Text variant="body-secondary" tone="secondary">
+              {liveOpen
+                ? 'The host has opened the live room. Join now.'
+                : 'Access appears here when the host opens the live room.'}
+            </Text>
+          </div>
+          {liveOpen && (
+            <Link
+              href={APP_LINKS.PUBLIC_QUIZ_LIVE(quiz.slug)}
+              className="ds-focus ds-control-motion ds-primary-motion inline-flex h-control w-full items-center justify-center gap-space-xs rounded-control bg-action-primary px-control-x text-label text-action-on-primary hover:bg-action-primary-hover"
+            >
+              Enter live room
+              <ArrowRight size={18} aria-hidden="true" />
+            </Link>
+          )}
         </div>
         <div className="flex flex-wrap gap-space-xs">
           <Button
@@ -133,13 +150,15 @@ function RegistrationPanel({
           >
             Add to calendar
           </Button>
-          <Button
-            variant="ghost"
-            icon={<UserMinus size={18} aria-hidden="true" />}
-            onClick={onUnregister}
-          >
-            Unregister
-          </Button>
+          {quiz.status !== 'LIVE' && (
+            <Button
+              variant="ghost"
+              icon={<UserMinus size={18} aria-hidden="true" />}
+              onClick={onUnregister}
+            >
+              Unregister
+            </Button>
+          )}
         </div>
         <Text variant="caption" tone="secondary">
           Unregistration is available until the quiz starts.
@@ -220,7 +239,6 @@ function RegistrationPanel({
         >
           <LogIn size={18} aria-hidden="true" />
           Sign in to register
-          <ArrowRight size={18} aria-hidden="true" />
         </Link>
       </Surface>
     );
@@ -241,8 +259,10 @@ function RegistrationPanel({
         className="w-full"
         icon={<TicketCheck size={18} aria-hidden="true" />}
         onClick={onRegister}
+        disabled={registering}
+        aria-busy={registering}
       >
-        Register for quiz
+        {registering ? 'Registering…' : 'Register for quiz'}
       </Button>
       <Text
         variant="caption"
@@ -272,6 +292,9 @@ export function PublicQuizView({
     quiz.registeredCount,
   );
   const [unregisterOpen, setUnregisterOpen] = useState(false);
+  const [pending, setPending] = useState<'register' | 'unregister' | null>(
+    null,
+  );
   const [hostNoticeOpen, setHostNoticeOpen] = useState(false);
   const [error, setError] = useState('');
   const signedIn = !!user;
@@ -286,6 +309,8 @@ export function PublicQuizView({
       setHostNoticeOpen(true);
       return;
     }
+    if (pending) return;
+    setPending('register');
     setError('');
     try {
       const registration = await publishingApi.register(quiz.id);
@@ -293,10 +318,14 @@ export function PublicQuizView({
       setState('registered');
     } catch (cause) {
       setError(apiError(cause).message);
+    } finally {
+      setPending(null);
     }
   }
 
   async function unregister() {
+    if (pending) return;
+    setPending('unregister');
     setError('');
     try {
       const registration = await publishingApi.unregister(quiz.id);
@@ -305,6 +334,8 @@ export function PublicQuizView({
       setUnregisterOpen(false);
     } catch (cause) {
       setError(apiError(cause).message);
+    } finally {
+      setPending(null);
     }
   }
 
@@ -388,6 +419,7 @@ export function PublicQuizView({
                 state={visibleState}
                 onRegister={() => void register()}
                 onUnregister={() => setUnregisterOpen(true)}
+                registering={pending === 'register'}
               />
               {error && (
                 <Text
@@ -427,8 +459,10 @@ export function PublicQuizView({
               variant="danger"
               icon={<UserMinus size={18} aria-hidden="true" />}
               onClick={() => void unregister()}
+              disabled={pending === 'unregister'}
+              aria-busy={pending === 'unregister'}
             >
-              Unregister
+              {pending === 'unregister' ? 'Unregistering…' : 'Unregister'}
             </Button>
           </div>
         </div>
