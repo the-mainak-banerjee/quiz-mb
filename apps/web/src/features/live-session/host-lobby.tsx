@@ -48,7 +48,8 @@ export function HostLobby({
   busy?: boolean;
 }) {
   const offline = registered - connected;
-  const connectedShare = Math.round((connected / registered) * 1000) / 10;
+  const connectedShare =
+    registered > 0 ? Math.round((connected / registered) * 1000) / 10 : 0;
 
   return (
     <div className="mx-auto w-full max-w-content space-y-space-lg px-margin-sm py-space-md md:px-margin lg:px-margin-lg lg:py-space-xl">
