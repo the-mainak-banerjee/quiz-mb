@@ -28,6 +28,7 @@ export const live = redis
       new LiveSessionsRepository(database),
       new LiveStore(redis),
       new SocketTickets(authConfig.AUTH_ACCESS_SECRET),
+      events,
     )
   : undefined;
 export default createApp({

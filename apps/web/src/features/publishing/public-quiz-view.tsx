@@ -26,6 +26,7 @@ import { publishingApi } from '@/lib/api/publishing';
 import { authLink } from '@/lib/auth/return-to';
 import { getInitials, pluralize } from '@/lib/utils';
 import type { PublicQuizState, PublishedQuizViewModel } from './types';
+import { useQuizStatus } from './use-quiz-status';
 import { PublicQuizHeader } from './public-quiz-header';
 import { QuizCover } from './quiz-cover';
 
@@ -298,11 +299,24 @@ export function PublicQuizView({
   const [hostNoticeOpen, setHostNoticeOpen] = useState(false);
   const [error, setError] = useState('');
   const signedIn = !!user;
-  const visibleState =
-    !signedIn && (state === 'open' || state === 'registered')
-      ? 'logged-out'
+  // Live lifecycle updates (lobby opened/closed, started, ended) for
+  // signed-in visitors; completed quizzes cannot change any more.
+  const status = useQuizStatus(
+    quiz.id,
+    quiz.status,
+    signedIn && quiz.status !== 'COMPLETED',
+  );
+  // Registration closes once the quiz is live; registered participants keep
+  // their panel (with the live-room link) until the quiz completes.
+  const lifecycleState: PublicQuizState =
+    status === 'COMPLETED' || (status === 'LIVE' && state !== 'registered')
+      ? 'closed'
       : state;
-  const currentQuiz = { ...quiz, registeredCount: registrationCount };
+  const visibleState =
+    !signedIn && (lifecycleState === 'open' || lifecycleState === 'registered')
+      ? 'logged-out'
+      : lifecycleState;
+  const currentQuiz = { ...quiz, status, registeredCount: registrationCount };
 
   async function register() {
     if (isHost) {

@@ -1,5 +1,6 @@
 import type {
   ActiveHostSessionDto,
+  QuizStatusDto,
   HostLiveSnapshotDto,
   LiveQuizInfoDto,
   LiveRole,
@@ -8,6 +9,7 @@ import type {
   ParticipantLiveSnapshotDto,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
+import type { DomainEvents } from '../../infrastructure/domain-events.js';
 import type { LiveStore } from './live-store.js';
 import type { LiveSessionRow, LiveSessionsRepository } from './repository.js';
 import type { SocketTickets } from './tickets.js';
@@ -23,7 +25,26 @@ export class LiveSessionsService {
     private repository: LiveSessionsRepository,
     private store: LiveStore,
     readonly tickets: SocketTickets,
+    private events?: DomainEvents,
   ) {}
+
+  /** Lifecycle changes are published in-process for the status namespace. */
+  private publishStatus(quizId: string, status: QuizStatusDto['status']) {
+    this.events?.emit('quizStatusChanged', { quizId, status });
+  }
+
+  /** Current public lifecycle status; drafts are not watchable. */
+  async quizStatus(quizId: string): Promise<QuizStatusDto> {
+    const quiz = await this.repository.publicStatus(quizId);
+    if (!quiz) throw new ApiError(404, 'NOT_FOUND', 'Quiz not found.');
+    return { quizId: quiz.id, status: quiz.status as QuizStatusDto['status'] };
+  }
+
+  /** Watch tickets reveal only public status, so any signed-in user qualifies. */
+  async issueWatchTicket(quizId: string, userId: string) {
+    await this.quizStatus(quizId);
+    return this.tickets.issueWatch(userId, quizId);
+  }
 
   private async load(liveSessionId: string) {
     const session = await this.repository.findById(liveSessionId);
@@ -136,6 +157,7 @@ export class LiveSessionsService {
 
   async openLobby(quizId: string, hostUserId: string) {
     const id = await this.repository.openLobby(quizId, hostUserId);
+    this.publishStatus(quizId, 'LOBBY');
     return this.ref(await this.load(id), 'HOST');
   }
 
@@ -282,10 +304,12 @@ export class LiveSessionsService {
     return this.load(liveSessionId);
   }
 
-  start(liveSessionId: string, userId: string) {
-    return this.hostTransition(liveSessionId, userId, () =>
+  async start(liveSessionId: string, userId: string) {
+    const session = await this.hostTransition(liveSessionId, userId, () =>
       this.repository.start(liveSessionId),
     );
+    this.publishStatus(session.quizId, 'LIVE');
+    return session;
   }
 
   setLateJoin(liveSessionId: string, userId: string, allow: boolean) {
@@ -304,6 +328,7 @@ export class LiveSessionsService {
       () => this.repository.closeLobby(liveSessionId),
     );
     await this.store.clearPresence(liveSessionId);
+    this.publishStatus(quizId, 'PUBLISHED');
     return quizId;
   }
 
@@ -312,6 +337,7 @@ export class LiveSessionsService {
       this.repository.end(liveSessionId),
     );
     await this.store.expireCompleted(liveSessionId);
+    this.publishStatus(session.quizId, 'COMPLETED');
     return session;
   }
 }

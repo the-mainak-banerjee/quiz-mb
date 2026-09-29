@@ -137,6 +137,17 @@ export class LiveSessionsRepository {
     }
   }
 
+  /** Lifecycle status of a quiz that is visible publicly (not a draft). */
+  publicStatus(quizId: string) {
+    return this.db.quiz.findFirst({
+      where: {
+        id: quizId,
+        status: { in: ['PUBLISHED', 'LOBBY', 'LIVE', 'COMPLETED'] },
+      },
+      select: { id: true, status: true },
+    });
+  }
+
   registration(quizId: string, userId: string) {
     return this.db.quizRegistration.findFirst({
       where: { quizId, userId, status: 'REGISTERED' },

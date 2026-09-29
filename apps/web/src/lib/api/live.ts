@@ -12,6 +12,13 @@ export const liveApi = {
       {},
       auth,
     ),
+  /** Short-lived ticket to watch one quiz's lifecycle status. */
+  watchTicket: (quizId: string) =>
+    api.post<SocketTicketDto>(
+      API_ROUTES.QUIZZES.WATCH_TICKET(quizId),
+      {},
+      auth,
+    ),
   /** Short-lived Socket.IO handshake ticket; request a new one per connect. */
   socketTicket: (liveSessionId: string) =>
     api.post<SocketTicketDto>(

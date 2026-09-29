@@ -23,6 +23,8 @@ export const API_ROUTES = {
       `${API_PREFIX}/quizzes/${quizId}/registrations/all`,
     LIVE_SESSION: (quizId: string) =>
       `${API_PREFIX}/quizzes/${quizId}/live-session`,
+    WATCH_TICKET: (quizId: string) =>
+      `${API_PREFIX}/quizzes/${quizId}/watch-ticket`,
   },
   LIVE_SESSIONS: {
     ACTIVE: `${API_PREFIX}/live-sessions/active`,

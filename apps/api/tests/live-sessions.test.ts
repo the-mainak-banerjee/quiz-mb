@@ -45,3 +45,18 @@ test('socket tickets reject expiry, tampering, other secrets and access tokens',
   } as AuthConfig).issue(userId, randomUUID());
   await assert.rejects(tickets.verify(access), { code: 'UNAUTHENTICATED' });
 });
+
+test('watch tickets and live tickets are not interchangeable', async () => {
+  const tickets = new SocketTickets(secret);
+  const userId = randomUUID();
+  const quizId = randomUUID();
+  const watch = await tickets.issueWatch(userId, quizId);
+  assert.deepEqual(await tickets.verifyWatch(watch.ticket), { userId, quizId });
+  await assert.rejects(tickets.verify(watch.ticket), {
+    code: 'UNAUTHENTICATED',
+  });
+  const live = await tickets.issue(userId, randomUUID());
+  await assert.rejects(tickets.verifyWatch(live.ticket), {
+    code: 'UNAUTHENTICATED',
+  });
+});

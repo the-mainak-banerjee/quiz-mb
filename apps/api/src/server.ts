@@ -7,6 +7,7 @@ import {
   attachLiveRealtime,
   createSocketServer,
 } from './modules/live-sessions/realtime.js';
+import { attachQuizStatusRealtime } from './modules/live-sessions/status-realtime.js';
 
 // Long-running entry point (local development and Render). Socket.IO needs a
 // persistent process, so it is attached here rather than in the app factory.
@@ -20,6 +21,7 @@ async function start() {
     await redis.connect();
     io = createSocketServer(server, env.ALLOWED_ORIGINS);
     attachLiveRealtime(io, live, logger, events);
+    attachQuizStatusRealtime(io, live, logger, events);
   } else {
     logger.warn('REDIS_URL is not set; live sessions are disabled');
   }

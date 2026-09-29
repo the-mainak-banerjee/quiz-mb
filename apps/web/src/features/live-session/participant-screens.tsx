@@ -146,7 +146,7 @@ export function ParticipantLobby({
                   in the lobby with you.
                 </>
               ) : (
-                <>You&apos;re the first one here.</>
+                <>You&apos;re the only one here.</>
               )}{' '}
               When the host starts the quiz, the room moves to the live stage
               before the first question is asked.
