@@ -5,8 +5,6 @@ import { useEffect, useState } from 'react';
 import {
   ArrowUpRight,
   CalendarDays,
-  Check,
-  Copy,
   Download,
   FileDown,
   Info,
@@ -22,6 +20,7 @@ import type { PublishedQuizViewModel } from './types';
 import { downloadQuizPoster, QuizQrCode } from './quiz-qr-code';
 import { QuizCover } from './quiz-cover';
 import { pluralize } from '@/lib/utils';
+import { CopyLinkButton } from '@/components/copy-link-button';
 
 const START_WINDOW_MS = 15 * 60 * 1000;
 
@@ -106,7 +105,6 @@ export function PublishedQuizManagement({
   quiz: PublishedQuizViewModel;
   participants: readonly Participant[];
 }) {
-  const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const [now, setNow] = useState<number | null>(null);
@@ -129,12 +127,6 @@ export function PublishedQuizManagement({
     const timer = window.setInterval(updateNow, 30_000);
     return () => window.clearInterval(timer);
   }, []);
-
-  async function copyPublicUrl() {
-    await navigator.clipboard?.writeText(quiz.publicUrl);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
-  }
 
   async function downloadPoster() {
     setDownloading(true);
@@ -283,19 +275,7 @@ export function PublishedQuizManagement({
               >
                 {quiz.publicUrl}
               </Text>
-              <Button
-                variant="secondary"
-                icon={
-                  copied ? (
-                    <Check size={18} aria-hidden="true" />
-                  ) : (
-                    <Copy size={18} aria-hidden="true" />
-                  )
-                }
-                onClick={() => void copyPublicUrl()}
-              >
-                {copied ? 'Copied' : 'Copy link'}
-              </Button>
+              <CopyLinkButton url={quiz.publicUrl} />
             </div>
           </Surface>
 

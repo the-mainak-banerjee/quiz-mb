@@ -2,9 +2,44 @@
 
 ## Current status
 
-Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Lobby, realtime, and Redis/Socket.IO (Phase 5 onward) are not started. No deployment has been performed.
+Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Phase 5 has started with frontend-only live screens on fixture data; the Phase 5 backend (live sessions, Redis, Socket.IO) is not started. No deployment has been performed.
 
 This document records implementation progress, verification results, limitations, and approved scope adjustments. Project setup and usage instructions belong in the root README.
+
+## Phase 5 — Live screens, frontend only — September 29, 2026
+
+Branch `phase-5-live`. UI built from the eight approved Stitch screens (project "QuizMB Core UI System", Host Lobby — Live Session through Host — Active Scored Question) with dummy data. No backend, API, socket, or product route was added.
+
+### Implemented
+
+- Development-only previews at `/dev/live` (index) and `/dev/live/[screen]`: `host-lobby`, `participant-lobby`, `participant-reconnecting`, `participant-live-idle`, `host-conflict`, `host-live-idle`, `host-descriptive`, `host-scored`. They return not-found outside development and use fixtures from `features/live-session/mock-data.ts`.
+- `features/live-session/`: view-model types shaped like the API_DESIGN §22–23 host/participant snapshots; a focused live shell (brand, live badge, Exit); host lobby; three participant screens; host conflict screen inside the existing workspace shell; and one shared host console (header, three-column layout, question queue, participants/leaderboard/progress rail) reused by the idle, scored, and descriptive states.
+- New shared primitives, approved for this task: `Switch`, `ProgressBar`, `Avatar`, `SegmentedControl`, `Callout`; `Badge` gained a `danger` variant and an optional `dot`. Extracted `CopyLinkButton` and switched the published-quiz management page to it. Documented in `components/ui/README.md`.
+- Local-only interactions: question selection and deselection in the idle console, late-join switch, roster filter, and copy link. Unwired actions (Start quiz, Ask question, End quiz, leaderboard buttons, Try reconnecting) use the existing preview-notice pattern.
+
+### Deliberate differences from the Stitch designs
+
+- Content that is not in the PRD was removed or replaced, as approved: host "Lobby Ambiance" audio/photo, host checklist, seat numbers, room codes, telemetry/latency readouts, sound chimes, "SYNC v2.4", estimated run time, auto-archive, "Live Audio Backup Stream", "Encrypted WebRTC Channel", and the "Standard Accuracy (No Speed Decay)" scoring line. The lobby side card now shows real quiz settings.
+- Removed "Close Early" (the PRD forbids stopping a question early), the conflict screen's "End Previous Session & Open This Lobby" and "Cancel & Keep in Draft", the host header's Console/Scores tabs, fullscreen, avatar and duplicate End button, and the duplicate "QuizMB" wordmark. True/False questions were replaced with the three supported types.
+- Participant "Thinking/Writing" states (amber, not in the tokens and requiring pre-submit tracking) became Submitted vs Waiting.
+- Cards use the existing `Surface` (16px radius, stone border) instead of Stitch's 12px borderless cards, for consistency with the rest of the app. Icons use lucide equivalents of the Material Symbols glyphs. Photo avatars became initials avatars. The conflict screen uses the existing workspace header/footer.
+- The three host console designs differed in queue and panel styling; one shared version is used for all three states. Copy was adjusted to match PRD rules (speed-based scoring, no autoplay, answer lock, late join with remaining time).
+
+### Responsive behaviour
+
+- Participant screens are single-column and centred at every width. The host lobby stacks on phones and uses two columns on tablets. The host console uses three columns from 1024px, main column plus two side-by-side columns on tablets, and one column on phones in the same order on all three host consoles: live question, question list, quiz progress, leaderboard, participants. The right rail uses that same progress → leaderboard → participants order on desktop. Selecting a question on stacked layouts scrolls back to its preview and Ask button.
+- Checked at 1280px (compared against the Stitch screenshots), 768px, 390px, and 320px with no horizontal page overflow on any screen; the live header was tightened to fit 320px.
+
+### Checks
+
+- `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (9 web + 14 API), and `pnpm build` passed.
+- Browser checks: all eight previews rendered; question selection, switch state/name, roster filtering, and preview notices verified.
+
+### Known limitations
+
+- Visual only: no timers count down, no data is live, and no action is connected. Product routes, authorization, and socket wiring are left for the Phase 5 backend work.
+- Stitch's own screenshot of "LIVE_IDLE — Host" is blank; that screen was built from its HTML.
+- The `/dev/design-system` showcase does not yet include examples of the new primitives.
 
 ## Phase 4 — Publishing, registration, link and QR — September 29, 2026
 
