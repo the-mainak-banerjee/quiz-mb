@@ -1,5 +1,10 @@
 import { Prisma, type PrismaClient } from '@quizmb/database';
-import { AUTHORING_LIMITS, type QuestionInput } from '@quizmb/contracts';
+import {
+  AUTHORING_LIMITS,
+  type QuestionInput,
+  ERROR_CODE,
+  MEDIA_PURPOSE,
+} from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
 import { lockEditableQuiz, validateMedia } from '../quizzes/repository.js';
 
@@ -38,14 +43,14 @@ export class QuestionsRepository {
         input.imageMediaId,
         quizId,
         userId,
-        'QUESTION_IMAGE',
+        MEDIA_PURPOSE.QUESTION_IMAGE,
       );
       const { options, ...data } = input;
       if (questionId) {
         if (
           !(await tx.question.findFirst({ where: { id: questionId, quizId } }))
         )
-          throw new ApiError(404, 'NOT_FOUND', 'Question not found.');
+          throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Question not found.');
         await tx.questionOption.deleteMany({ where: { questionId } });
         await tx.question.update({
           where: { id: questionId },
@@ -61,7 +66,7 @@ export class QuestionsRepository {
         if (count >= AUTHORING_LIMITS.questions)
           throw new ApiError(
             422,
-            'VALIDATION_ERROR',
+            ERROR_CODE.VALIDATION_ERROR,
             'Question limit reached.',
           );
         await tx.question.create({
@@ -89,7 +94,8 @@ export class QuestionsRepository {
       },
       select: { quizId: true },
     });
-    if (!q) throw new ApiError(404, 'NOT_FOUND', 'Question not found.');
+    if (!q)
+      throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Question not found.');
     return q.quizId;
   }
   async remove(id: string, quizId: string, userId: string) {
@@ -125,7 +131,7 @@ export class QuestionsRepository {
       )
         throw new ApiError(
           422,
-          'VALIDATION_ERROR',
+          ERROR_CODE.VALIDATION_ERROR,
           'Include every question exactly once.',
         );
       await setPositions(tx, quizId, ids);

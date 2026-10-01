@@ -9,6 +9,7 @@ import { api } from '@/lib/api/browser';
 import { apiError } from '@/lib/api/client';
 import { API_ROUTES } from '@/lib/api/routes';
 import { z } from 'zod';
+import { ERROR_CODE } from '@quizmb/contracts';
 
 type Field = 'name' | 'email' | 'password';
 const emailSchema = z.email().max(254);
@@ -106,7 +107,7 @@ export function AuthForm({
       );
       setMessage(
         Object.keys(fieldErrors).length > 0 ||
-          failure.code === 'VALIDATION_ERROR'
+          failure.code === ERROR_CODE.VALIDATION_ERROR
           ? ''
           : failure.message,
       );

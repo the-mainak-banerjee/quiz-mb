@@ -9,6 +9,7 @@ import {
   type QuestionDto,
   type QuizDto,
   type MediaDto,
+  QUESTION_TYPE,
 } from '@quizmb/contracts';
 import { ArrowRight, FileText, Info, Plus, Save, Trash2 } from 'lucide-react';
 import { Button, FormField, Input, Surface, Text } from '@/components/ui';
@@ -22,13 +23,13 @@ import { ImageUpload } from './image-upload';
 import { QuizOption } from './quiz-option';
 
 export const QUESTION_LABELS = {
-  SINGLE_CHOICE: 'Single-choice',
-  MULTIPLE_CHOICE: 'Multiple-answer',
-  DESCRIPTIVE: 'Descriptive',
+  [QUESTION_TYPE.SINGLE_CHOICE]: 'Single-choice',
+  [QUESTION_TYPE.MULTIPLE_CHOICE]: 'Multiple-answer',
+  [QUESTION_TYPE.DESCRIPTIVE]: 'Descriptive',
 };
 export function questionValues(q?: QuestionDto): QuestionInput {
   return {
-    type: q?.type ?? 'SINGLE_CHOICE',
+    type: q?.type ?? QUESTION_TYPE.SINGLE_CHOICE,
     text: q?.text ?? '',
     imageMediaId: q?.imageMediaId ?? null,
     durationOverrideSeconds: q?.durationOverrideSeconds ?? null,
@@ -141,13 +142,13 @@ export function QuestionForm({
                       shouldDirty: true,
                       shouldValidate: true,
                     });
-                    if (next === 'DESCRIPTIVE') replace([]);
+                    if (next === QUESTION_TYPE.DESCRIPTIVE) replace([]);
                     else if (!fields.length)
                       replace([
                         { text: '', isCorrect: false },
                         { text: '', isCorrect: false },
                       ]);
-                    else if (next === 'SINGLE_CHOICE') {
+                    else if (next === QUESTION_TYPE.SINGLE_CHOICE) {
                       let chosen = false;
                       replace(
                         options.map((o) => {
@@ -205,28 +206,28 @@ export function QuestionForm({
             <div className="flex flex-wrap items-start justify-between gap-space-sm border-t border-border-surface pt-space-lg">
               <div className="space-y-space-xs">
                 <Text as="h2" variant="section-heading">
-                  {type === 'DESCRIPTIVE'
+                  {type === QUESTION_TYPE.DESCRIPTIVE
                     ? 'Participant response preview'
                     : 'Answer options'}
                 </Text>
                 <Text variant="body-secondary" tone="secondary">
-                  {type === 'DESCRIPTIVE'
+                  {type === QUESTION_TYPE.DESCRIPTIVE
                     ? 'Participants will enter a written response. Descriptive questions are ungraded and award no points.'
                     : 'Use the selection control to mark each correct response.'}
                 </Text>
               </div>
-              {type !== 'DESCRIPTIVE' && (
+              {type !== QUESTION_TYPE.DESCRIPTIVE && (
                 <Text
                   variant="caption"
                   className="rounded-pill bg-action-secondary px-badge-x py-badge-y text-accent"
                 >
-                  {type === 'SINGLE_CHOICE'
+                  {type === QUESTION_TYPE.SINGLE_CHOICE
                     ? 'Single correct choice'
                     : `${correctCount} correct ${correctCount === 1 ? 'answer' : 'answers'} specified`}
                 </Text>
               )}
             </div>
-            {type === 'MULTIPLE_CHOICE' && (
+            {type === QUESTION_TYPE.MULTIPLE_CHOICE && (
               <div className="flex gap-space-sm rounded-control border border-border-surface bg-surface-low p-space-sm">
                 <Info className="mt-space-xs shrink-0 text-accent" size={18} />
                 <Text variant="body-secondary" tone="secondary">
@@ -235,7 +236,7 @@ export function QuestionForm({
                 </Text>
               </div>
             )}
-            {type === 'DESCRIPTIVE' ? (
+            {type === QUESTION_TYPE.DESCRIPTIVE ? (
               <div className="flex min-h-40 flex-col items-center justify-center gap-space-sm rounded-control border border-dashed border-border-control bg-surface-low p-space-lg text-center">
                 <FileText className="text-accent" size={28} />
                 <Text variant="label">Written response area</Text>
@@ -252,7 +253,7 @@ export function QuestionForm({
                     index={index}
                     isCorrect={options[index]?.isCorrect ?? false}
                     onCorrectChange={(checked) => {
-                      if (type === 'SINGLE_CHOICE')
+                      if (type === QUESTION_TYPE.SINGLE_CHOICE)
                         options.forEach((_, optionIndex) =>
                           setValue(
                             `options.${optionIndex}.isCorrect`,

@@ -13,8 +13,14 @@ import {
   Eye,
   Folder,
 } from 'lucide-react';
-import type { ProjectDto, QuizDto, QuestionDto } from '@quizmb/contracts';
-import { questionSchema, quizSchema } from '@quizmb/contracts';
+import {
+  type ProjectDto,
+  QUESTION_TYPE,
+  type QuestionDto,
+  questionSchema,
+  type QuizDto,
+  quizSchema,
+} from '@quizmb/contracts';
 import { Button, Surface, Text, Badge } from '@/components/ui';
 import { VisuallyHidden } from '@/components/visually-hidden';
 import { Modal } from '@/components/ui/modal';
@@ -408,14 +414,14 @@ export function QuizEditor({
                   className="max-h-64 w-full object-contain"
                 />
               )}
-              {q.type !== 'DESCRIPTIVE' &&
+              {q.type !== QUESTION_TYPE.DESCRIPTIVE &&
                 q.options.map((option, index) => (
                   <QuizOption
                     key={index}
                     type={
-                      q.type === 'SINGLE_CHOICE'
-                        ? 'SINGLE_CHOICE'
-                        : 'MULTIPLE_CHOICE'
+                      q.type === QUESTION_TYPE.SINGLE_CHOICE
+                        ? QUESTION_TYPE.SINGLE_CHOICE
+                        : QUESTION_TYPE.MULTIPLE_CHOICE
                     }
                     index={index}
                     isCorrect={option.isCorrect}
@@ -423,7 +429,7 @@ export function QuizEditor({
                     <Text className="wrap-break-word">{option.text}</Text>
                   </QuizOption>
                 ))}
-              {q.type === 'DESCRIPTIVE' && (
+              {q.type === QUESTION_TYPE.DESCRIPTIVE && (
                 <div className="flex min-h-40 flex-col items-center justify-center gap-space-sm rounded-control border border-dashed border-border-control bg-surface-low p-space-lg text-center">
                   <FileText
                     className="text-accent"

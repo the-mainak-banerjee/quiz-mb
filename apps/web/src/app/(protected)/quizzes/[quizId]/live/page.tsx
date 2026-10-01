@@ -1,5 +1,9 @@
 import { notFound, redirect } from 'next/navigation';
-import type { LiveSessionRefDto, QuizDto } from '@quizmb/contracts';
+import {
+  LIVE_ROLE,
+  type LiveSessionRefDto,
+  type QuizDto,
+} from '@quizmb/contracts';
 import { APP_LINKS } from '@/config/navigation';
 import { HostLiveConsole } from '@/features/live-session/host-live-console';
 import { LiveSessionShell } from '@/features/live-session/live-session-shell';
@@ -29,7 +33,7 @@ export default async function HostLivePage({
       redirect(APP_LINKS.AUTH.LOGIN);
     throw error;
   }
-  if (session.role !== 'HOST') notFound();
+  if (session.role !== LIVE_ROLE.HOST) notFound();
   const [quiz, appOrigin] = await Promise.all([
     loadApi<QuizDto>(API_ROUTES.QUIZZES.DETAIL(quizId)),
     getAppOrigin(),

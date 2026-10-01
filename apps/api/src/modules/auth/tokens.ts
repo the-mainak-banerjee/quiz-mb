@@ -2,6 +2,8 @@ import { randomBytes, createHash } from 'node:crypto';
 import { SignJWT, jwtVerify, errors } from 'jose';
 import { ApiError } from '../../http/api-error.js';
 import type { AuthConfig } from './config.js';
+import { ERROR_CODE } from '@quizmb/contracts';
+import { TOKEN_ISSUER } from '../../config/constants.js';
 export const hashRefresh = (token: string) =>
   createHash('sha256').update(token).digest('hex');
 export const newRefresh = () => randomBytes(32).toString('base64url');
@@ -14,7 +16,7 @@ export class Tokens {
     return new SignJWT({ sid: sessionId })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setSubject(userId)
-      .setIssuer('quizmb-api')
+      .setIssuer(TOKEN_ISSUER)
       .setAudience('quizmb')
       .setIssuedAt()
       .setExpirationTime(
@@ -26,7 +28,7 @@ export class Tokens {
     try {
       const { payload } = await jwtVerify(token, this.key, {
         algorithms: ['HS256'],
-        issuer: 'quizmb-api',
+        issuer: TOKEN_ISSUER,
         audience: 'quizmb',
         requiredClaims: ['sub', 'sid', 'exp', 'iat'],
       });
@@ -42,8 +44,8 @@ export class Tokens {
       throw new ApiError(
         401,
         error instanceof errors.JWTExpired
-          ? 'TOKEN_EXPIRED'
-          : 'UNAUTHENTICATED',
+          ? ERROR_CODE.TOKEN_EXPIRED
+          : ERROR_CODE.UNAUTHENTICATED,
         'Please sign in to continue.',
       );
     }

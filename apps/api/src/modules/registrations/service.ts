@@ -1,10 +1,15 @@
-import type {
-  HostDashboardDto,
-  HostRegistrationDto,
-  ParticipantDashboardDto,
-  RegistrationDto,
+import {
+  type HostDashboardDto,
+  type HostRegistrationDto,
+  type ParticipantDashboardDto,
+  QUIZ_STATUS,
+  REGISTRATION_STATUS,
+  type RegistrationDto,
 } from '@quizmb/contracts';
-import type { DomainEvents } from '../../infrastructure/domain-events.js';
+import {
+  DOMAIN_EVENT,
+  type DomainEvents,
+} from '../../infrastructure/domain-events.js';
 import type { QuizzesService } from '../quizzes/service.js';
 import type { RegistrationsRepository } from './repository.js';
 
@@ -17,7 +22,7 @@ export class RegistrationsService {
 
   async register(quizId: string, userId: string): Promise<RegistrationDto> {
     const result = await this.repository.register(quizId, userId);
-    this.events?.emit('registrationChanged', {
+    this.events?.emit(DOMAIN_EVENT.registrationChanged, {
       quizId,
       userId,
       registered: true,
@@ -31,7 +36,7 @@ export class RegistrationsService {
 
   async unregister(quizId: string, userId: string): Promise<RegistrationDto> {
     const result = await this.repository.unregister(quizId, userId);
-    this.events?.emit('registrationChanged', {
+    this.events?.emit(DOMAIN_EVENT.registrationChanged, {
       quizId,
       userId,
       registered: false,
@@ -45,7 +50,8 @@ export class RegistrationsService {
 
   async own(quizId: string, userId: string): Promise<RegistrationDto> {
     const result = await this.repository.own(quizId, userId);
-    const active = result.registration?.status === 'REGISTERED';
+    const active =
+      result.registration?.status === REGISTRATION_STATUS.REGISTERED;
     return {
       registered: active,
       registeredAt: active
@@ -89,8 +95,8 @@ export class RegistrationsService {
 
   async participantDashboard(userId: string): Promise<ParticipantDashboardDto> {
     const [upcoming, live] = await Promise.all([
-      this.repository.upcoming(userId, ['PUBLISHED']),
-      this.repository.upcoming(userId, ['LOBBY', 'LIVE']),
+      this.repository.upcoming(userId, [QUIZ_STATUS.PUBLISHED]),
+      this.repository.upcoming(userId, [QUIZ_STATUS.LOBBY, QUIZ_STATUS.LIVE]),
     ]);
     const toDto = (rows: typeof upcoming) =>
       Promise.all(rows.map((row) => this.quizzes.publicDto(row.quiz)));

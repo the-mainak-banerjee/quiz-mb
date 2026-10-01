@@ -1,7 +1,16 @@
 import { randomBytes } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@quizmb/database';
-import type { QuizInput } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
+import {
+  PUBLIC_QUIZ_STATUSES,
+  type MediaPurpose,
+  type QuizInput,
+  ERROR_CODE,
+  MEDIA_PURPOSE,
+  MEDIA_STATUS,
+  QUIZ_STATUS,
+  REGISTRATION_STATUS,
+} from '@quizmb/contracts';
 
 export const quizInclude = {
   project: true,
@@ -18,7 +27,7 @@ export const publicQuizInclude = {
   cover: true,
   _count: {
     select: {
-      registrations: { where: { status: 'REGISTERED' } },
+      registrations: { where: { status: REGISTRATION_STATUS.REGISTERED } },
       questions: true,
     },
   },
@@ -35,11 +44,11 @@ export async function lockEditableQuiz(
   const quiz = await tx.quiz.findFirst({
     where: { id, creatorUserId: userId, project: { ownerUserId: userId } },
   });
-  if (!quiz) throw new ApiError(404, 'NOT_FOUND', 'Quiz not found.');
-  if (['LIVE', 'COMPLETED'].includes(quiz.status))
+  if (!quiz) throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');
+  if (quiz.status === QUIZ_STATUS.LIVE || quiz.status === QUIZ_STATUS.COMPLETED)
     throw new ApiError(
       409,
-      'QUIZ_LOCKED',
+      ERROR_CODE.QUIZ_LOCKED,
       'This quiz can no longer be edited.',
     );
   return quiz;
@@ -49,17 +58,23 @@ export async function validateMedia(
   id: string | null,
   quizId: string,
   userId: string,
-  purpose: 'QUIZ_COVER' | 'QUESTION_IMAGE',
+  purpose: MediaPurpose,
 ) {
   if (
     id &&
     !(await tx.mediaAsset.findFirst({
-      where: { id, quizId, ownerUserId: userId, purpose, status: 'READY' },
+      where: {
+        id,
+        quizId,
+        ownerUserId: userId,
+        purpose,
+        status: MEDIA_STATUS.READY,
+      },
     }))
   )
     throw new ApiError(
       422,
-      'VALIDATION_ERROR',
+      ERROR_CODE.VALIDATION_ERROR,
       'Choose a completed image upload belonging to this quiz.',
     );
 }
@@ -90,11 +105,11 @@ export class QuizzesRepository {
           where: { id: projectId, ownerUserId: userId },
         }))
       )
-        throw new ApiError(404, 'NOT_FOUND', 'Project not found.');
+        throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Project not found.');
       if (input.coverMediaId)
         throw new ApiError(
           422,
-          'VALIDATION_ERROR',
+          ERROR_CODE.VALIDATION_ERROR,
           'Save the quiz before uploading its cover.',
         );
       return tx.quiz.create({
@@ -111,7 +126,13 @@ export class QuizzesRepository {
   update(id: string, userId: string, input: QuizInput) {
     return this.db.$transaction(async (tx) => {
       await lockEditableQuiz(tx, id, userId);
-      await validateMedia(tx, input.coverMediaId, id, userId, 'QUIZ_COVER');
+      await validateMedia(
+        tx,
+        input.coverMediaId,
+        id,
+        userId,
+        MEDIA_PURPOSE.QUIZ_COVER,
+      );
       return tx.quiz.update({
         where: { id },
         data: input,
@@ -122,21 +143,21 @@ export class QuizzesRepository {
   publish(id: string, userId: string) {
     return this.db.$transaction(async (tx) => {
       const locked = await lockEditableQuiz(tx, id, userId);
-      if (locked.status === 'PUBLISHED')
+      if (locked.status === QUIZ_STATUS.PUBLISHED)
         return tx.quiz.findUniqueOrThrow({
           where: { id },
           include: quizInclude,
         });
-      if (locked.status !== 'DRAFT')
+      if (locked.status !== QUIZ_STATUS.DRAFT)
         throw new ApiError(
           409,
-          'QUIZ_LOCKED',
+          ERROR_CODE.QUIZ_LOCKED,
           'This quiz cannot be published.',
         );
       if (!locked.plannedStartAt)
         throw new ApiError(
           422,
-          'VALIDATION_ERROR',
+          ERROR_CODE.VALIDATION_ERROR,
           'Choose a planned date and time before publishing.',
           {
             plannedStartAt: 'Choose a planned date and time before publishing.',
@@ -144,7 +165,7 @@ export class QuizzesRepository {
         );
       return tx.quiz.update({
         where: { id },
-        data: { status: 'PUBLISHED', publishedAt: new Date() },
+        data: { status: QUIZ_STATUS.PUBLISHED, publishedAt: new Date() },
         include: quizInclude,
       });
     });
@@ -153,7 +174,7 @@ export class QuizzesRepository {
     return this.db.quiz.findFirst({
       where: {
         publicId,
-        status: { in: ['PUBLISHED', 'LOBBY', 'LIVE', 'COMPLETED'] },
+        status: { in: [...PUBLIC_QUIZ_STATUSES] },
       },
       include: publicQuizInclude,
     });

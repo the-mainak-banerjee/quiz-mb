@@ -9,6 +9,7 @@ import { APP_LINKS } from '@/config/navigation';
 import { apiError } from '@/lib/api/client';
 import { liveApi } from '@/lib/api/live';
 import type { PublishedQuizViewModel } from './types';
+import { ERROR_CODE, QUIZ_STATUS } from '@quizmb/contracts';
 
 /**
  * Host entry to the live session. The planned time never gates this; the API
@@ -25,7 +26,7 @@ export function HostLiveEntry({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
 
-  if (status === 'LOBBY' || status === 'LIVE')
+  if (status === QUIZ_STATUS.LOBBY || status === QUIZ_STATUS.LIVE)
     return (
       <NavigationItem
         href={APP_LINKS.WORKSPACE.LIVE_QUIZ(quizId)}
@@ -36,7 +37,7 @@ export function HostLiveEntry({
       </NavigationItem>
     );
 
-  if (status === 'COMPLETED')
+  if (status === QUIZ_STATUS.COMPLETED)
     return (
       <Button disabled icon={<Play size={18} aria-hidden="true" />}>
         Quiz completed
@@ -51,7 +52,7 @@ export function HostLiveEntry({
       router.push(APP_LINKS.WORKSPACE.LIVE_QUIZ(quizId));
     } catch (cause) {
       const problem = apiError(cause);
-      if (problem.code === 'ACTIVE_SESSION_EXISTS')
+      if (problem.code === ERROR_CODE.ACTIVE_SESSION_EXISTS)
         router.push(APP_LINKS.WORKSPACE.LIVE_CONFLICT(quizId));
       else setError(problem.message);
       setPending(false);

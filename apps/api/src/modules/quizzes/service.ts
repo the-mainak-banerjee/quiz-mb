@@ -3,6 +3,8 @@ import {
   type PublicQuizDto,
   type QuizInput,
   type QuizDto,
+  ERROR_CODE,
+  QUIZ_STATUS,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
 import type {
@@ -53,14 +55,14 @@ export class QuizzesService {
   }
   async get(id: string, userId: string) {
     const q = await this.repository.get(id, userId);
-    if (!q) throw new ApiError(404, 'NOT_FOUND', 'Quiz not found.');
+    if (!q) throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');
     return this.dto(q);
   }
   async publicDto(q: PublicQuizRow): Promise<PublicQuizDto> {
     if (!q.plannedStartAt)
       throw new ApiError(
         500,
-        'INVALID_QUIZ_STATE',
+        ERROR_CODE.INVALID_QUIZ_STATE,
         'Quiz schedule is missing.',
       );
     const registrationCount = q._count.registrations;
@@ -82,7 +84,7 @@ export class QuizzesService {
   }
   async getPublic(publicId: string) {
     const quiz = await this.repository.publicById(publicId);
-    if (!quiz) throw new ApiError(404, 'NOT_FOUND', 'Quiz not found.');
+    if (!quiz) throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');
     return this.publicDto(quiz);
   }
   async list(projectId: string, userId: string, cursor?: string) {
@@ -108,21 +110,25 @@ export class QuizzesService {
   }
   async publish(id: string, userId: string) {
     const quiz = await this.repository.get(id, userId);
-    if (!quiz) throw new ApiError(404, 'NOT_FOUND', 'Quiz not found.');
-    if (quiz.status === 'PUBLISHED') return this.dto(quiz);
-    if (quiz.status !== 'DRAFT')
-      throw new ApiError(409, 'QUIZ_LOCKED', 'This quiz cannot be published.');
+    if (!quiz) throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');
+    if (quiz.status === QUIZ_STATUS.PUBLISHED) return this.dto(quiz);
+    if (quiz.status !== QUIZ_STATUS.DRAFT)
+      throw new ApiError(
+        409,
+        ERROR_CODE.QUIZ_LOCKED,
+        'This quiz cannot be published.',
+      );
     if (!quiz.plannedStartAt)
       throw new ApiError(
         422,
-        'VALIDATION_ERROR',
+        ERROR_CODE.VALIDATION_ERROR,
         'Choose a planned date and time before publishing.',
         { plannedStartAt: 'Choose a planned date and time before publishing.' },
       );
     if (!quiz.questions.length)
       throw new ApiError(
         422,
-        'VALIDATION_ERROR',
+        ERROR_CODE.VALIDATION_ERROR,
         'Add at least one valid question before publishing.',
         { questions: 'Add at least one valid question before publishing.' },
       );
@@ -140,7 +146,7 @@ export class QuizzesService {
       if (!result.success)
         throw new ApiError(
           422,
-          'VALIDATION_ERROR',
+          ERROR_CODE.VALIDATION_ERROR,
           'Fix invalid questions before publishing.',
           { questions: 'Fix invalid questions before publishing.' },
         );

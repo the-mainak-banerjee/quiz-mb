@@ -16,6 +16,7 @@ import type { SupabaseStorage } from './modules/media/storage.js';
 import type { LiveSessionsService } from './modules/live-sessions/service.js';
 import { liveSessionRoutes } from './modules/live-sessions/routes.js';
 import type { DomainEvents } from './infrastructure/domain-events.js';
+import { HTTP_HEADER, HTTP_METHOD } from '@quizmb/contracts';
 
 export function createApp({
   allowedOrigins,
@@ -45,9 +46,9 @@ export function createApp({
     cors({
       origin: (origin, callback) =>
         callback(null, origin !== undefined && allowedOrigins.includes(origin)),
-      methods: ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'],
+      methods: Object.values(HTTP_METHOD),
       credentials: true,
-      exposedHeaders: ['X-Request-ID'],
+      exposedHeaders: [HTTP_HEADER.REQUEST_ID],
     }),
   );
   app.get('/api/health', health);

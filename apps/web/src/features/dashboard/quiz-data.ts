@@ -1,10 +1,11 @@
 import 'server-only';
 
-import type {
-  HostDashboardDto,
-  HostDashboardQuizDto,
-  ParticipantDashboardDto,
-  PublicQuizDto,
+import {
+  type HostDashboardDto,
+  type HostDashboardQuizDto,
+  type ParticipantDashboardDto,
+  type PublicQuizDto,
+  QUIZ_STATUS,
 } from '@quizmb/contracts';
 import { API_ROUTES } from '@/lib/api/routes';
 import { loadApi } from '@/lib/api/server';
@@ -12,11 +13,11 @@ import type { Quiz } from './types';
 
 function hostQuiz(quiz: HostDashboardQuizDto): Quiz {
   const status: Quiz['status'] =
-    quiz.status === 'DRAFT'
+    quiz.status === QUIZ_STATUS.DRAFT
       ? 'draft'
-      : quiz.status === 'COMPLETED'
+      : quiz.status === QUIZ_STATUS.COMPLETED
         ? 'completed'
-        : quiz.status === 'LIVE' || quiz.status === 'LOBBY'
+        : quiz.status === QUIZ_STATUS.LIVE || quiz.status === QUIZ_STATUS.LOBBY
           ? 'live'
           : 'scheduled';
   const planned = quiz.plannedStartAt
@@ -53,9 +54,9 @@ function hostQuiz(quiz: HostDashboardQuizDto): Quiz {
 
 function participantQuiz(quiz: PublicQuizDto): Quiz {
   const status: Quiz['status'] =
-    quiz.status === 'COMPLETED'
+    quiz.status === QUIZ_STATUS.COMPLETED
       ? 'completed'
-      : quiz.status === 'LIVE' || quiz.status === 'LOBBY'
+      : quiz.status === QUIZ_STATUS.LIVE || quiz.status === QUIZ_STATUS.LOBBY
         ? 'live'
         : 'scheduled';
 

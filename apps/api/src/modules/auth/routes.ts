@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { HTTP_HEADER } from '@quizmb/contracts';
+import { BEARER_PREFIX, CACHE_NO_STORE } from '../../config/constants.js';
 import type { AuthService } from './service.js';
 import type { UsersService } from '../users/service.js';
 import { authCookies } from './cookies.js';
@@ -19,7 +21,7 @@ export function authRoutes(
   const router = Router();
   const cookies = authCookies(production, auth.config.AUTH_COOKIE_DOMAIN);
   router.use((_req, res, next) => {
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader(HTTP_HEADER.CACHE_CONTROL, CACHE_NO_STORE);
     next();
   });
   router.use(csrf(origins));
@@ -29,7 +31,7 @@ export function authRoutes(
   router.post('/auth/signup', async (req, res) => {
     const credentials = await auth.signup(
       validate(signupSchema, req.body),
-      req.get('user-agent'),
+      req.get(HTTP_HEADER.USER_AGENT),
     );
     cookies.set(res, credentials);
     res.status(201).json({ success: true, data: { user: credentials.user } });
@@ -37,7 +39,7 @@ export function authRoutes(
   router.post('/auth/login', async (req, res) => {
     const credentials = await auth.login(
       validate(loginSchema, req.body),
-      req.get('user-agent'),
+      req.get(HTTP_HEADER.USER_AGENT),
     );
     cookies.set(res, credentials);
     res.json({ success: true, data: { user: credentials.user } });
@@ -60,14 +62,14 @@ export function authRoutes(
   router.get('/me', async (req, res) => {
     const user = await auth.authenticate(
       cookies.read(req).access ??
-        req.get('authorization')?.replace(/^Bearer /, ''),
+        req.get(HTTP_HEADER.AUTHORIZATION)?.replace(BEARER_PREFIX, ''),
     );
     res.json({ success: true, data: { ...user, avatarUrl: null } });
   });
   router.patch('/me', async (req, res) => {
     const user = await auth.authenticate(
       cookies.read(req).access ??
-        req.get('authorization')?.replace(/^Bearer /, ''),
+        req.get(HTTP_HEADER.AUTHORIZATION)?.replace(BEARER_PREFIX, ''),
     );
     const { name } = validate(profileSchema, req.body);
     res.json({ success: true, data: await users.updateName(user.id, name) });

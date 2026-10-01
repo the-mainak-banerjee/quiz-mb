@@ -1,5 +1,8 @@
 import { redirect } from 'next/navigation';
-import type { ActiveHostSessionDto } from '@quizmb/contracts';
+import {
+  type ActiveHostSessionDto,
+  LIVE_SESSION_STATE,
+} from '@quizmb/contracts';
 import { APP_LINKS } from '@/config/navigation';
 import { HostLiveConflict } from '@/features/live-session/host-live-conflict';
 import { API_ROUTES } from '@/lib/api/routes';
@@ -33,7 +36,9 @@ export default async function LiveConflictPage({
       activeQuizTitle={active.quizTitle}
       activeProjectName={active.projectName}
       startedLabel={openedLabel(active.createdAt)}
-      stageLabel={active.state === 'LOBBY' ? 'Lobby open' : 'Quiz live'}
+      stageLabel={
+        active.state === LIVE_SESSION_STATE.LOBBY ? 'Lobby open' : 'Quiz live'
+      }
       connected={active.connected}
       registered={active.registered}
       asked={0}

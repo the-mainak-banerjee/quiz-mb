@@ -5,7 +5,11 @@ import { currentUser } from '@/lib/auth/session';
 import { loadApi, serverApi } from '@/lib/api/server';
 import { getAppOrigin } from '@/lib/app-origin';
 import { API_ROUTES } from '@/lib/api/routes';
-import type { PublicQuizDto, RegistrationDto } from '@quizmb/contracts';
+import {
+  type PublicQuizDto,
+  QUIZ_STATUS,
+  type RegistrationDto,
+} from '@quizmb/contracts';
 
 export default async function PublicQuizPage({
   params,
@@ -27,9 +31,10 @@ export default async function PublicQuizPage({
   // Registration stays open while the lobby is open; registered
   // participants keep their panel (with the live-room link) once live.
   const initialState: PublicQuizState =
-    !isHost && registration?.registered && quiz.status !== 'COMPLETED'
+    !isHost && registration?.registered && quiz.status !== QUIZ_STATUS.COMPLETED
       ? 'registered'
-      : quiz.status !== 'PUBLISHED' && quiz.status !== 'LOBBY'
+      : quiz.status !== QUIZ_STATUS.PUBLISHED &&
+          quiz.status !== QUIZ_STATUS.LOBBY
         ? 'closed'
         : quiz.isFull
           ? 'full'

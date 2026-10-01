@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { QuizDto } from '@quizmb/contracts';
+import { QUESTION_TYPE, type QuizDto } from '@quizmb/contracts';
 import {
   ArrowLeft,
   ArrowRight,
@@ -38,7 +38,7 @@ export function ReviewPublishPanel({
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState('');
   const scored = quiz.questions.filter(
-    (question) => question.type !== 'DESCRIPTIVE',
+    (question) => question.type !== QUESTION_TYPE.DESCRIPTIVE,
   );
   const totalSeconds = quiz.questions.reduce(
     (sum, question) =>
@@ -214,7 +214,7 @@ export function ReviewPublishPanel({
                       </Text>
                       <Text variant="caption" tone="secondary">
                         {QUESTION_LABELS[question.type]} ·{' '}
-                        {question.type === 'DESCRIPTIVE'
+                        {question.type === QUESTION_TYPE.DESCRIPTIVE
                           ? 'Unscored'
                           : `${question.options.length} options · ${correct} correct`}{' '}
                         ·{' '}

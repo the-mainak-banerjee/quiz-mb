@@ -29,6 +29,7 @@ import type { PublicQuizState, PublishedQuizViewModel } from './types';
 import { useQuizStatus } from './use-quiz-status';
 import { PublicQuizHeader } from './public-quiz-header';
 import { QuizCover } from './quiz-cover';
+import { QUIZ_STATUS } from '@quizmb/contracts';
 
 function SessionFacts({ quiz }: { quiz: PublishedQuizViewModel }) {
   const facts = [
@@ -111,7 +112,8 @@ function RegistrationPanel({
   registering: boolean;
 }) {
   if (state === 'registered') {
-    const liveOpen = quiz.status === 'LOBBY' || quiz.status === 'LIVE';
+    const liveOpen =
+      quiz.status === QUIZ_STATUS.LOBBY || quiz.status === QUIZ_STATUS.LIVE;
     return (
       <Surface className="space-y-space-md bg-action-secondary">
         <div className="flex items-start gap-space-sm">
@@ -151,7 +153,7 @@ function RegistrationPanel({
           >
             Add to calendar
           </Button>
-          {quiz.status !== 'LIVE' && (
+          {quiz.status !== QUIZ_STATUS.LIVE && (
             <Button
               variant="ghost"
               icon={<UserMinus size={18} aria-hidden="true" />}
@@ -304,12 +306,13 @@ export function PublicQuizView({
   const status = useQuizStatus(
     quiz.id,
     quiz.status,
-    signedIn && quiz.status !== 'COMPLETED',
+    signedIn && quiz.status !== QUIZ_STATUS.COMPLETED,
   );
   // Registration closes once the quiz is live; registered participants keep
   // their panel (with the live-room link) until the quiz completes.
   const lifecycleState: PublicQuizState =
-    status === 'COMPLETED' || (status === 'LIVE' && state !== 'registered')
+    status === QUIZ_STATUS.COMPLETED ||
+    (status === QUIZ_STATUS.LIVE && state !== 'registered')
       ? 'closed'
       : state;
   const visibleState =

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ApiError } from '../../http/api-error.js';
+import { ERROR_CODE } from '@quizmb/contracts';
 const email = z
   .string()
   .trim()
@@ -27,7 +28,7 @@ export function validate<T>(schema: z.ZodType<T>, value: unknown): T {
   if (result.success) return result.data;
   throw new ApiError(
     422,
-    'VALIDATION_ERROR',
+    ERROR_CODE.VALIDATION_ERROR,
     'Please check the highlighted fields.',
     Object.fromEntries(
       result.error.issues.map((i) => [i.path.join('.') || 'form', i.message]),

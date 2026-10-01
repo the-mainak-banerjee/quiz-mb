@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler } from 'express';
 import type { Logger } from 'pino';
 import { ApiError } from './api-error.js';
+import { ERROR_CODE } from '@quizmb/contracts';
 
 export function errorHandler(logger: Logger): ErrorRequestHandler {
   return (_error: unknown, _req, res, next) => {
@@ -8,13 +9,13 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
       _error instanceof ApiError
         ? _error
         : _error instanceof SyntaxError && 'body' in _error
-          ? new ApiError(400, 'VALIDATION_ERROR', 'Invalid JSON body.')
+          ? new ApiError(400, ERROR_CODE.VALIDATION_ERROR, 'Invalid JSON body.')
           : _error instanceof Error &&
               'type' in _error &&
               _error.type === 'entity.too.large'
             ? new ApiError(
                 413,
-                'VALIDATION_ERROR',
+                ERROR_CODE.VALIDATION_ERROR,
                 'Request body is too large.',
               )
             : null;
@@ -31,7 +32,7 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
       return;
     }
     logger.error(
-      { requestId: res.locals.requestId, code: 'INTERNAL_ERROR' },
+      { requestId: res.locals.requestId, code: ERROR_CODE.INTERNAL_ERROR },
       'Request failed',
     );
     if (res.headersSent) {
@@ -41,7 +42,7 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
     res.status(500).json({
       success: false,
       error: {
-        code: 'INTERNAL_ERROR',
+        code: ERROR_CODE.INTERNAL_ERROR,
         message: 'An unexpected error occurred.',
         requestId: res.locals.requestId,
       },

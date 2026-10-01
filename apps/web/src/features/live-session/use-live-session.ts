@@ -10,10 +10,13 @@ import {
   type LiveRemovedDto,
   type LiveSnapshotDto,
   type SocketAck,
+  ERROR_CODE,
+  LIVE_ROLE,
 } from '@quizmb/contracts';
 import { API_ORIGIN } from '@/lib/api/config';
 import { apiError } from '@/lib/api/client';
 import { liveApi } from '@/lib/api/live';
+import { CLIENT_ERROR_CODE } from '@/lib/api/error-codes';
 
 export type LiveConnection =
   'connecting' | 'connected' | 'reconnecting' | 'replaced' | 'failed';
@@ -31,13 +34,13 @@ export const MAX_RECONNECT_ATTEMPTS = 10;
  * Join refusals that retrying cannot fix. Anything else (timeouts,
  * LIVE_UNAVAILABLE, INTERNAL_ERROR, OPERATION_IN_PROGRESS) is retried.
  */
-const PERMANENT_JOIN_ERRORS = new Set([
-  'REGISTRATION_REQUIRED',
-  'LATE_JOIN_DISABLED',
-  'QUIZ_COMPLETED',
-  'SESSION_NOT_FOUND',
-  'FORBIDDEN',
-  'VALIDATION_ERROR',
+const PERMANENT_JOIN_ERRORS = new Set<string>([
+  ERROR_CODE.REGISTRATION_REQUIRED,
+  ERROR_CODE.LATE_JOIN_DISABLED,
+  ERROR_CODE.QUIZ_COMPLETED,
+  ERROR_CODE.SESSION_NOT_FOUND,
+  ERROR_CODE.FORBIDDEN,
+  ERROR_CODE.VALIDATION_ERROR,
 ]);
 
 function applyPresence(
@@ -46,7 +49,7 @@ function applyPresence(
 ): LiveSnapshotDto | null {
   if (!snapshot) return snapshot;
   const counts = { ...snapshot.counts, connected: presence.connectedCount };
-  if (snapshot.role !== 'HOST') return { ...snapshot, counts };
+  if (snapshot.role !== LIVE_ROLE.HOST) return { ...snapshot, counts };
   return {
     ...snapshot,
     counts,
@@ -235,7 +238,7 @@ export function useLiveSession(liveSessionId: string) {
         return {
           ok: false,
           error: {
-            code: 'NOT_CONNECTED',
+            code: CLIENT_ERROR_CODE.NOT_CONNECTED,
             message: 'You are offline. Wait for the connection to return.',
           },
         } as const;
@@ -245,7 +248,7 @@ export function useLiveSession(liveSessionId: string) {
         .catch(() => ({
           ok: false,
           error: {
-            code: 'TIMEOUT',
+            code: CLIENT_ERROR_CODE.TIMEOUT,
             message: 'The live room did not respond. Please try again.',
           },
         }))) as SocketAck<LiveSnapshotDto>;

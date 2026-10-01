@@ -14,7 +14,12 @@ import {
   Search,
   Sparkles,
 } from 'lucide-react';
-import type { ProjectDto, QuizSummaryDto } from '@quizmb/contracts';
+import {
+  ACTIVE_QUIZ_STATUSES,
+  QUIZ_STATUS,
+  type ProjectDto,
+  type QuizSummaryDto,
+} from '@quizmb/contracts';
 import { Button, Input, Surface, Text } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
 import { NavigationItem } from '@/components/workspace/navigation-item';
@@ -326,27 +331,29 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
 }
 
 function quizStatus(status: string): Quiz['status'] {
-  if (status === 'DRAFT') return 'draft';
-  if (status === 'COMPLETED') return 'completed';
-  if (status === 'LIVE' || status === 'LOBBY') return 'live';
+  if (status === QUIZ_STATUS.DRAFT) return 'draft';
+  if (status === QUIZ_STATUS.COMPLETED) return 'completed';
+  if (status === QUIZ_STATUS.LIVE || status === QUIZ_STATUS.LOBBY)
+    return 'live';
   return 'scheduled';
 }
 
 function quizAction(status: string) {
-  if (status === 'DRAFT') return 'Edit Draft';
-  if (status === 'COMPLETED') return 'View Results';
-  if (status === 'LIVE' || status === 'LOBBY') return 'Launch Room';
+  if (status === QUIZ_STATUS.DRAFT) return 'Edit Draft';
+  if (status === QUIZ_STATUS.COMPLETED) return 'View Results';
+  if (status === QUIZ_STATUS.LIVE || status === QUIZ_STATUS.LOBBY)
+    return 'Launch Room';
   return 'Manage';
 }
 
 function quizDescription(status: string) {
-  if (status === 'DRAFT') {
+  if (status === QUIZ_STATUS.DRAFT) {
     return 'Continue shaping this quiz before it is published.';
   }
-  if (status === 'COMPLETED') {
+  if (status === QUIZ_STATUS.COMPLETED) {
     return 'Review this completed quiz and its results.';
   }
-  if (status === 'LIVE' || status === 'LOBBY') {
+  if (status === QUIZ_STATUS.LIVE || status === QUIZ_STATUS.LOBBY) {
     return 'This quiz is ready for its live session.';
   }
   return 'Manage this quiz before its scheduled session.';
@@ -367,10 +374,11 @@ export function ProjectQuizzes({
 
   const counts = {
     scheduled: items.filter((quiz) =>
-      ['PUBLISHED', 'SCHEDULED', 'LOBBY', 'LIVE'].includes(quiz.status),
+      ACTIVE_QUIZ_STATUSES.includes(quiz.status),
     ).length,
-    draft: items.filter((quiz) => quiz.status === 'DRAFT').length,
-    completed: items.filter((quiz) => quiz.status === 'COMPLETED').length,
+    draft: items.filter((quiz) => quiz.status === QUIZ_STATUS.DRAFT).length,
+    completed: items.filter((quiz) => quiz.status === QUIZ_STATUS.COMPLETED)
+      .length,
   };
   const filters: { value: QuizFilter; label: string }[] = [
     { value: 'all', label: `All (${items.length})` },
@@ -381,7 +389,7 @@ export function ProjectQuizzes({
   const visible = items.filter((quiz) => {
     if (filter === 'all') return true;
     if (filter === 'scheduled') {
-      return ['PUBLISHED', 'SCHEDULED', 'LOBBY', 'LIVE'].includes(quiz.status);
+      return ACTIVE_QUIZ_STATUSES.includes(quiz.status);
     }
     return quiz.status === filter.toUpperCase();
   });
@@ -430,7 +438,8 @@ export function ProjectQuizzes({
               project: project.name,
               role: 'host',
               status: quizStatus(quiz.status),
-              ...(quiz.status === 'PUBLISHED' || quiz.status === 'LOBBY'
+              ...(quiz.status === QUIZ_STATUS.PUBLISHED ||
+              quiz.status === QUIZ_STATUS.LOBBY
                 ? { statusLabel: 'Live Ready' }
                 : {}),
               title: quiz.title,
@@ -444,9 +453,10 @@ export function ProjectQuizzes({
                 key={quiz.id}
                 quiz={card}
                 actionHref={
-                  quiz.status === 'LOBBY' || quiz.status === 'LIVE'
+                  quiz.status === QUIZ_STATUS.LOBBY ||
+                  quiz.status === QUIZ_STATUS.LIVE
                     ? APP_LINKS.WORKSPACE.LIVE_QUIZ(quiz.id)
-                    : quiz.status === 'DRAFT'
+                    : quiz.status === QUIZ_STATUS.DRAFT
                       ? APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)
                       : APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id)
                 }
