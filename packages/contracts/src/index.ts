@@ -275,7 +275,16 @@ export const LIVE_EVENTS = {
   submissions: 'host:submissions-updated',
   /** One participant's recalculated score and rank after a question ends. */
   standing: 'participant:standing',
+  /** Host-only: the Top 10 without changing what participants see. */
+  leaderboardGet: 'host:leaderboard-get',
+  /** Host shows the Top 10 on every participant screen. */
+  leaderboardShow: 'host:leaderboard-show',
+  /** Host returns participants to the latest question result. */
+  leaderboardHide: 'host:leaderboard-hide',
 } as const;
+
+/** Leaderboard size; ties at the last rank are all included. */
+export const LEADERBOARD_SIZE = 10;
 
 export const liveSessionCommandSchema = z
   .object({ liveSessionId: z.uuid() })
@@ -396,6 +405,22 @@ export type ParticipantAnswerDto = {
   pointsAwarded: number;
 };
 
+export type LeaderboardEntryDto = {
+  rank: number;
+  userId: string;
+  name: string;
+  score: number;
+};
+
+/** Top standings (rank ≤ LEADERBOARD_SIZE, so ties may add rows). */
+export type LeaderboardDto = {
+  entries: LeaderboardEntryDto[];
+  /** Everyone who entered the live session. */
+  participantCount: number;
+  /** Live number of the latest completed question, if any. */
+  afterQuestionNumber: number | null;
+};
+
 /** Score and rank after the given asked question; ties share a rank. */
 export type ParticipantStandingDto = {
   askedQuestionId: string;
@@ -447,12 +472,16 @@ export type HostLiveSnapshotDto = LiveSnapshotBase & {
   }>;
   /** The active question, or the one that just ended (QUESTION_RESULT). */
   currentQuestion: HostCurrentQuestionDto | null;
+  /** Present while the leaderboard is shown to participants. */
+  leaderboard: LeaderboardDto | null;
 };
 
 export type ParticipantLiveSnapshotDto = LiveSnapshotBase & {
   role: typeof LIVE_ROLE.PARTICIPANT;
   /** The active question, or the one that just ended (QUESTION_RESULT). */
   question: ParticipantQuestionStateDto | null;
+  /** Present while the host shows the leaderboard (LEADERBOARD). */
+  leaderboard: LeaderboardDto | null;
   /**
    * Personal fields: present only when the snapshot is addressed to one
    * participant (join, sync, question end). Absent means unchanged.

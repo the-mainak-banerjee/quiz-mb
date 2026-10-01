@@ -40,6 +40,7 @@ export default async function ParticipantLivePage({
     <LiveSessionShell exitHref={quizHref}>
       <ParticipantLiveView
         liveSessionId={session.id}
+        participantId={user.id}
         participantName={user.name}
         quizHref={quizHref}
         quiz={{

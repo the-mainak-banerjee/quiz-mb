@@ -6,6 +6,8 @@ import {
   ERROR_CODE,
   type HostCurrentQuestionDto,
   type HostQuestionProgressDto,
+  LEADERBOARD_SIZE,
+  type LeaderboardDto,
   type HostLiveSnapshotDto,
   LIVE_ROLE,
   LIVE_SESSION_STATE,
@@ -53,9 +55,11 @@ const CLOSE_GRACE_MS = 50;
 const CLOSE_RETRY_MS = 2_000;
 const CLOSE_MAX_RETRIES = 5;
 
+/** States in which the latest asked question stays on screen. */
 const QUESTION_STATES: readonly string[] = [
   LIVE_SESSION_STATE.QUESTION_ACTIVE,
   LIVE_SESSION_STATE.QUESTION_RESULT,
+  LIVE_SESSION_STATE.LEADERBOARD,
 ];
 
 const questionNotActive = () =>
@@ -139,11 +143,32 @@ export class LiveSessionsService {
     return questions;
   }
 
+  /**
+   * Values that cannot change until the next question ends, per session:
+   * the ended question's final progress (submissions are closed) and the
+   * leaderboard (standings move only when a question ends or someone new
+   * enters). Promises are cached so concurrent host and participant
+   * snapshots share one query; showing or hiding the leaderboard and
+   * re-reading a result cost no queries.
+   */
+  private finalProgress = new Map<
+    string,
+    {
+      askedQuestionId: string;
+      progress: Promise<
+        Awaited<ReturnType<LiveSessionsRepository['progress']>>
+      >;
+    }
+  >();
+  private boards = new Map<string, Promise<LeaderboardDto>>();
+
   /** Forgets in-memory state for a session that has finished. */
   private forget(liveSessionId: string) {
     this.clearTimer(liveSessionId);
     this.confirmed.delete(liveSessionId);
     this.questionCache.delete(liveSessionId);
+    this.finalProgress.delete(liveSessionId);
+    this.boards.delete(liveSessionId);
     for (const [id, key] of this.answerKeys)
       if (key.liveSessionId === liveSessionId) this.answerKeys.delete(id);
   }
@@ -266,7 +291,7 @@ export class LiveSessionsService {
     const { question } = asked;
     let reveal: LiveQuestionRevealDto | null = null;
     if (asked.status === ASKED_QUESTION_STATUS.COMPLETED) {
-      const progress = await this.repository.progress(asked.id, false);
+      const progress = await this.progressOf(asked);
       reveal = {
         correctOptionIds: question.options
           .filter((option) => option.isCorrect)
@@ -289,14 +314,29 @@ export class LiveSessionsService {
     };
   }
 
-  private async questionProgress(
+  /** Progress of an asked question; final once it has ended, so cached. */
+  private progressOf(asked: AskedQuestionRow) {
+    const load = () =>
+      this.repository.progress(
+        asked.id,
+        asked.question.type === QUESTION_TYPE.DESCRIPTIVE,
+      );
+    if (asked.status !== ASKED_QUESTION_STATUS.COMPLETED) return load();
+    const cached = this.finalProgress.get(asked.liveSessionId);
+    if (cached?.askedQuestionId === asked.id) return cached.progress;
+    const progress = load();
+    this.finalProgress.set(asked.liveSessionId, {
+      askedQuestionId: asked.id,
+      progress,
+    });
+    progress.catch(() => this.finalProgress.delete(asked.liveSessionId));
+    return progress;
+  }
+
+  private toProgressDto(
     askedQuestionId: string,
-    type: QuestionType,
-  ): Promise<HostQuestionProgressDto> {
-    const progress = await this.repository.progress(
-      askedQuestionId,
-      type === QUESTION_TYPE.DESCRIPTIVE,
-    );
+    progress: Awaited<ReturnType<LiveSessionsRepository['progress']>>,
+  ): HostQuestionProgressDto {
     return {
       askedQuestionId,
       submittedCount: progress.submittedCount,
@@ -313,7 +353,7 @@ export class LiveSessionsService {
     asked: AskedQuestionRow,
   ): Promise<HostCurrentQuestionDto> {
     return {
-      ...(await this.questionProgress(asked.id, asked.question.type)),
+      ...this.toProgressDto(asked.id, await this.progressOf(asked)),
       questionId: asked.questionId,
       number: asked.sequenceNumber,
       durationSeconds: asked.durationSeconds,
@@ -323,12 +363,55 @@ export class LiveSessionsService {
     };
   }
 
+  /** Top standings with names (ties at the last rank included). */
+  leaderboard(liveSessionId: string): Promise<LeaderboardDto> {
+    const cached = this.boards.get(liveSessionId);
+    if (cached) return cached;
+    const board = this.loadLeaderboard(liveSessionId);
+    this.boards.set(liveSessionId, board);
+    board.catch(() => this.boards.delete(liveSessionId));
+    return board;
+  }
+
+  private async loadLeaderboard(
+    liveSessionId: string,
+  ): Promise<LeaderboardDto> {
+    const rows = await this.repository.leaderboard(
+      liveSessionId,
+      LEADERBOARD_SIZE,
+    );
+    return {
+      entries: rows.map(({ rank, userId, name, score }) => ({
+        rank,
+        userId,
+        name,
+        score,
+      })),
+      participantCount: rows[0]?.participantCount ?? 0,
+      afterQuestionNumber: rows[0]?.lastQuestion ?? null,
+    };
+  }
+
+  private shownLeaderboard(session: LiveSessionRow) {
+    return session.state === LIVE_SESSION_STATE.LEADERBOARD
+      ? this.leaderboard(session.id)
+      : Promise.resolve(null);
+  }
+
   /** Host-only progress for throttled realtime updates. */
   async progressFor(askedQuestionId: string) {
     const type =
       this.answerKeys.get(askedQuestionId)?.type ??
       (await this.repository.findAsked(askedQuestionId))?.question.type;
-    return type ? this.questionProgress(askedQuestionId, type) : null;
+    return type
+      ? this.toProgressDto(
+          askedQuestionId,
+          await this.repository.progress(
+            askedQuestionId,
+            type === QUESTION_TYPE.DESCRIPTIVE,
+          ),
+        )
+      : null;
   }
 
   /** `preloaded` skips reloading the current question (undefined = load). */
@@ -336,15 +419,15 @@ export class LiveSessionsService {
     session: LiveSessionRow,
     preloaded?: AskedQuestionRow | null,
   ): Promise<HostLiveSnapshotDto> {
-    const [connectedIds, roster, questions, asked, current] = await Promise.all(
-      [
+    const [connectedIds, roster, questions, asked, current, leaderboard] =
+      await Promise.all([
         this.store.connectedUserIds(session.id),
         this.repository.roster(session.quizId, HOST_ROSTER_LIMIT),
         this.quizQuestions(session),
         this.repository.askedQuestions(session.id),
         preloaded === undefined ? this.currentAsked(session) : preloaded,
-      ],
-    );
+        this.shownLeaderboard(session),
+      ]);
     return {
       ...this.base(session, connectedIds.size),
       role: LIVE_ROLE.HOST,
@@ -374,6 +457,7 @@ export class LiveSessionsService {
         number: item.sequenceNumber,
       })),
       currentQuestion: current ? await this.hostCurrent(current) : null,
+      leaderboard,
     };
   }
 
@@ -387,14 +471,16 @@ export class LiveSessionsService {
     userId?: string,
     preloaded?: AskedQuestionRow | null,
   ): Promise<ParticipantLiveSnapshotDto> {
-    const [connected, asked] = await Promise.all([
+    const [connected, asked, leaderboard] = await Promise.all([
       this.store.connectedCount(session.id),
       preloaded === undefined ? this.currentAsked(session) : preloaded,
+      this.shownLeaderboard(session),
     ]);
     const snapshot: ParticipantLiveSnapshotDto = {
       ...this.base(session, connected),
       role: LIVE_ROLE.PARTICIPANT,
       question: asked ? await this.participantQuestion(asked) : null,
+      leaderboard,
     };
     if (userId === undefined) return snapshot;
     if (!asked)
@@ -535,6 +621,8 @@ export class LiveSessionsService {
     );
     this.clearTimer(liveSessionId);
     this.answerKeys.delete(active.id);
+    // Standings change once the question has ended.
+    this.boards.delete(liveSessionId);
     if (closed)
       this.events?.emit(DOMAIN_EVENT.questionEnded, {
         liveSessionId,
@@ -645,6 +733,8 @@ export class LiveSessionsService {
         'The host is not admitting new participants right now.',
       );
     await this.repository.recordJoin(session.id, userId);
+    // A new entrant changes the participant count (and zero-score ranks).
+    this.boards.delete(session.id);
     const replacedSocketId = await this.store.claimPresence(
       session.id,
       userId,
@@ -822,6 +912,29 @@ export class LiveSessionsService {
     if (!(await this.repository.registration(quizId, userId))) return false;
     this.confirmed.set(liveSessionId, (known ?? new Set()).add(userId));
     return true;
+  }
+
+  /** Host-only private view; participants' screens do not change. */
+  async hostLeaderboard(liveSessionId: string, userId: string) {
+    const session = await this.load(liveSessionId);
+    this.requireHost(session, userId);
+    return this.leaderboard(liveSessionId);
+  }
+
+  /**
+   * Shows or hides the Top 10 on participant screens (between questions).
+   * Only the state changes, so the session is not reloaded afterwards.
+   */
+  async setLeaderboard(liveSessionId: string, userId: string, shown: boolean) {
+    const session = await this.load(liveSessionId);
+    this.requireHost(session, userId);
+    await this.repository.setLeaderboard(liveSessionId, shown);
+    return {
+      ...session,
+      state: shown
+        ? LIVE_SESSION_STATE.LEADERBOARD
+        : LIVE_SESSION_STATE.QUESTION_RESULT,
+    };
   }
 
   /**

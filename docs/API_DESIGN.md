@@ -2007,3 +2007,11 @@ Question delivery and submission on the `/quiz` namespace. Answer reveal (correc
 ## Live distribution and result screen — Phase 8 — 2026-10-01
 
 Delivered with Phase 6: host-only live counts, percentages and descriptive responses (`host:submissions-updated`), automatic reveal at expiry with the correct answer and final distribution for participants, correct/incorrect states and the post-question waiting state. Participants receive neither the answer key, the distribution nor host progress before expiry (covered by the live questions integration test).
+
+## Host presentation controls and leaderboard — Phase 9 — 2026-10-01
+
+- `host:leaderboard-get` (host only): returns `LeaderboardDto { entries: [{ rank, userId, name, score }], participantCount, afterQuestionNumber }` without changing participant screens (host private view).
+- `host:leaderboard-show` (host only, from `QUESTION_RESULT`): session → `LEADERBOARD`; host and participant snapshots carry `leaderboard`, and participants see the Top 10 instead of the question result, with their own rank (`myStanding`) still available. `host:leaderboard-hide` returns to `QUESTION_RESULT` with the latest result. Asking the next question from `LEADERBOARD` hides it implicitly. Showing during a question returns `INVALID_STATE_TRANSITION`.
+- Top 10 is everyone ranked 10th or better (`LEADERBOARD_SIZE`), so ties at the boundary can add rows; ties share a rank and are ordered by name. Computed in PostgreSQL from completed questions, like standings.
+- Timer expiry never advances: the host keeps the finished question (or the leaderboard) on screen until choosing the next question.
+- Performance: the leaderboard and the ended question's final results are cached per session until the next question ends (or someone new enters), and concurrent host and participant snapshots share one query. Showing or hiding is a single conditional update (`state` must match), and the live session row loads in one SQL query.

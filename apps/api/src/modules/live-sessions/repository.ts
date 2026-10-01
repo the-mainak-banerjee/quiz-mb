@@ -27,9 +27,31 @@ export const liveSessionInclude = {
   },
 } satisfies Prisma.LiveQuizSessionInclude;
 
-export type LiveSessionRow = Prisma.LiveQuizSessionGetPayload<{
-  include: typeof liveSessionInclude;
-}>;
+/**
+ * What the live module needs about a session and its quiz. The Prisma
+ * include above returns a superset; `findById` builds it in one query.
+ */
+export type LiveSessionRow = {
+  id: string;
+  quizId: string;
+  hostUserId: string;
+  state: LiveSessionState;
+  allowLateJoin: boolean;
+  startedAt: Date | null;
+  endedAt: Date | null;
+  createdAt: Date;
+  quiz: {
+    id: string;
+    publicId: string;
+    title: string;
+    plannedStartAt: Date | null;
+    registrationLimit: number;
+    defaultQuestionDurationSeconds: number;
+    project: { name: string };
+    creator: { name: string };
+    _count: { questions: number; registrations: number };
+  };
+};
 
 const active = { state: { not: LIVE_SESSION_STATE.COMPLETED } } as const;
 
@@ -110,11 +132,73 @@ async function lockSession(tx: Prisma.TransactionClient, id: string) {
 export class LiveSessionsRepository {
   constructor(readonly db: PrismaClient) {}
 
-  findById(id: string) {
-    return this.db.liveQuizSession.findUnique({
-      where: { id },
-      include: liveSessionInclude,
-    });
+  /**
+   * One round trip instead of Prisma's per-relation queries: this runs on
+   * every join, sync and host command.
+   */
+  async findById(id: string): Promise<LiveSessionRow | null> {
+    const [row] = await this.db.$queryRaw<
+      Array<{
+        id: string;
+        quizId: string;
+        hostUserId: string;
+        state: LiveSessionState;
+        allowLateJoin: boolean;
+        startedAt: Date | null;
+        endedAt: Date | null;
+        createdAt: Date;
+        publicId: string;
+        title: string;
+        plannedStartAt: Date | null;
+        registrationLimit: number;
+        defaultQuestionDurationSeconds: number;
+        projectName: string;
+        creatorName: string;
+        questionCount: number;
+        registrationCount: number;
+      }>
+    >`
+      SELECT s.id::text, s."quizId"::text, s."hostUserId"::text,
+        s.state::text, s."allowLateJoin", s."startedAt", s."endedAt",
+        s."createdAt", q."publicId", q.title, q."plannedStartAt",
+        q."registrationLimit", q."defaultQuestionDurationSeconds",
+        p.name AS "projectName", u.name AS "creatorName",
+        (SELECT COUNT(*) FROM questions WHERE "quizId" = q.id)::int
+          AS "questionCount",
+        (SELECT COUNT(*) FROM quiz_registrations
+          WHERE "quizId" = q.id
+            AND status = ${REGISTRATION_STATUS.REGISTERED}::"RegistrationStatus"
+        )::int AS "registrationCount"
+      FROM live_quiz_sessions s
+      JOIN quizzes q ON q.id = s."quizId"
+      JOIN projects p ON p.id = q."projectId"
+      JOIN users u ON u.id = q."creatorUserId"
+      WHERE s.id = ${id}::uuid`;
+    if (!row) return null;
+    return {
+      id: row.id,
+      quizId: row.quizId,
+      hostUserId: row.hostUserId,
+      state: row.state,
+      allowLateJoin: row.allowLateJoin,
+      startedAt: row.startedAt,
+      endedAt: row.endedAt,
+      createdAt: row.createdAt,
+      quiz: {
+        id: row.quizId,
+        publicId: row.publicId,
+        title: row.title,
+        plannedStartAt: row.plannedStartAt,
+        registrationLimit: row.registrationLimit,
+        defaultQuestionDurationSeconds: row.defaultQuestionDurationSeconds,
+        project: { name: row.projectName },
+        creator: { name: row.creatorName },
+        _count: {
+          questions: row.questionCount,
+          registrations: row.registrationCount,
+        },
+      },
+    };
   }
 
   findActiveForQuiz(quizId: string) {
@@ -370,9 +454,11 @@ export class LiveSessionsRepository {
     try {
       return await this.db.$transaction(async (tx) => {
         const session = await lockSession(tx, id);
+        // Asking from the leaderboard hides it implicitly.
         if (
           session.state !== LIVE_SESSION_STATE.LIVE_IDLE &&
-          session.state !== LIVE_SESSION_STATE.QUESTION_RESULT
+          session.state !== LIVE_SESSION_STATE.QUESTION_RESULT &&
+          session.state !== LIVE_SESSION_STATE.LEADERBOARD
         )
           invalidTransition();
         const startedAt = new Date();
@@ -520,6 +606,71 @@ export class LiveSessionsRepository {
       ) ranked
       WHERE ${userId ?? null}::uuid IS NULL OR ranked."userId" = ${userId ?? null}::text`;
     return rows;
+  }
+
+  /**
+   * Top standings with names, from the same ranking as `standings`. Every
+   * participant ranked within `maxRank` is included, so ties at the last
+   * rank can return more than `maxRank` rows.
+   */
+  async leaderboard(liveSessionId: string, maxRank: number) {
+    const rows = await this.db.$queryRaw<
+      Array<{
+        userId: string;
+        name: string;
+        score: number;
+        rank: number;
+        participantCount: number;
+        lastQuestion: number | null;
+      }>
+    >`
+      SELECT ranked.*, u.name,
+        (SELECT MAX("sequenceNumber") FROM asked_questions
+          WHERE "liveSessionId" = ${liveSessionId}::uuid
+            AND status = ${ASKED_QUESTION_STATUS.COMPLETED}::"AskedQuestionStatus"
+        )::int AS "lastQuestion"
+      FROM (
+        SELECT ps."userId",
+          COALESCE(SUM(s."pointsAwarded"), 0)::int AS score,
+          RANK() OVER (
+            ORDER BY COALESCE(SUM(s."pointsAwarded"), 0) DESC
+          )::int AS rank,
+          COUNT(*) OVER ()::int AS "participantCount"
+        FROM participant_sessions ps
+        LEFT JOIN asked_questions aq
+          ON aq."liveSessionId" = ps."liveSessionId"
+          AND aq.status = ${ASKED_QUESTION_STATUS.COMPLETED}::"AskedQuestionStatus"
+        LEFT JOIN answer_submissions s
+          ON s."askedQuestionId" = aq.id AND s."userId" = ps."userId"
+        WHERE ps."liveSessionId" = ${liveSessionId}::uuid
+        GROUP BY ps."userId"
+      ) ranked
+      JOIN users u ON u.id = ranked."userId"
+      WHERE ranked.rank <= ${maxRank}
+      ORDER BY ranked.rank ASC, u.name ASC`;
+    return rows;
+  }
+
+  /**
+   * QUESTION_RESULT to LEADERBOARD and back as one conditional update: it
+   * changes only presentation state, so a single atomic statement replaces
+   * the lock and transaction (any concurrent transition simply fails it).
+   */
+  async setLeaderboard(id: string, shown: boolean) {
+    const { count } = await this.db.liveQuizSession.updateMany({
+      where: {
+        id,
+        state: shown
+          ? LIVE_SESSION_STATE.QUESTION_RESULT
+          : LIVE_SESSION_STATE.LEADERBOARD,
+      },
+      data: {
+        state: shown
+          ? LIVE_SESSION_STATE.LEADERBOARD
+          : LIVE_SESSION_STATE.QUESTION_RESULT,
+      },
+    });
+    if (count === 0) invalidTransition();
   }
 
   submissionFor(askedQuestionId: string, userId: string) {
