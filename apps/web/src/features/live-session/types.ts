@@ -1,4 +1,4 @@
-import type { QuestionType } from '@quizmb/contracts';
+import type { AnswerStatus, QuestionType } from '@quizmb/contracts';
 // View models for live-session screens. They mirror the role-safe session
 // snapshots in API_DESIGN §22–23 so realtime data can replace fixtures later.
 
@@ -62,3 +62,58 @@ export type LiveCounts = {
   registered: number;
   asked: number;
 };
+
+// ---- Participant question flow (API_DESIGN §27 and §34) ----------------------
+
+/** Participant-safe option: never carries correctness. */
+export type ParticipantOption = { id: string; text: string };
+
+/** The question as delivered to participants by `question:started`. */
+export type ParticipantQuestion = {
+  askedQuestionId: string;
+  /** Order in which the host asked it (1-based), not its quiz position. */
+  number: number;
+  type: LiveQuestionType;
+  text: string;
+  imageUrl: string | null;
+  options: ParticipantOption[];
+  durationSeconds: number;
+};
+
+/** What the participant submitted; null text for choice questions. */
+export type SubmittedAnswer = {
+  selectedOptionIds: string[];
+  answerText: string | null;
+};
+
+/** Revealed outcome after the timer ends; standing arrives separately. */
+export type ParticipantQuestionResult = {
+  status: AnswerStatus;
+  selectedOptionIds: string[];
+  answerText: string | null;
+  correctOptionIds: string[];
+  /** Null when not attempted or descriptive. */
+  isCorrect: boolean | null;
+  pointsAwarded: number;
+  /** Final submissions per option id. */
+  distribution: Record<string, number>;
+};
+
+export type ParticipantStanding = {
+  totalScore: number;
+  rank: number;
+  participantCount: number;
+};
+
+/** Where one asked question is in its lifecycle for this participant. */
+export type ParticipantQuestionPhase =
+  | { kind: 'answering'; remainingSeconds: number }
+  | { kind: 'submitted'; remainingSeconds: number; answer: SubmittedAnswer }
+  /** Timer ended; the reveal has not arrived yet. */
+  | { kind: 'closed'; answer: SubmittedAnswer | null }
+  | {
+      kind: 'revealed';
+      result: ParticipantQuestionResult;
+      /** Null while score and rank are being recalculated. */
+      standing: ParticipantStanding | null;
+    };

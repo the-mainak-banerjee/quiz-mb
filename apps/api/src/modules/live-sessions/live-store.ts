@@ -115,6 +115,15 @@ export class LiveStore {
     return new Set(await guard(this.redis.hkeys(presenceKey(liveSessionId))));
   }
 
+  /** Connected participants and their active socket ids (one HGETALL). */
+  async presence(liveSessionId: string) {
+    return new Map(
+      Object.entries(
+        await guard(this.redis.hgetall(presenceKey(liveSessionId))),
+      ),
+    );
+  }
+
   /** Drops all presence for a session that no longer exists. */
   async clearPresence(liveSessionId: string) {
     await guard(this.redis.del(presenceKey(liveSessionId)));

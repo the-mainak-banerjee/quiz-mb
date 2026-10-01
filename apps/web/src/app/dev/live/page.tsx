@@ -14,8 +14,8 @@ export default function LivePreviewIndexPage() {
           Live session previews
         </Text>
         <Text tone="secondary">
-          Phase 5 screens rendered with fixture data. No API or realtime
-          connection is used.
+          Live screens rendered with fixture data. No API or realtime connection
+          is used.
         </Text>
       </div>
       <ul className="grid grid-cols-1 gap-gutter-sm md:grid-cols-2">

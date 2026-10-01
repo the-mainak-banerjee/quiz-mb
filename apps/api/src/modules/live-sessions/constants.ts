@@ -24,5 +24,20 @@ export const TICKET_KIND = { LIVE: 'live', WATCH: 'watch' } as const;
 //   lock:{operation}:{resourceId} STRING random owner token (short TTL)
 export const presenceKey = (liveSessionId: string) =>
   `lq:${liveSessionId}:presence`;
+/**
+ * Server-side scoring (PRD §23): a correct answer earns up to MAX_POINTS,
+ * decreasing linearly with response time by up to SPEED_WEIGHT of it.
+ * Not configurable in the MVP UI.
+ */
+export const SCORING = {
+  MAX_POINTS: 1000,
+  SPEED_WEIGHT: 0.6,
+} as const;
+
+/** Operations serialized with `LiveStore.withLock`. */
+export const LOCK_OPERATION = {
+  SESSION_TRANSITION: 'session-transition',
+} as const;
+
 export const lockKey = (operation: string, resourceId: string) =>
   `lock:${operation}:${resourceId}`;

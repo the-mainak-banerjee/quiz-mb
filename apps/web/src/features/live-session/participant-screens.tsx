@@ -15,7 +15,7 @@ import { AmbientGlow } from './live-session-shell';
 import type { LiveQuizSummary } from './types';
 
 /** Centered stage shared by participant waiting and recovery screens. */
-function ParticipantStage({
+export function ParticipantStage({
   children,
   glow,
   className,

@@ -7,7 +7,7 @@ import {
 } from '@/features/live-session/preview-screens';
 import { getAppOrigin } from '@/lib/app-origin';
 
-// Static fixture previews of the Phase 5 live screens; development only.
+// Fixture previews of the live screens; development only.
 export default async function LiveScreenPreviewPage({
   params,
 }: {

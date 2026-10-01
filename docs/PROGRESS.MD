@@ -2,9 +2,22 @@
 
 ## Current status
 
-Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Phase 5 (lobby and live-session foundation) is implemented end to end on branch `phase-5-live`, including a minimal End quiz; question delivery, scoring and results remain for Phases 6–10. No deployment has been performed.
+Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Phase 5 (lobby and live-session foundation) and Phases 6–8 (live questions, submission, scoring, personal rank and live distribution) are implemented end to end, including a minimal End quiz; host presentation controls, leaderboard, final results and history remain for Phases 9–10. No deployment has been performed.
 
 This document records implementation progress, verification results, limitations, and approved scope adjustments. Project setup and usage instructions belong in the root README.
+
+## Phases 6–8 — Live questions, scoring and distribution — October 1, 2026
+
+Branch `phase-6-questions`. QA approved.
+
+- Host asks any unused question in any order; it starts immediately with a server-owned timer. One explicit, locked submission per participant before `endsAt`; not attempted is derived. Questions close exactly once (in-process timer re-armed at boot, plus a recovery check on every interaction); ending the quiz mid-question closes it.
+- Participants stay on one question card from answering through the reveal (correct answer, own answer, final distribution), then see their score and rank load in place. Late joiners get only the remaining time.
+- Scoring: 1000 × (1 − 0.6 × response time ÷ duration) for correct answers, 0 otherwise; multiple answer is all-or-nothing; descriptive is not scored. Standings are computed in PostgreSQL per question (shared ranks on ties; count includes everyone who entered) instead of a Redis leaderboard, to save Upstash commands.
+- Host sees live submission counts, percentages and anonymous descriptive responses, and keeps the finished question with its final results on screen until choosing the next one (Phase 9's "keep question visible", delivered early).
+- Database: `AskedQuestion`, `AnswerSubmission`, `AnswerSubmissionOption` (migration `20261001000000_live_questions`). Answers cost one database statement; quiz content, answer keys and confirmed registrations are cached in memory per session.
+- QA fixes: number fields ignore the scroll wheel, saving an unchanged question skips the API, question-form errors appear only after a save attempt, the Open live lobby button no longer wraps, and asking a question is faster.
+- Checks: format, lint, typecheck, unit tests (26 API, 9 web), build, and both live integration tests passed against development PostgreSQL and Upstash Redis.
+- Known limitations: single API instance (timers, caches and throttling are in memory); joins and reveals take a few seconds at high database latency; question Markdown needs work (docs/TODO.md).
 
 ## Phase 5 — Lobby and live-session backend — September 29, 2026
 

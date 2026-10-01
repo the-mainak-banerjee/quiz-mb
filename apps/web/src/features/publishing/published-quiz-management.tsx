@@ -156,11 +156,11 @@ export function PublishedQuizManagement({
       </nav>
 
       <Surface className="flex flex-col items-start justify-between gap-space-md bg-surface-low sm:flex-row sm:items-center">
-        <div className="flex items-start gap-space-sm">
+        <div className="flex min-w-0 items-start gap-space-sm">
           <div className="flex shrink-0 size-control items-center justify-center rounded-control bg-surface-high text-accent">
             <Info size={20} aria-hidden="true" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-space-xs">
               <Text variant="label">Manual start required</Text>
               <Badge variant="draft" label="Host control" />
@@ -171,7 +171,9 @@ export function PublishedQuizManagement({
             </Text>
           </div>
         </div>
-        <HostLiveEntry quizId={quiz.id} status={quiz.status} />
+        <div className="w-full shrink-0 sm:w-auto">
+          <HostLiveEntry quizId={quiz.id} status={quiz.status} />
+        </div>
       </Surface>
 
       <section className="w-full">

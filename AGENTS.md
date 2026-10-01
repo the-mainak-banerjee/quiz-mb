@@ -99,6 +99,8 @@ Before creating a new shared component:
 
 ## Backend Boundaries
 
+For backend work, use the `backend-design` skill.
+
 Keep backend transport layers thin.
 
 Use the general flow:

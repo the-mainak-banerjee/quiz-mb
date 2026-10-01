@@ -36,7 +36,7 @@ import {
 } from './question-form';
 import { QuizOption } from './quiz-option';
 import { ReviewPublishPanel } from '@/features/publishing/review-publish-panel';
-const MarkdownPreview = dynamic(() => import('./markdown-preview'));
+const MarkdownPreview = dynamic(() => import('@/components/markdown-preview'));
 type Step = 'details' | 'questions' | 'review';
 export function QuizEditor({
   project,

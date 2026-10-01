@@ -24,6 +24,7 @@ model User {
   quizRegistrations   QuizRegistration[]
   hostedLiveSessions  LiveQuizSession[]
   liveParticipations  ParticipantSession[]
+  answerSubmissions   AnswerSubmission[]
 
   @@map("users")
 }
@@ -83,6 +84,16 @@ enum LiveSessionState {
   QUESTION_RESULT
   LEADERBOARD
   COMPLETED
+}
+
+enum AskedQuestionStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum AnswerStatus {
+  SUBMITTED
+  NOT_ATTEMPTED
 }
 
 model Project {
@@ -175,18 +186,20 @@ model Question {
   quiz                    Quiz             @relation(fields: [quizId], references: [id], onDelete: Cascade)
   image                   MediaAsset?      @relation("QuestionImage", fields: [imageMediaId], references: [id], onDelete: SetNull)
   options                 QuestionOption[]
+  askedQuestions          AskedQuestion[]
 
   @@unique([quizId, position])
   @@map("questions")
 }
 
 model QuestionOption {
-  id         String   @id @default(uuid()) @db.Uuid
-  questionId String   @db.Uuid
+  id         String                   @id @default(uuid()) @db.Uuid
+  questionId String                   @db.Uuid
   text       String
   position   Int
   isCorrect  Boolean
-  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  question   Question                 @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selections AnswerSubmissionOption[]
 
   @@unique([questionId, position])
   @@map("question_options")
@@ -218,18 +231,19 @@ model MediaAsset {
 // One live execution of a quiz. Partial unique indexes in the migration allow
 // at most one unfinished session per host and per quiz.
 model LiveQuizSession {
-  id            String               @id @default(uuid()) @db.Uuid
-  quizId        String               @db.Uuid
-  hostUserId    String               @db.Uuid
-  state         LiveSessionState     @default(LOBBY)
-  allowLateJoin Boolean
-  startedAt     DateTime?            @db.Timestamptz(3)
-  endedAt       DateTime?            @db.Timestamptz(3)
-  createdAt     DateTime             @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime             @updatedAt @db.Timestamptz(3)
-  quiz          Quiz                 @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  host          User                 @relation(fields: [hostUserId], references: [id], onDelete: Restrict)
-  participants  ParticipantSession[]
+  id             String               @id @default(uuid()) @db.Uuid
+  quizId         String               @db.Uuid
+  hostUserId     String               @db.Uuid
+  state          LiveSessionState     @default(LOBBY)
+  allowLateJoin  Boolean
+  startedAt      DateTime?            @db.Timestamptz(3)
+  endedAt        DateTime?            @db.Timestamptz(3)
+  createdAt      DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime             @updatedAt @db.Timestamptz(3)
+  quiz           Quiz                 @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  host           User                 @relation(fields: [hostUserId], references: [id], onDelete: Restrict)
+  participants   ParticipantSession[]
+  askedQuestions AskedQuestion[]
 
   @@index([quizId, state])
   @@index([hostUserId, state])
@@ -252,4 +266,62 @@ model ParticipantSession {
   @@unique([liveSessionId, userId])
   @@index([userId])
   @@map("participant_sessions")
+}
+
+// A question the host actually presented in a live session. Only these rows
+// count towards results; the live order is sequenceNumber, not position.
+model AskedQuestion {
+  id              String              @id @default(uuid()) @db.Uuid
+  liveSessionId   String              @db.Uuid
+  questionId      String              @db.Uuid
+  sequenceNumber  Int
+  status          AskedQuestionStatus @default(ACTIVE)
+  durationSeconds Int
+  startedAt       DateTime            @db.Timestamptz(3)
+  endsAt          DateTime            @db.Timestamptz(3)
+  completedAt     DateTime?           @db.Timestamptz(3)
+  createdAt       DateTime            @default(now()) @db.Timestamptz(3)
+  liveSession     LiveQuizSession     @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+  question        Question            @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  submissions     AnswerSubmission[]
+
+  @@unique([liveSessionId, questionId])
+  @@unique([liveSessionId, sequenceNumber])
+  @@index([liveSessionId, status])
+  @@index([questionId])
+  @@map("asked_questions")
+}
+
+// One accepted answer per participant per asked question. A participant with
+// no row was not attempted; that outcome is derived, not stored eagerly.
+model AnswerSubmission {
+  id              String                   @id @default(uuid()) @db.Uuid
+  askedQuestionId String                   @db.Uuid
+  userId          String                   @db.Uuid
+  status          AnswerStatus             @default(SUBMITTED)
+  answerText      String?
+  submittedAt     DateTime?                @db.Timestamptz(3)
+  responseTimeMs  Int?
+  isCorrect       Boolean?
+  pointsAwarded   Int                      @default(0)
+  createdAt       DateTime                 @default(now()) @db.Timestamptz(3)
+  askedQuestion   AskedQuestion            @relation(fields: [askedQuestionId], references: [id], onDelete: Cascade)
+  user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  options         AnswerSubmissionOption[]
+
+  @@unique([askedQuestionId, userId])
+  @@index([askedQuestionId, status])
+  @@index([userId, createdAt])
+  @@map("answer_submissions")
+}
+
+model AnswerSubmissionOption {
+  answerSubmissionId String           @db.Uuid
+  questionOptionId   String           @db.Uuid
+  submission         AnswerSubmission @relation(fields: [answerSubmissionId], references: [id], onDelete: Cascade)
+  option             QuestionOption   @relation(fields: [questionOptionId], references: [id], onDelete: Cascade)
+
+  @@id([answerSubmissionId, questionOptionId])
+  @@index([questionOptionId])
+  @@map("answer_submission_options")
 }

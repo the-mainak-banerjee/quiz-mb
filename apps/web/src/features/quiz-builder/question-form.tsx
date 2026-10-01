@@ -65,12 +65,15 @@ export function QuestionForm({
     setError,
     reset,
 
-    formState: { errors, isDirty, isSubmitting },
+    formState: { errors, isDirty, isSubmitting, isSubmitted },
   } = useForm<QuestionInput>({
     resolver: zodResolver(questionSchema),
-    mode: 'onChange',
+    // Errors appear after the first save attempt, then update as you edit.
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
     defaultValues: questionValues(initial),
   });
+  const touch = { shouldDirty: true, shouldValidate: isSubmitted };
   const { fields, append, remove, replace } = useFieldArray({
     control,
     name: 'options',
@@ -94,6 +97,11 @@ export function QuestionForm({
   }));
   const submitQuestion = (addNext: boolean) =>
     handleSubmit(async (input) => {
+      // An existing question without edits is already saved: just move on.
+      if (initial?.id && !isDirty) {
+        onSaved(quiz, addNext);
+        return;
+      }
       try {
         const saved = await authoringApi.saveQuestion(
           quiz.id,
@@ -138,10 +146,7 @@ export function QuestionForm({
                   value={type}
                   onChange={(e) => {
                     const next = e.target.value as QuestionInput['type'];
-                    setValue('type', next, {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    });
+                    setValue('type', next, touch);
                     if (next === QUESTION_TYPE.DESCRIPTIVE) replace([]);
                     else if (!fields.length)
                       replace([
@@ -197,10 +202,7 @@ export function QuestionForm({
               onBusy={setUploading}
               onChange={(m) => {
                 setImage(m);
-                setValue('imageMediaId', m?.id ?? null, {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                });
+                setValue('imageMediaId', m?.id ?? null, touch);
               }}
             />
             <div className="flex flex-wrap items-start justify-between gap-space-sm border-t border-border-surface pt-space-lg">
@@ -258,17 +260,11 @@ export function QuestionForm({
                           setValue(
                             `options.${optionIndex}.isCorrect`,
                             optionIndex === index,
-                            {
-                              shouldDirty: true,
-                              shouldValidate: true,
-                            },
+                            touch,
                           ),
                         );
                       else
-                        setValue(`options.${index}.isCorrect`, checked, {
-                          shouldDirty: true,
-                          shouldValidate: true,
-                        });
+                        setValue(`options.${index}.isCorrect`, checked, touch);
                     }}
                     action={
                       <Button

@@ -5,8 +5,10 @@ import type { z } from 'zod';
 import {
   LIVE_EVENTS,
   LIVE_SOCKET_NAMESPACE,
+  answerSubmitCommandSchema,
   lateJoinCommandSchema,
   liveSessionCommandSchema,
+  questionStartCommandSchema,
   type LiveCountDto,
   type LivePresenceDto,
   type LiveRemovedDto,
@@ -20,7 +22,7 @@ import {
   DOMAIN_EVENT,
   type DomainEvents,
 } from '../../infrastructure/domain-events.js';
-import type { LiveSessionRow } from './repository.js';
+import type { AskedQuestionRow, LiveSessionRow } from './repository.js';
 import type { LiveSessionsService } from './service.js';
 import { ROOM_AUDIENCE, SOCKET_EVENT, liveRoom } from './constants.js';
 
@@ -36,6 +38,36 @@ type LiveSocket = Socket<
   Record<string, never>,
   SocketData
 >;
+
+/**
+ * Leading + trailing throttle per key: the first value goes out at once,
+ * then at most one per interval carrying the latest value. In memory only,
+ * so it costs no Redis commands (single API instance).
+ */
+function keyedThrottle<T>(
+  intervalMs: number,
+  send: (key: string, value: T) => void,
+) {
+  const timers = new Map<string, NodeJS.Timeout>();
+  const latest = new Map<string, T>();
+  function publish(key: string, value: T) {
+    if (timers.has(key)) {
+      latest.set(key, value);
+      return;
+    }
+    send(key, value);
+    const timer = setTimeout(() => {
+      timers.delete(key);
+      if (!latest.has(key)) return;
+      const next = latest.get(key) as T;
+      latest.delete(key);
+      publish(key, next);
+    }, intervalMs);
+    timer.unref();
+    timers.set(key, timer);
+  }
+  return publish;
+}
 
 function failure(error: unknown, logger: Logger, event: string) {
   if (error instanceof ApiError)
@@ -102,47 +134,98 @@ export function attachLiveRealtime(
     );
   });
 
-  async function broadcast(session: LiveSessionRow) {
-    const [host, participant] = await Promise.all([
-      service.hostSnapshot(session),
-      service.participantSnapshot(session),
-    ]);
+  /**
+   * Sends role-safe snapshots after a lifecycle change. Participants are
+   * sent theirs as soon as it is ready; the host snapshot is returned so
+   * the command's ack reuses it instead of building it twice.
+   */
+  async function broadcast(
+    session: LiveSessionRow,
+    preloaded?: AskedQuestionRow | null,
+  ) {
+    const asked =
+      preloaded === undefined ? await service.askedFor(session) : preloaded;
+    const participants = service
+      .participantSnapshot(session, undefined, asked)
+      .then((snapshot) =>
+        nsp
+          .to(liveRoom(session.id, ROOM_AUDIENCE.PARTICIPANTS))
+          .emit(LIVE_EVENTS.snapshot, snapshot),
+      );
+    const host = await service.hostSnapshot(session, asked);
     nsp
       .to(liveRoom(session.id, ROOM_AUDIENCE.HOST))
       .emit(LIVE_EVENTS.snapshot, host);
-    nsp
-      .to(liveRoom(session.id, ROOM_AUDIENCE.PARTICIPANTS))
-      .emit(LIVE_EVENTS.snapshot, participant);
+    await participants;
+    return host;
   }
 
-  // Participants see the connected count too. Updates are throttled per
-  // session (first change immediately, then at most one per interval with
-  // the latest value) so a burst of joins does not fan out N² messages.
-  // In-memory only: this costs no Redis commands.
+  // Participants see the connected count too, throttled per session so a
+  // burst of joins does not fan out N² messages.
   const COUNT_INTERVAL_MS = 2_000;
-  const countTimers = new Map<string, NodeJS.Timeout>();
-  const latestCounts = new Map<string, number>();
-  function sendCount(liveSessionId: string, connectedCount: number) {
-    const payload: LiveCountDto = { connectedCount };
-    nsp
-      .to(liveRoom(liveSessionId, ROOM_AUDIENCE.PARTICIPANTS))
-      .emit(LIVE_EVENTS.count, payload);
-  }
-  function publishCount(liveSessionId: string, connectedCount: number) {
-    if (countTimers.has(liveSessionId)) {
-      latestCounts.set(liveSessionId, connectedCount);
-      return;
-    }
-    sendCount(liveSessionId, connectedCount);
-    const timer = setTimeout(() => {
-      countTimers.delete(liveSessionId);
-      const latest = latestCounts.get(liveSessionId);
-      latestCounts.delete(liveSessionId);
-      if (latest !== undefined) publishCount(liveSessionId, latest);
-    }, COUNT_INTERVAL_MS);
-    timer.unref();
-    countTimers.set(liveSessionId, timer);
-  }
+  const publishCount = keyedThrottle<number>(
+    COUNT_INTERVAL_MS,
+    (liveSessionId, connectedCount) => {
+      const payload: LiveCountDto = { connectedCount };
+      nsp
+        .to(liveRoom(liveSessionId, ROOM_AUDIENCE.PARTICIPANTS))
+        .emit(LIVE_EVENTS.count, payload);
+    },
+  );
+
+  // Host-only answer progress for the active question: one database read
+  // per interval however many answers arrive.
+  const PROGRESS_INTERVAL_MS = 1_000;
+  const publishProgress = keyedThrottle<string>(
+    PROGRESS_INTERVAL_MS,
+    (liveSessionId, askedQuestionId) => {
+      service
+        .progressFor(askedQuestionId)
+        .then((progress) => {
+          if (!progress) return;
+          nsp
+            .to(liveRoom(liveSessionId, ROOM_AUDIENCE.HOST))
+            .emit(LIVE_EVENTS.submissions, progress);
+        })
+        .catch(() =>
+          logger.warn(
+            { liveSessionId, code: ERROR_CODE.LIVE_UNAVAILABLE },
+            'Answer progress update failed',
+          ),
+        );
+    },
+  );
+
+  // A question closed (timer, recovery path or end): the host gets the new
+  // snapshot and each connected participant a personal one with their own
+  // answer and the shared reveal; recalculated standings follow.
+  events?.on(
+    DOMAIN_EVENT.questionEnded,
+    ({ liveSessionId, askedQuestionId }) => {
+      service
+        .questionEndedDeliveries(liveSessionId)
+        .then(async ({ host, participants }) => {
+          nsp
+            .to(liveRoom(liveSessionId, ROOM_AUDIENCE.HOST))
+            .emit(LIVE_EVENTS.snapshot, host);
+          for (const { socketId, snapshot } of participants)
+            nsp.to(socketId).emit(LIVE_EVENTS.snapshot, snapshot);
+          logger.info({ liveSessionId }, 'Live question ended');
+          const standings = await service.standingDeliveries(
+            liveSessionId,
+            askedQuestionId,
+          );
+          for (const { socketId, standing } of standings)
+            nsp.to(socketId).emit(LIVE_EVENTS.standing, standing);
+        })
+        .catch(() =>
+          logger.warn(
+            { liveSessionId, code: ERROR_CODE.LIVE_UNAVAILABLE },
+            'Question end broadcast failed',
+          ),
+        );
+    },
+  );
 
   // Registration can change while the lobby is open: keep the host's roster
   // and counts current, and remove participants who unregistered.
@@ -301,10 +384,36 @@ export function attachLiveRealtime(
         requireHost();
         const session = await service.start(liveSessionId, userId);
         logger.info({ liveSessionId }, 'Live quiz started');
-        await broadcast(session);
-        return service.hostSnapshot(session);
+        return broadcast(session);
       },
     );
+
+    on(
+      LIVE_EVENTS.questionStart,
+      questionStartCommandSchema,
+      async ({ liveSessionId, questionId }) => {
+        requireHost();
+        const { session, asked } = await service.startQuestion(
+          liveSessionId,
+          userId,
+          questionId,
+        );
+        logger.info({ liveSessionId }, 'Live question started');
+        return broadcast(session, asked);
+      },
+    );
+
+    on(LIVE_EVENTS.answerSubmit, answerSubmitCommandSchema, async (command) => {
+      if (requireJoined() !== LIVE_ROLE.PARTICIPANT)
+        throw new ApiError(
+          403,
+          ERROR_CODE.FORBIDDEN,
+          'Only participants can answer questions.',
+        );
+      const answer = await service.submit(userId, socket.id, command);
+      publishProgress(command.liveSessionId, command.askedQuestionId);
+      return answer;
+    });
 
     on(
       LIVE_EVENTS.lateJoinSet,
@@ -312,8 +421,7 @@ export function attachLiveRealtime(
       async ({ liveSessionId, allow }) => {
         requireHost();
         const session = await service.setLateJoin(liveSessionId, userId, allow);
-        await broadcast(session);
-        return service.hostSnapshot(session);
+        return broadcast(session);
       },
     );
 
@@ -324,8 +432,7 @@ export function attachLiveRealtime(
         requireHost();
         const session = await service.end(liveSessionId, userId);
         logger.info({ liveSessionId }, 'Live quiz ended');
-        await broadcast(session);
-        return service.hostSnapshot(session);
+        return broadcast(session);
       },
     );
 

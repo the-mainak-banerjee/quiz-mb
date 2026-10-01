@@ -1,0 +1,595 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { io as connect, type Socket as ClientSocket } from 'socket.io-client';
+import { createDatabase } from '@quizmb/database';
+import {
+  ANSWER_STATUS,
+  ERROR_CODE,
+  LIVE_EVENTS,
+  LIVE_SESSION_STATE,
+  LIVE_SOCKET_NAMESPACE,
+  QUESTION_TYPE,
+  type HostLiveSnapshotDto,
+  type HostQuestionProgressDto,
+  type LiveSessionRefDto,
+  type LiveSnapshotDto,
+  type ParticipantAnswerDto,
+  type ParticipantLiveSnapshotDto,
+  type ParticipantStandingDto,
+  type QuizDto,
+  type SocketAck,
+  type SocketTicketDto,
+} from '@quizmb/contracts';
+import { createApp } from '../src/app.js';
+import { createLogger } from '../src/infrastructure/logger.js';
+import { createRedis } from '../src/infrastructure/redis.js';
+import { DomainEvents } from '../src/infrastructure/domain-events.js';
+import { AuthRepository } from '../src/modules/auth/repository.js';
+import { AuthService } from '../src/modules/auth/service.js';
+import { parseAuthEnv } from '../src/modules/auth/config.js';
+import { UsersService } from '../src/modules/users/service.js';
+import { LiveSessionsRepository } from '../src/modules/live-sessions/repository.js';
+import { LiveSessionsService } from '../src/modules/live-sessions/service.js';
+import { LiveStore } from '../src/modules/live-sessions/live-store.js';
+import { SocketTickets } from '../src/modules/live-sessions/tickets.js';
+import { presenceKey } from '../src/modules/live-sessions/constants.js';
+import {
+  attachLiveRealtime,
+  createSocketServer,
+} from '../src/modules/live-sessions/realtime.js';
+
+// Short timers keep the scenario fast while leaving room for remote
+// database round trips inside each question.
+const DURATION = 15;
+
+const quizBasics = {
+  description: 'Live question fixture.',
+  registrationLimit: 10,
+  defaultQuestionDurationSeconds: DURATION,
+  allowLateJoin: true,
+  coverMediaId: null,
+  plannedStartAt: '2030-10-24T19:00:00Z',
+};
+const questions = [
+  {
+    type: QUESTION_TYPE.SINGLE_CHOICE,
+    text: 'Single choice',
+    options: [
+      { text: 'Right', isCorrect: true },
+      { text: 'Wrong', isCorrect: false },
+    ],
+  },
+  {
+    type: QUESTION_TYPE.MULTIPLE_CHOICE,
+    text: 'Multiple answer',
+    options: [
+      { text: 'A', isCorrect: true },
+      { text: 'B', isCorrect: false },
+      { text: 'C', isCorrect: true },
+    ],
+  },
+  { type: QUESTION_TYPE.DESCRIPTIVE, text: 'Descriptive', options: [] },
+].map((item) => ({
+  ...item,
+  durationOverrideSeconds: null,
+  imageMediaId: null,
+}));
+
+test(
+  'live questions: order, submission lock, expiry, reveal, scoring and rank',
+  { skip: !process.env.DATABASE_URL || !process.env.REDIS_URL },
+  async (t) => {
+    if (process.env.NODE_ENV === 'production')
+      throw new Error('Development integration tests only');
+    const config = parseAuthEnv(process.env);
+    const db = createDatabase(
+      config.DATABASE_URL,
+      config.DATABASE_SSL_CA_BASE64,
+    );
+    const redis = createRedis(process.env.REDIS_URL!);
+    await redis.connect();
+    const events = new DomainEvents();
+    const live = new LiveSessionsService(
+      new LiveSessionsRepository(db),
+      new LiveStore(redis),
+      new SocketTickets(config.AUTH_ACCESS_SECRET),
+      events,
+    );
+    const origin = 'http://localhost:3000';
+    const logger = createLogger('silent');
+    const server = createServer(
+      createApp({
+        allowedOrigins: [origin],
+        logger,
+        auth: new AuthService(new AuthRepository(db), config),
+        users: new UsersService(db),
+        database: db,
+        live,
+        events,
+      }),
+    );
+    const io = createSocketServer(server, [origin]);
+    attachLiveRealtime(io, live, logger, events);
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+    const roles = ['host', 'a', 'b', 'late'] as const;
+    type Role = (typeof roles)[number];
+    const emails = roles.map(
+      (role) => `liveq-${role}-${randomUUID()}@example.invalid`,
+    );
+    const sockets: ClientSocket[] = [];
+    let liveSessionId = '';
+
+    t.after(async () => {
+      for (const socket of sockets) socket.disconnect();
+      await io.close();
+      const users = await db.user.findMany({
+        where: { email: { in: emails } },
+        select: { id: true },
+      });
+      const ids = users.map((user) => user.id);
+      await db.quiz.deleteMany({ where: { creatorUserId: { in: ids } } });
+      await db.project.deleteMany({ where: { ownerUserId: { in: ids } } });
+      await db.user.deleteMany({ where: { id: { in: ids } } });
+      await db.$disconnect();
+      if (liveSessionId) await redis.del(presenceKey(liveSessionId));
+      await redis.quit();
+    });
+
+    const request = (
+      path: string,
+      method = 'GET',
+      body?: unknown,
+      cookie = '',
+    ) =>
+      fetch(base + '/api' + path, {
+        method,
+        headers: {
+          Origin: origin,
+          'Content-Type': 'application/json',
+          Cookie: cookie,
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    const data = async <T>(response: Response, status = 200): Promise<T> => {
+      const body = (await response.json()) as { data: T };
+      assert.equal(response.status, status, JSON.stringify(body));
+      return body.data;
+    };
+
+    const cookies = {} as Record<Role, string>;
+    for (const [index, role] of roles.entries()) {
+      const response = await request('/auth/signup', 'POST', {
+        name: `Questions ${role}`,
+        email: emails[index],
+        password: 'a strong live question test password',
+      });
+      assert.equal(response.status, 201);
+      cookies[role] = response.headers
+        .getSetCookie()
+        .map((value) => value.split(';')[0])
+        .join('; ');
+    }
+
+    const project = await data<{ id: string }>(
+      await request(
+        '/projects',
+        'POST',
+        { name: 'Questions project', description: 'Integration fixture' },
+        cookies.host,
+      ),
+      201,
+    );
+    const quiz = await data<QuizDto>(
+      await request(
+        `/projects/${project.id}/quizzes`,
+        'POST',
+        { ...quizBasics, title: 'Live questions' },
+        cookies.host,
+      ),
+      201,
+    );
+    for (const item of questions)
+      await data(
+        await request(
+          `/quizzes/${quiz.id}/questions`,
+          'POST',
+          item,
+          cookies.host,
+        ),
+        201,
+      );
+    await data(
+      await request(`/quizzes/${quiz.id}/publish`, 'POST', {}, cookies.host),
+    );
+    for (const role of ['a', 'b', 'late'] as const)
+      await data(
+        await request(
+          `/quizzes/${quiz.id}/register`,
+          'POST',
+          {},
+          cookies[role],
+        ),
+        201,
+      );
+    const session = await data<LiveSessionRefDto>(
+      await request(
+        `/quizzes/${quiz.id}/live-session`,
+        'POST',
+        {},
+        cookies.host,
+      ),
+      201,
+    );
+    liveSessionId = session.id;
+
+    const nextEvent = <T>(socket: ClientSocket, event: string) =>
+      new Promise<T>((resolve) => socket.once(event, resolve));
+    /** Resolves with the first event payload that satisfies `match`. */
+    const waitFor = <T>(
+      socket: ClientSocket,
+      event: string,
+      match: (payload: T) => boolean,
+    ) =>
+      new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error(`timed out waiting for ${event}`)),
+          20_000,
+        );
+        const listener = (payload: T) => {
+          if (!match(payload)) return;
+          clearTimeout(timer);
+          socket.off(event, listener);
+          resolve(payload);
+        };
+        socket.on(event, listener);
+      });
+    const emit = <T>(socket: ClientSocket, event: string, payload: object) =>
+      socket
+        .timeout(10_000)
+        .emitWithAck(event, { liveSessionId, ...payload }) as Promise<
+        SocketAck<T>
+      >;
+    const ok = <T>(ack: SocketAck<T>) => {
+      assert.ok(ack.ok, JSON.stringify(ack));
+      return ack.data;
+    };
+    const errorCode = <T>(ack: SocketAck<T>) =>
+      ack.ok ? 'OK' : ack.error.code;
+    const joinAs = async (role: Role) => {
+      const { ticket } = await data<SocketTicketDto>(
+        await request(
+          `/live-sessions/${liveSessionId}/socket-ticket`,
+          'POST',
+          {},
+          cookies[role],
+        ),
+      );
+      const socket = connect(base + LIVE_SOCKET_NAMESPACE, {
+        auth: { ticket },
+        transports: ['websocket'],
+        reconnection: false,
+        forceNew: true,
+      });
+      sockets.push(socket);
+      await nextEvent(socket, 'connect');
+      const snapshot = ok(
+        await emit<LiveSnapshotDto>(socket, LIVE_EVENTS.join, {}),
+      );
+      return { socket, snapshot };
+    };
+    const submit = (socket: ClientSocket, payload: object) =>
+      emit<ParticipantAnswerDto>(socket, LIVE_EVENTS.answerSubmit, payload);
+    const resultFor = (socket: ClientSocket, askedQuestionId: string) =>
+      waitFor<ParticipantLiveSnapshotDto>(
+        socket,
+        LIVE_EVENTS.snapshot,
+        (snapshot) =>
+          snapshot.state === LIVE_SESSION_STATE.QUESTION_RESULT &&
+          snapshot.question?.askedQuestionId === askedQuestionId &&
+          'myAnswer' in snapshot,
+      );
+    const standingFor = (socket: ClientSocket, askedQuestionId: string) =>
+      waitFor<ParticipantStandingDto>(
+        socket,
+        LIVE_EVENTS.standing,
+        (standing) => standing.askedQuestionId === askedQuestionId,
+      );
+    // Host-only progress must never reach a participant socket.
+    let leakedProgress = 0;
+    const watchForLeaks = (socket: ClientSocket) =>
+      socket.on(LIVE_EVENTS.submissions, () => (leakedProgress += 1));
+
+    const host = await joinAs('host');
+    const a = await joinAs('a');
+    const b = await joinAs('b');
+    watchForLeaks(a.socket);
+    watchForLeaks(b.socket);
+    const hostView = ok(
+      await emit<HostLiveSnapshotDto>(host.socket, LIVE_EVENTS.quizStart, {}),
+    );
+    const [single, multiple, descriptive] = hostView.questions;
+    assert.ok(single && multiple && descriptive);
+    const optionId = (index: number, text: string) =>
+      hostView.questions[index]!.options.find((option) => option.text === text)!
+        .id;
+
+    // ---- Only the host asks, and asking needs an idle session.
+    assert.equal(
+      errorCode(
+        await emit(a.socket, LIVE_EVENTS.questionStart, {
+          questionId: multiple.id,
+        }),
+      ),
+      ERROR_CODE.FORBIDDEN,
+    );
+
+    // ---- Questions can be asked in any order: the second one first.
+    const started = waitFor<ParticipantLiveSnapshotDto>(
+      a.socket,
+      LIVE_EVENTS.snapshot,
+      (snapshot) => snapshot.state === LIVE_SESSION_STATE.QUESTION_ACTIVE,
+    );
+    const afterAsk = ok(
+      await emit<HostLiveSnapshotDto>(host.socket, LIVE_EVENTS.questionStart, {
+        questionId: multiple.id,
+      }),
+    );
+    assert.equal(afterAsk.state, LIVE_SESSION_STATE.QUESTION_ACTIVE);
+    assert.equal(afterAsk.currentQuestion?.questionId, multiple.id);
+    assert.equal(afterAsk.currentQuestion?.number, 1);
+    const shared = await started;
+    const askedFirst = shared.question!.askedQuestionId;
+    // Listen for the personal results before anything else can take time.
+    const aResultPending = resultFor(a.socket, askedFirst);
+    const bResultPending = resultFor(b.socket, askedFirst);
+    const aStandingPending = standingFor(a.socket, askedFirst);
+    const bStandingPending = standingFor(b.socket, askedFirst);
+    assert.equal(shared.question?.number, 1);
+    assert.equal(shared.question?.reveal, null);
+    assert.equal(
+      Date.parse(shared.question!.endsAt) -
+        Date.parse(shared.question!.startedAt),
+      DURATION * 1000,
+    );
+    assert.ok(!('myAnswer' in shared), 'broadcasts carry no personal data');
+    assert.ok(
+      !JSON.stringify(shared).includes('isCorrect'),
+      'participants never receive the answer key while it is active',
+    );
+    assert.ok(
+      !JSON.stringify(shared).includes('distribution'),
+      'participants never receive the distribution while it is active',
+    );
+
+    // ---- A late joiner enters the running question with the same deadline.
+    const late = await joinAs('late');
+    watchForLeaks(late.socket);
+    const lateResultPending = resultFor(late.socket, askedFirst);
+    const lateStandingPending = standingFor(late.socket, askedFirst);
+    const lateView = late.snapshot as ParticipantLiveSnapshotDto;
+    assert.equal(lateView.state, LIVE_SESSION_STATE.QUESTION_ACTIVE);
+    assert.equal(lateView.question?.endsAt, shared.question?.endsAt);
+    assert.equal(lateView.myAnswer, null);
+    assert.equal(lateView.joinedDuringQuestion, true);
+    assert.equal(
+      errorCode(
+        await emit(host.socket, LIVE_EVENTS.questionStart, {
+          questionId: single.id,
+        }),
+      ),
+      ERROR_CODE.INVALID_STATE_TRANSITION,
+      'only one question is active at a time',
+    );
+
+    // ---- Explicit submission, locked once accepted.
+    const progress = waitFor<HostQuestionProgressDto>(
+      host.socket,
+      LIVE_EVENTS.submissions,
+      (update) => update.submittedCount === 2,
+    );
+    const correct = [optionId(1, 'A'), optionId(1, 'C')];
+    const accepted = ok(
+      await submit(a.socket, {
+        askedQuestionId: askedFirst,
+        selectedOptionIds: correct,
+      }),
+    );
+    const aSync = ok(
+      await emit<ParticipantLiveSnapshotDto>(a.socket, LIVE_EVENTS.sync, {}),
+    );
+    assert.equal(aSync.myAnswer?.status, ANSWER_STATUS.SUBMITTED);
+    assert.equal(aSync.myAnswer?.isCorrect, null);
+    assert.equal(
+      aSync.myAnswer?.pointsAwarded,
+      0,
+      'points hidden until the end',
+    );
+    assert.equal(aSync.question?.reveal, null);
+    assert.equal(aSync.myStanding, null);
+    assert.equal(aSync.joinedDuringQuestion, false);
+    assert.equal(accepted.status, ANSWER_STATUS.SUBMITTED);
+    assert.equal(accepted.isCorrect, null, 'correctness hidden until the end');
+    assert.equal(
+      errorCode(
+        await submit(a.socket, {
+          askedQuestionId: askedFirst,
+          selectedOptionIds: [optionId(1, 'B')],
+        }),
+      ),
+      ERROR_CODE.ALREADY_SUBMITTED,
+    );
+    assert.equal(
+      errorCode(
+        await submit(b.socket, {
+          askedQuestionId: askedFirst,
+          selectedOptionIds: [optionId(0, 'Right')],
+        }),
+      ),
+      ERROR_CODE.INVALID_ANSWER,
+      'options from another question are refused',
+    );
+    assert.equal(
+      errorCode(
+        await submit(host.socket, {
+          askedQuestionId: askedFirst,
+          selectedOptionIds: correct,
+        }),
+      ),
+      ERROR_CODE.FORBIDDEN,
+    );
+    ok(
+      await submit(b.socket, {
+        askedQuestionId: askedFirst,
+        selectedOptionIds: [optionId(1, 'A')],
+      }),
+    );
+    const live1 = await progress;
+    assert.equal(live1.distribution[optionId(1, 'A')], 2);
+    assert.equal(live1.distribution[optionId(1, 'C')], 1);
+
+    // ---- The timer closes it: each participant gets their own result.
+    const [aResult, bResult, lateResult] = await Promise.all([
+      aResultPending,
+      bResultPending,
+      lateResultPending,
+    ]);
+    assert.deepEqual(
+      [...aResult.question!.reveal!.correctOptionIds].sort(),
+      [...correct].sort(),
+    );
+    assert.equal(aResult.question?.reveal?.submittedCount, 2);
+    assert.equal(aResult.myAnswer?.isCorrect, true);
+    assert.equal(bResult.myAnswer?.isCorrect, false, 'partial is incorrect');
+    assert.equal(lateResult.myAnswer?.status, ANSWER_STATUS.NOT_ATTEMPTED);
+    assert.ok(!('myStanding' in aResult), 'standing follows the reveal');
+
+    // ---- Scoring: faster correct answers earn more; wrong or missing earn
+    // nothing; exact ties share a rank.
+    const firstPoints = aResult.myAnswer!.pointsAwarded;
+    assert.ok(firstPoints >= 400 && firstPoints <= 1000, String(firstPoints));
+    assert.equal(bResult.myAnswer?.pointsAwarded, 0);
+    assert.equal(lateResult.myAnswer?.pointsAwarded, 0);
+    const [aStanding, bStanding, lateStanding] = await Promise.all([
+      aStandingPending,
+      bStandingPending,
+      lateStandingPending,
+    ]);
+    assert.deepEqual(
+      { ...aStanding, askedQuestionId: undefined },
+      {
+        askedQuestionId: undefined,
+        totalScore: firstPoints,
+        rank: 1,
+        participantCount: 3,
+      },
+    );
+    assert.equal(bStanding.rank, 2);
+    assert.equal(lateStanding.rank, 2, 'equal scores share a rank');
+    assert.equal(lateStanding.totalScore, 0);
+    assert.equal(
+      errorCode(
+        await submit(late.socket, {
+          askedQuestionId: askedFirst,
+          selectedOptionIds: correct,
+        }),
+      ),
+      ERROR_CODE.SUBMISSION_CLOSED,
+    );
+    assert.equal(
+      errorCode(
+        await emit(host.socket, LIVE_EVENTS.questionStart, {
+          questionId: multiple.id,
+        }),
+      ),
+      ERROR_CODE.QUESTION_ALREADY_ASKED,
+    );
+
+    // ---- Recovery path: with its timer gone, the next interaction closes
+    // an overdue question.
+    const descriptiveHost = ok(
+      await emit<HostLiveSnapshotDto>(host.socket, LIVE_EVENTS.questionStart, {
+        questionId: descriptive.id,
+      }),
+    );
+    const askedSecond = descriptiveHost.currentQuestion!.askedQuestionId;
+    (live as unknown as { clearTimer(id: string): void }).clearTimer(
+      liveSessionId,
+    );
+    const responses = waitFor<HostQuestionProgressDto>(
+      host.socket,
+      LIVE_EVENTS.submissions,
+      (update) => update.responses.length === 1,
+    );
+    ok(
+      await submit(a.socket, {
+        askedQuestionId: askedSecond,
+        answerText: 'Because tokens scale.',
+      }),
+    );
+    assert.equal((await responses).responses[0]?.text, 'Because tokens scale.');
+    await new Promise((resolve) => setTimeout(resolve, DURATION * 1000 + 300));
+    const aClosed = resultFor(a.socket, askedSecond);
+    const aSecondStanding = standingFor(a.socket, askedSecond);
+    const bSynced = ok(
+      await emit<ParticipantLiveSnapshotDto>(b.socket, LIVE_EVENTS.sync, {}),
+    );
+    assert.equal(bSynced.state, LIVE_SESSION_STATE.QUESTION_RESULT);
+    assert.equal(bSynced.myAnswer?.status, ANSWER_STATUS.NOT_ATTEMPTED);
+    const aDescriptive = await aClosed;
+    assert.equal(aDescriptive.myAnswer?.answerText, 'Because tokens scale.');
+    assert.equal(aDescriptive.myAnswer?.isCorrect, null);
+    assert.deepEqual(aDescriptive.question?.reveal?.correctOptionIds, []);
+    assert.equal(aDescriptive.myAnswer?.pointsAwarded, 0);
+    const afterDescriptive = await aSecondStanding;
+    assert.equal(afterDescriptive.totalScore, firstPoints, 'not scored');
+    assert.equal(afterDescriptive.rank, 1);
+    assert.equal(bSynced.myStanding?.totalScore, 0);
+    assert.equal(bSynced.myStanding?.rank, 2);
+    assert.equal(leakedProgress, 0, 'participants never get host progress');
+
+    // ---- Ending the quiz mid-question closes it; later answers are refused.
+    const lastAsk = ok(
+      await emit<HostLiveSnapshotDto>(host.socket, LIVE_EVENTS.questionStart, {
+        questionId: single.id,
+      }),
+    );
+    const askedThird = lastAsk.currentQuestion!.askedQuestionId;
+    assert.equal(lastAsk.currentQuestion?.number, 3);
+    ok(await emit(host.socket, LIVE_EVENTS.quizEnd, {}));
+    assert.equal(
+      errorCode(
+        await submit(b.socket, {
+          askedQuestionId: askedThird,
+          selectedOptionIds: [optionId(0, 'Right')],
+        }),
+      ),
+      ERROR_CODE.SUBMISSION_CLOSED,
+    );
+
+    // ---- Only presented questions exist, in live order.
+    const asked = await db.askedQuestion.findMany({
+      where: { liveSessionId },
+      orderBy: { sequenceNumber: 'asc' },
+      select: { questionId: true, status: true },
+    });
+    assert.deepEqual(
+      asked.map((item) => item.questionId),
+      [multiple.id, descriptive.id, single.id],
+    );
+    assert.ok(asked.every((item) => item.status === 'COMPLETED'));
+    assert.equal(
+      await db.answerSubmission.count({
+        where: { askedQuestion: { liveSessionId } },
+      }),
+      3,
+      'missed questions are not stored as rows',
+    );
+  },
+);

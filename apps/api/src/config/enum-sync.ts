@@ -3,6 +3,8 @@
 // schema.prisma (or in @quizmb/contracts) fails `tsc` until both agree.
 import type { PrismaClient } from '@quizmb/database';
 import type {
+  AnswerStatus,
+  AskedQuestionStatus,
   LiveSessionState,
   MediaPurpose,
   MediaStatus,
@@ -26,6 +28,15 @@ export type EnumSyncChecks = [
   Assert<Same<QuestionType, Field<Row<PrismaClient['question']>, 'type'>>>,
   Assert<Same<MediaPurpose, Field<Row<PrismaClient['mediaAsset']>, 'purpose'>>>,
   Assert<Same<MediaStatus, Field<Row<PrismaClient['mediaAsset']>, 'status'>>>,
+  Assert<
+    Same<
+      AskedQuestionStatus,
+      Field<Row<PrismaClient['askedQuestion']>, 'status'>
+    >
+  >,
+  Assert<
+    Same<AnswerStatus, Field<Row<PrismaClient['answerSubmission']>, 'status'>>
+  >,
   Assert<
     Same<
       RegistrationStatus,

@@ -1,20 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, CircleX, DoorClosed, WifiOff } from 'lucide-react';
 import {
   LIVE_EVENTS,
+  type HostCurrentQuestionDto,
+  type HostLiveQuestionDto,
   type HostLiveSnapshotDto,
   ERROR_CODE,
   LIVE_ROLE,
   LIVE_SESSION_STATE,
+  QUESTION_TYPE,
 } from '@quizmb/contracts';
 import { Button, Callout, Text } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
-import { HostConsoleHeader } from './host-console-layout';
+import { HostActiveQuestion } from './host-active-question';
+import { HostConsoleHeader, HostConsoleLayout } from './host-console-layout';
 import { HostLiveIdle } from './host-live-idle';
 import { HostLobby } from './host-lobby';
 import {
@@ -23,13 +27,69 @@ import {
   QuizProgressPanel,
 } from './host-rail';
 import { LiveNotice } from './participant-screens';
+import { QuestionQueue } from './question-queue';
+import type { QueueQuestion } from './types';
+import { useRemainingSeconds } from './use-countdown';
 import { MAX_RECONNECT_ATTEMPTS, useLiveSession } from './use-live-session';
 import {
   toHostQuestions,
+  toOptionResults,
   toQueue,
   toQuizSummary,
+  toResponses,
   toRoster,
 } from './view-models';
+
+/** While the countdown shows zero, ask the server to close the question. */
+const CLOSE_NUDGE_MS = 2_000;
+
+/** The running question with its live countdown and answer progress. */
+function ActiveQuestionMain({
+  entry,
+  question,
+  current,
+  questionCount,
+  connected,
+  clockOffsetMs,
+  onExpired,
+}: {
+  entry: QueueQuestion;
+  question: HostLiveQuestionDto;
+  current: HostCurrentQuestionDto;
+  questionCount: number;
+  connected: number;
+  clockOffsetMs: number;
+  onExpired: () => unknown;
+}) {
+  const remainingSeconds = useRemainingSeconds(current.endsAt, clockOffsetMs);
+  const expired = !current.ended && remainingSeconds === 0;
+  useEffect(() => {
+    if (!expired) return;
+    const timer = window.setInterval(onExpired, CLOSE_NUDGE_MS);
+    return () => window.clearInterval(timer);
+  }, [expired, onExpired]);
+  const shared = {
+    question: entry,
+    questionCount,
+    remainingSeconds: current.ended ? 0 : remainingSeconds,
+    submitted: current.submittedCount,
+    connected,
+    ended: current.ended,
+  };
+  return question.type === QUESTION_TYPE.DESCRIPTIVE ? (
+    <HostActiveQuestion
+      {...shared}
+      kind="descriptive"
+      responses={toResponses(current)}
+    />
+  ) : (
+    <HostActiveQuestion
+      {...shared}
+      kind="scored"
+      results={toOptionResults(question, current)}
+    />
+  );
+}
 
 const confirmations = {
   end: {
@@ -60,8 +120,16 @@ export function HostLiveConsole({
   quizId: string;
   publicUrl: string;
 }) {
-  const { snapshot, connection, failure, attempt, command, reconnect } =
-    useLiveSession(liveSessionId);
+  const {
+    snapshot,
+    connection,
+    failure,
+    attempt,
+    command,
+    reconnect,
+    clockOffsetMs,
+    resync,
+  } = useLiveSession(liveSessionId);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState<
@@ -141,6 +209,69 @@ export function HostLiveConsole({
   const roster = toRoster(host);
   const onLateJoinChange = (allow: boolean) =>
     void run(LIVE_EVENTS.lateJoinSet, { allow });
+  const current = host.currentQuestion;
+  const activeId =
+    host.state === LIVE_SESSION_STATE.QUESTION_ACTIVE && current
+      ? current.questionId
+      : null;
+  const queue = toQueue(
+    host.questions,
+    new Set(host.askedQuestions.map((item) => item.questionId)),
+    activeId,
+  );
+  const asked = host.askedQuestions.length;
+  const activeEntry = queue.find((item) => item.id === activeId);
+  const activeQuestion = host.questions.find((item) => item.id === activeId);
+  const justEnded =
+    host.state === LIVE_SESSION_STATE.QUESTION_RESULT ? current : null;
+  const endedEntry = queue.find((item) => item.id === justEnded?.questionId);
+  const endedQuestion = host.questions.find(
+    (item) => item.id === justEnded?.questionId,
+  );
+  const header = (
+    <HostConsoleHeader
+      projectName={quiz.projectName}
+      quizTitle={quiz.title}
+      title={
+        activeId
+          ? 'Question live'
+          : justEnded
+            ? `Question ${justEnded.number} ended`
+            : 'Quiz is live'
+      }
+      description={
+        activeId
+          ? 'Submissions close automatically when the timer ends.'
+          : justEnded
+            ? 'Participants now see the correct answer and their own result. Choose the next question when you are ready.'
+            : 'No question is active. Connected participants are waiting for your next question.'
+      }
+      status={activeId ? 'Question live' : 'Idle between questions'}
+      connected={host.counts.connected}
+      registered={host.counts.registered}
+      asked={asked}
+      questionCount={quiz.questionCount}
+    />
+  );
+  const rail = (
+    <>
+      <QuizProgressPanel
+        asked={asked}
+        questionCount={quiz.questionCount}
+        questionLive={!!activeId}
+        onEndQuiz={() => setConfirming('end')}
+      />
+      <LeaderboardPanel canShowParticipants={!activeId} />
+      <ParticipantsPanel
+        participants={roster.filter((participant) => participant.connected)}
+        connected={host.counts.connected}
+        registered={host.counts.registered}
+        submitted={activeId ? current?.submittedCount : undefined}
+        allowLateJoin={host.allowLateJoin}
+        onLateJoinChange={onLateJoinChange}
+      />
+    </>
+  );
   const status =
     connection === 'connected' ? null : (
       <Callout
@@ -195,43 +326,53 @@ export function HostLiveConsole({
           onCloseLobby={() => setConfirming('close')}
           onLateJoinChange={onLateJoinChange}
         />
-      ) : (
-        <HostLiveIdle
-          header={
-            <HostConsoleHeader
-              projectName={quiz.projectName}
-              quizTitle={quiz.title}
-              title="Quiz is live"
-              description="No question is active. Connected participants are waiting for your next question."
-              status="Idle between questions"
-              connected={host.counts.connected}
-              registered={host.counts.registered}
-              asked={0}
-              questionCount={quiz.questionCount}
+      ) : activeId && current && activeEntry && activeQuestion ? (
+        <HostConsoleLayout
+          header={header}
+          queue={
+            <QuestionQueue
+              questions={queue}
+              defaultDurationSeconds={quiz.defaultDurationSeconds}
             />
           }
-          questions={toQueue(host.questions)}
+          main={
+            <ActiveQuestionMain
+              key={current.askedQuestionId}
+              entry={activeEntry}
+              question={activeQuestion}
+              current={current}
+              questionCount={quiz.questionCount}
+              connected={host.counts.connected}
+              clockOffsetMs={clockOffsetMs}
+              onExpired={resync}
+            />
+          }
+          rail={rail}
+        />
+      ) : (
+        <HostLiveIdle
+          header={header}
+          questions={queue}
           hostQuestions={toHostQuestions(host.questions)}
           defaultDurationSeconds={quiz.defaultDurationSeconds}
-          rail={
-            <>
-              <QuizProgressPanel
-                asked={0}
+          rail={rail}
+          asking={busy}
+          onAsk={(questionId) =>
+            void run(LIVE_EVENTS.questionStart, { questionId })
+          }
+          idleMain={
+            justEnded && endedEntry && endedQuestion ? (
+              <ActiveQuestionMain
+                key={justEnded.askedQuestionId}
+                entry={endedEntry}
+                question={endedQuestion}
+                current={justEnded}
                 questionCount={quiz.questionCount}
-                questionLive={false}
-                onEndQuiz={() => setConfirming('end')}
-              />
-              <LeaderboardPanel canShowParticipants />
-              <ParticipantsPanel
-                participants={roster.filter(
-                  (participant) => participant.connected,
-                )}
                 connected={host.counts.connected}
-                registered={host.counts.registered}
-                allowLateJoin={host.allowLateJoin}
-                onLateJoinChange={onLateJoinChange}
+                clockOffsetMs={clockOffsetMs}
+                onExpired={resync}
               />
-            </>
+            ) : undefined
           }
         />
       )}

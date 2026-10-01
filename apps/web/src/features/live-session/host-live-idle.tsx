@@ -22,11 +22,18 @@ function SelectedQuestionPreview({
   question,
   onDeselect,
   actionsRef,
+  onAsk,
+  asking = false,
 }: {
   question: HostQuestion;
   onDeselect: () => void;
   actionsRef: RefObject<HTMLDivElement | null>;
+  /** Absent in design previews, which show a preview notice instead. */
+  onAsk?: ((questionId: string) => void) | undefined;
+  asking?: boolean;
 }) {
+  const askLabel = `Ask question (${question.durationSeconds}s)`;
+  const askIcon = <Send size={18} aria-hidden="true" />;
   const descriptive = question.type === QUESTION_TYPE.DESCRIPTIVE;
   return (
     <Surface as="section" className="flex flex-col gap-space-sm sm:p-space-md">
@@ -119,15 +126,28 @@ function SelectedQuestionPreview({
         ref={actionsRef}
         className="flex scroll-mb-space-md flex-col items-stretch gap-3 pt-2 sm:flex-row sm:items-center"
       >
-        <PreviewButton
-          action="Asking a question"
-          size="hero"
-          className="w-full sm:w-auto sm:flex-1"
-          icon={<Send size={18} aria-hidden="true" />}
-          iconPosition="right"
-        >
-          Ask question ({question.durationSeconds}s)
-        </PreviewButton>
+        {onAsk ? (
+          <Button
+            size="hero"
+            className="w-full sm:w-auto sm:flex-1"
+            icon={askIcon}
+            iconPosition="right"
+            disabled={asking}
+            onClick={() => onAsk(question.id)}
+          >
+            {asking ? 'Asking…' : askLabel}
+          </Button>
+        ) : (
+          <PreviewButton
+            action="Asking a question"
+            size="hero"
+            className="w-full sm:w-auto sm:flex-1"
+            icon={askIcon}
+            iconPosition="right"
+          >
+            {askLabel}
+          </PreviewButton>
+        )}
         <Button
           variant="ghost"
           className="h-control-large bg-surface-low"
@@ -147,6 +167,9 @@ export function HostLiveIdle({
   hostQuestions,
   defaultDurationSeconds,
   rail,
+  onAsk,
+  asking,
+  idleMain,
 }: {
   header: ReactNode;
   questions: QueueQuestion[];
@@ -154,6 +177,10 @@ export function HostLiveIdle({
   hostQuestions: Record<string, HostQuestion>;
   defaultDurationSeconds: number;
   rail: ReactNode;
+  onAsk?: ((questionId: string) => void) | undefined;
+  asking?: boolean;
+  /** Shown while nothing is selected, e.g. the question that just ended. */
+  idleMain?: ReactNode;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(
     questions.find((question) => question.state === 'selected')?.id ?? null,
@@ -205,7 +232,11 @@ export function HostLiveIdle({
             question={selected}
             onDeselect={() => setSelectedId(null)}
             actionsRef={actionsRef}
+            onAsk={onAsk}
+            asking={asking ?? false}
           />
+        ) : idleMain ? (
+          idleMain
         ) : (
           <Surface className="flex flex-col items-center gap-space-xs py-space-xl text-center">
             <ListChecks size={24} aria-hidden="true" className="text-accent" />

@@ -3,11 +3,13 @@
 import { RefreshCw } from 'lucide-react';
 import {
   ERROR_CODE,
+  LIVE_ROLE,
   LIVE_SESSION_STATE,
   type LiveQuizInfoDto,
 } from '@quizmb/contracts';
 import { Button } from '@/components/ui';
 import { NavigationItem } from '@/components/workspace/navigation-item';
+import { ParticipantLiveQuestion } from './participant-live-question';
 import {
   LiveNotice,
   ParticipantLiveIdle,
@@ -59,8 +61,19 @@ export function ParticipantLiveView({
   participantName: string;
   quizHref: string;
 }) {
-  const { snapshot, connection, failure, attempt, reconnect } =
-    useLiveSession(liveSessionId);
+  const {
+    snapshot,
+    connection,
+    failure,
+    attempt,
+    reconnect,
+    myAnswer,
+    myStanding,
+    joinedDuringQuestion,
+    clockOffsetMs,
+    submitAnswer,
+    resync,
+  } = useLiveSession(liveSessionId);
   const quiz = toQuizSummary(snapshot?.quiz ?? initialQuiz);
   const backToQuiz = (
     <NavigationItem href={quizHref} className="bg-surface-low">
@@ -116,7 +129,14 @@ export function ParticipantLiveView({
         attempt={attempt}
         maxAttempts={MAX_RECONNECT_ATTEMPTS}
         stopped={connection === 'failed'}
-        stats={snapshot ? { connected: snapshot.counts.connected } : undefined}
+        stats={
+          snapshot
+            ? {
+                connected: snapshot.counts.connected,
+                ...(myStanding ? { score: myStanding.totalScore } : {}),
+              }
+            : undefined
+        }
         onRetry={reconnect}
       />
     ) : (
@@ -124,6 +144,20 @@ export function ParticipantLiveView({
         eyebrow="Connecting"
         title="Joining the live room…"
         description={`Connecting you to ${quiz.title}.`}
+      />
+    );
+
+  if (snapshot.role === LIVE_ROLE.PARTICIPANT && snapshot.question)
+    return (
+      <ParticipantLiveQuestion
+        key={snapshot.question.askedQuestionId}
+        question={snapshot.question}
+        myAnswer={myAnswer}
+        myStanding={myStanding}
+        joinedDuringQuestion={joinedDuringQuestion}
+        clockOffsetMs={clockOffsetMs}
+        submitAnswer={submitAnswer}
+        resync={resync}
       />
     );
 
