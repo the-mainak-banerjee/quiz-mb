@@ -5,6 +5,7 @@ import {
   MessagesSquare,
   Radio,
   Timer,
+  TimerOff,
   UsersRound,
   Zap,
 } from 'lucide-react';
@@ -20,6 +21,8 @@ type ActiveQuestionProps = {
   remainingSeconds: number;
   submitted: number;
   connected: number;
+  /** The question's timer has ended: show its final results. */
+  ended?: boolean;
 } & (
   | { kind: 'scored'; results: OptionResult[] }
   | { kind: 'descriptive'; responses: DescriptiveResponse[] }
@@ -28,9 +31,11 @@ type ActiveQuestionProps = {
 function AnswerBreakdown({
   results,
   submitted,
+  ended,
 }: {
   results: OptionResult[];
   submitted: number;
+  ended: boolean;
 }) {
   return (
     <div className="flex flex-col gap-space-sm">
@@ -40,16 +45,18 @@ function AnswerBreakdown({
           variant="caption"
           className="font-bold tracking-wide uppercase"
         >
-          Live answer breakdown
+          {ended ? 'Final answer breakdown' : 'Live answer breakdown'}
         </Text>
-        <Text
-          variant="caption"
-          tone="secondary"
-          className="flex items-center gap-1"
-        >
-          <Eye size={14} aria-hidden="true" />
-          Host only
-        </Text>
+        {!ended && (
+          <Text
+            variant="caption"
+            tone="secondary"
+            className="flex items-center gap-1"
+          >
+            <Eye size={14} aria-hidden="true" />
+            Host only
+          </Text>
+        )}
       </div>
       <ul className="flex flex-col gap-space-sm">
         {results.map((result, index) => {
@@ -88,7 +95,9 @@ function AnswerBreakdown({
                         className="inline-flex items-center gap-1.5 self-start rounded-pill bg-accent px-2 py-0.5 text-action-on-primary"
                       >
                         <Check size={14} aria-hidden="true" />
-                        Correct answer · hidden from participants
+                        {ended
+                          ? 'Correct answer'
+                          : 'Correct answer · hidden from participants'}
                       </Text>
                     )}
                   </div>
@@ -107,14 +116,21 @@ function AnswerBreakdown({
         })}
       </ul>
       <Callout icon={<LockKeyhole size={18} aria-hidden="true" />}>
-        Live percentages and the correct answer are visible only to you.
-        Participants see the options until the timer ends.
+        {ended
+          ? 'Participants now see the correct answer, these final percentages and their own result.'
+          : 'Live percentages and the correct answer are visible only to you. Participants see the options until the timer ends.'}
       </Callout>
     </div>
   );
 }
 
-function ResponseStream({ responses }: { responses: DescriptiveResponse[] }) {
+function ResponseStream({
+  responses,
+  ended,
+}: {
+  responses: DescriptiveResponse[];
+  ended: boolean;
+}) {
   return (
     <Surface as="section" className="flex flex-col gap-space-sm">
       <div className="flex items-center justify-between gap-space-xs pb-space-xs">
@@ -128,9 +144,13 @@ function ResponseStream({ responses }: { responses: DescriptiveResponse[] }) {
             aria-hidden="true"
             className="text-accent"
           />
-          Live responses
+          {ended ? 'Responses' : 'Live responses'}
         </Text>
-        <Badge variant="live" label="Streaming live" />
+        {ended ? (
+          <Badge variant="draft" label="Final" />
+        ) : (
+          <Badge variant="live" label="Streaming live" />
+        )}
       </div>
       <ol className="flex flex-col gap-space-sm pr-1 lg:max-h-110 lg:overflow-y-auto">
         {responses.map((response, index) => (
@@ -183,8 +203,14 @@ function ResponseStream({ responses }: { responses: DescriptiveResponse[] }) {
 
 /** QUESTION_ACTIVE host view for scored and descriptive questions. */
 export function HostActiveQuestion(props: ActiveQuestionProps) {
-  const { question, questionCount, remainingSeconds, submitted, connected } =
-    props;
+  const {
+    question,
+    questionCount,
+    remainingSeconds,
+    submitted,
+    connected,
+    ended = false,
+  } = props;
   const scored = props.kind === 'scored';
   return (
     <>
@@ -209,10 +235,17 @@ export function HostActiveQuestion(props: ActiveQuestionProps) {
               <Radio size={14} aria-hidden="true" />
               Host view
             </QuestionChip>
-            <TimerPill
-              remainingSeconds={remainingSeconds}
-              durationSeconds={question.durationSeconds}
-            />
+            {ended ? (
+              <QuestionChip>
+                <TimerOff size={14} aria-hidden="true" />
+                Ended
+              </QuestionChip>
+            ) : (
+              <TimerPill
+                remainingSeconds={remainingSeconds}
+                durationSeconds={question.durationSeconds}
+              />
+            )}
           </div>
         </div>
 
@@ -221,7 +254,7 @@ export function HostActiveQuestion(props: ActiveQuestionProps) {
             variant="caption"
             className="font-bold tracking-wider text-accent uppercase"
           >
-            Live prompt
+            {ended ? 'Completed question' : 'Live prompt'}
           </Text>
           <Text as="h2" variant="page-title">
             {question.text}
@@ -238,7 +271,8 @@ export function HostActiveQuestion(props: ActiveQuestionProps) {
               />
               {submitted} submitted
               <Text as="span" variant="body-secondary" tone="secondary">
-                · {connected - submitted} waiting
+                · {Math.max(connected - submitted, 0)}{' '}
+                {ended ? 'did not answer' : 'waiting'}
               </Text>
             </Text>
             <Text variant="label" className="text-accent">
@@ -253,24 +287,39 @@ export function HostActiveQuestion(props: ActiveQuestionProps) {
         </div>
 
         {props.kind === 'scored' && (
-          <AnswerBreakdown results={props.results} submitted={submitted} />
+          <AnswerBreakdown
+            results={props.results}
+            submitted={submitted}
+            ended={ended}
+          />
         )}
       </Surface>
 
       {props.kind === 'descriptive' && (
-        <ResponseStream responses={props.responses} />
+        <ResponseStream responses={props.responses} ended={ended} />
       )}
 
       <Surface className="flex flex-col gap-2">
         <div
           role="status"
-          className="flex h-control-large items-center justify-center gap-2 rounded-control bg-action-primary px-space-md text-label text-action-on-primary"
+          className={cn(
+            'flex h-control-large items-center justify-center gap-2 rounded-control px-space-md text-label',
+            ended
+              ? 'bg-surface-low text-text-primary'
+              : 'bg-action-primary text-action-on-primary',
+          )}
         >
-          <span
-            aria-hidden="true"
-            className="ds-live-dot size-2 rounded-pill bg-action-secondary"
-          />
-          Question live · {remainingSeconds}s remaining
+          {ended ? (
+            <TimerOff size={16} aria-hidden="true" className="text-accent" />
+          ) : (
+            <span
+              aria-hidden="true"
+              className="ds-live-dot size-2 rounded-pill bg-action-secondary"
+            />
+          )}
+          {ended
+            ? 'Question ended'
+            : `Question live · ${remainingSeconds}s remaining`}
         </div>
         <Text
           variant="caption"
@@ -278,8 +327,9 @@ export function HostActiveQuestion(props: ActiveQuestionProps) {
           className="flex items-center justify-center gap-1 text-center"
         >
           <Timer size={14} aria-hidden="true" />
-          Submissions close automatically at 0:00. Choose the next question
-          after it ends.
+          {ended
+            ? 'Select the next question from the list when you are ready.'
+            : 'Submissions close automatically at 0:00. Choose the next question after it ends.'}
         </Text>
       </Surface>
     </>

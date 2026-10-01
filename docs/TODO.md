@@ -42,3 +42,12 @@ ALTER TABLE "quizzes" ADD CONSTRAINT "quiz_planned_start_required"
 ```
 
 Before applying, confirm that no existing non-draft development rows have a null `plannedStartAt`, and extend the publishing integration test to assert the constraint.
+
+## Make question Markdown production ready
+
+Question prompts are written in Markdown, but its behaviour is not production ready yet. Review and finish it before release:
+
+- Consistent rendering everywhere a prompt appears: the builder preview and the participant live screen render Markdown (`components/markdown-preview.tsx`), while the host console (question queue, preview and live question) and the review screen still show the raw text.
+- Decide the supported syntax (headings, lists, code, links, images are currently disallowed) and how large elements such as headings look inside a prompt on each screen and on phones.
+- Confirm sanitization and link handling are safe for participant-facing content, and that long or complex prompts stay readable.
+- Improve the editor experience (toolbar, preview, character limits) as needed.

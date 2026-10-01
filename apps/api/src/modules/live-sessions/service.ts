@@ -124,6 +124,29 @@ export class LiveSessionsService {
    */
   private answerKeys = new Map<string, AnswerKey>();
   private confirmed = new Map<string, Set<string>>();
+  /** Quiz content per started session; it is locked once the quiz starts. */
+  private questionCache = new Map<
+    string,
+    Awaited<ReturnType<LiveSessionsRepository['hostQuestions']>>
+  >();
+
+  private async quizQuestions(session: LiveSessionRow) {
+    const cached = this.questionCache.get(session.id);
+    if (cached) return cached;
+    const questions = await this.repository.hostQuestions(session.quizId);
+    if (session.state !== LIVE_SESSION_STATE.LOBBY)
+      this.questionCache.set(session.id, questions);
+    return questions;
+  }
+
+  /** Forgets in-memory state for a session that has finished. */
+  private forget(liveSessionId: string) {
+    this.clearTimer(liveSessionId);
+    this.confirmed.delete(liveSessionId);
+    this.questionCache.delete(liveSessionId);
+    for (const [id, key] of this.answerKeys)
+      if (key.liveSessionId === liveSessionId) this.answerKeys.delete(id);
+  }
 
   constructor(
     private repository: LiveSessionsRepository,
@@ -212,10 +235,20 @@ export class LiveSessionsService {
   // ---- Questions -----------------------------------------------------------
 
   /** The active or just-ended question while the session is in one. */
-  private currentAsked(session: LiveSessionRow) {
-    return QUESTION_STATES.includes(session.state)
-      ? this.repository.latestAsked(session.id)
-      : Promise.resolve(null);
+  askedFor(session: LiveSessionRow) {
+    return this.currentAsked(session);
+  }
+
+  private async currentAsked(
+    session: LiveSessionRow,
+  ): Promise<AskedQuestionRow | null> {
+    if (!QUESTION_STATES.includes(session.state)) return null;
+    const [asked, questions] = await Promise.all([
+      this.repository.latestAsked(session.id),
+      this.quizQuestions(session),
+    ]);
+    const question = questions.find((item) => item.id === asked?.questionId);
+    return asked && question ? { ...asked, question } : null;
   }
 
   private async imageUrl(asked: AskedQuestionRow) {
@@ -257,14 +290,15 @@ export class LiveSessionsService {
   }
 
   private async questionProgress(
-    asked: AskedQuestionRow,
+    askedQuestionId: string,
+    type: QuestionType,
   ): Promise<HostQuestionProgressDto> {
     const progress = await this.repository.progress(
-      asked.id,
-      asked.question.type === QUESTION_TYPE.DESCRIPTIVE,
+      askedQuestionId,
+      type === QUESTION_TYPE.DESCRIPTIVE,
     );
     return {
-      askedQuestionId: asked.id,
+      askedQuestionId,
       submittedCount: progress.submittedCount,
       distribution: progress.distribution,
       responses: progress.responses.map((response) => ({
@@ -279,7 +313,7 @@ export class LiveSessionsService {
     asked: AskedQuestionRow,
   ): Promise<HostCurrentQuestionDto> {
     return {
-      ...(await this.questionProgress(asked)),
+      ...(await this.questionProgress(asked.id, asked.question.type)),
       questionId: asked.questionId,
       number: asked.sequenceNumber,
       durationSeconds: asked.durationSeconds,
@@ -291,18 +325,24 @@ export class LiveSessionsService {
 
   /** Host-only progress for throttled realtime updates. */
   async progressFor(askedQuestionId: string) {
-    const asked = await this.repository.findAsked(askedQuestionId);
-    return asked ? this.questionProgress(asked) : null;
+    const type =
+      this.answerKeys.get(askedQuestionId)?.type ??
+      (await this.repository.findAsked(askedQuestionId))?.question.type;
+    return type ? this.questionProgress(askedQuestionId, type) : null;
   }
 
-  async hostSnapshot(session: LiveSessionRow): Promise<HostLiveSnapshotDto> {
+  /** `preloaded` skips reloading the current question (undefined = load). */
+  async hostSnapshot(
+    session: LiveSessionRow,
+    preloaded?: AskedQuestionRow | null,
+  ): Promise<HostLiveSnapshotDto> {
     const [connectedIds, roster, questions, asked, current] = await Promise.all(
       [
         this.store.connectedUserIds(session.id),
         this.repository.roster(session.quizId, HOST_ROSTER_LIMIT),
-        this.repository.hostQuestions(session.quizId),
+        this.quizQuestions(session),
         this.repository.askedQuestions(session.id),
-        this.currentAsked(session),
+        preloaded === undefined ? this.currentAsked(session) : preloaded,
       ],
     );
     return {
@@ -345,10 +385,11 @@ export class LiveSessionsService {
   async participantSnapshot(
     session: LiveSessionRow,
     userId?: string,
+    preloaded?: AskedQuestionRow | null,
   ): Promise<ParticipantLiveSnapshotDto> {
     const [connected, asked] = await Promise.all([
       this.store.connectedCount(session.id),
-      this.currentAsked(session),
+      preloaded === undefined ? this.currentAsked(session) : preloaded,
     ]);
     const snapshot: ParticipantLiveSnapshotDto = {
       ...this.base(session, connected),
@@ -701,37 +742,54 @@ export class LiveSessionsService {
       () => this.repository.closeLobby(liveSessionId),
     );
     await this.store.clearPresence(liveSessionId);
+    this.forget(liveSessionId);
     this.publishStatus(quizId, QUIZ_STATUS.PUBLISHED);
     return quizId;
   }
 
-  /** Asks any unused question; it starts now for everyone in the room. */
+  /**
+   * Asks any unused question; it starts now for everyone in the room.
+   * Returns the updated session and the new question so the caller can
+   * broadcast without reloading either.
+   */
   async startQuestion(
     liveSessionId: string,
     userId: string,
     questionId: string,
   ) {
-    const session = await this.load(liveSessionId);
+    const session = await this.current(await this.load(liveSessionId));
     this.requireHost(session, userId);
-    await this.current(session);
-    const started = await this.store.withLock(
+    const question = (await this.quizQuestions(session)).find(
+      (item) => item.id === questionId,
+    );
+    if (!question)
+      throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Question not found.');
+    const asked = await this.store.withLock(
       LOCK_OPERATION.SESSION_TRANSITION,
       liveSessionId,
-      () => this.repository.startQuestion(liveSessionId, questionId),
+      () =>
+        this.repository.startQuestion(
+          liveSessionId,
+          questionId,
+          question.durationOverrideSeconds ??
+            session.quiz.defaultQuestionDurationSeconds,
+        ),
     );
-    const { asked } = started;
     this.imageUrls.clear();
     this.answerKeys.set(asked.id, {
       liveSessionId,
-      quizId: started.quizId,
-      hostUserId: started.hostUserId,
-      type: started.type,
-      options: started.options,
+      quizId: session.quizId,
+      hostUserId: session.hostUserId,
+      type: question.type,
+      options: question.options,
       startedAt: asked.startedAt,
       endsAt: asked.endsAt,
     });
     this.schedule(liveSessionId, asked.endsAt);
-    return this.load(liveSessionId);
+    return {
+      session: { ...session, state: LIVE_SESSION_STATE.QUESTION_ACTIVE },
+      asked: { ...asked, question } satisfies AskedQuestionRow,
+    };
   }
 
   /** Cached answer key; reloaded after a restart. Null once closed. */
@@ -835,10 +893,7 @@ export class LiveSessionsService {
     const session = await this.hostTransition(liveSessionId, userId, () =>
       this.repository.end(liveSessionId),
     );
-    this.clearTimer(liveSessionId);
-    this.confirmed.delete(liveSessionId);
-    for (const [id, key] of this.answerKeys)
-      if (key.liveSessionId === liveSessionId) this.answerKeys.delete(id);
+    this.forget(liveSessionId);
     await this.store.expireCompleted(liveSessionId);
     this.publishStatus(session.quizId, QUIZ_STATUS.COMPLETED);
     return session;

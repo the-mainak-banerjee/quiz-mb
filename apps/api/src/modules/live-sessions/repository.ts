@@ -7,6 +7,7 @@ import {
   PUBLIC_QUIZ_STATUSES,
   ERROR_CODE,
   LIVE_SESSION_STATE,
+  type LiveSessionState,
   QUIZ_STATUS,
   REGISTRATION_STATUS,
 } from '@quizmb/contracts';
@@ -86,9 +87,17 @@ function invalidTransition(): never {
   );
 }
 
+/** Locks the session row and reads what transitions need (one round trip). */
 async function lockSession(tx: Prisma.TransactionClient, id: string) {
-  await tx.$queryRaw`SELECT id FROM live_quiz_sessions WHERE id = ${id}::uuid FOR UPDATE`;
-  const session = await tx.liveQuizSession.findUnique({ where: { id } });
+  const [session] = await tx.$queryRaw<
+    Array<{
+      id: string;
+      quizId: string;
+      hostUserId: string;
+      state: LiveSessionState;
+    }>
+  >`SELECT id::text, "quizId"::text, "hostUserId"::text, state::text
+    FROM live_quiz_sessions WHERE id = ${id}::uuid FOR UPDATE`;
   if (!session)
     throw new ApiError(
       404,
@@ -316,12 +325,14 @@ export class LiveSessionsRepository {
     });
   }
 
-  /** The most recently asked question (active or just ended). */
+  /**
+   * The most recently asked question (active or just ended), without its
+   * content: the service attaches the question from its quiz cache.
+   */
   latestAsked(liveSessionId: string) {
     return this.db.askedQuestion.findFirst({
       where: { liveSessionId },
       orderBy: { sequenceNumber: 'desc' },
-      include: askedInclude,
     });
   }
 
@@ -351,10 +362,11 @@ export class LiveSessionsRepository {
   }
 
   /**
-   * LIVE_IDLE or QUESTION_RESULT to QUESTION_ACTIVE. Any unused question of
-   * the quiz may be asked, in any order; its timer starts now.
+   * LIVE_IDLE or QUESTION_RESULT to QUESTION_ACTIVE; the timer starts now.
+   * The service has already checked the question belongs to the quiz; the
+   * unique keys reject a reused question or a second active one.
    */
-  async startQuestion(id: string, questionId: string) {
+  async startQuestion(id: string, questionId: string, durationSeconds: number) {
     try {
       return await this.db.$transaction(async (tx) => {
         const session = await lockSession(tx, id);
@@ -363,27 +375,6 @@ export class LiveSessionsRepository {
           session.state !== LIVE_SESSION_STATE.QUESTION_RESULT
         )
           invalidTransition();
-        const question = await tx.question.findFirst({
-          where: { id: questionId, quizId: session.quizId },
-          select: {
-            type: true,
-            durationOverrideSeconds: true,
-            options: { select: { id: true, isCorrect: true } },
-            quiz: { select: { defaultQuestionDurationSeconds: true } },
-          },
-        });
-        if (!question)
-          throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Question not found.');
-        const used = await tx.askedQuestion.findUnique({
-          where: {
-            liveSessionId_questionId: { liveSessionId: id, questionId },
-          },
-          select: { id: true },
-        });
-        if (used) throw alreadyAsked();
-        const durationSeconds =
-          question.durationOverrideSeconds ??
-          question.quiz.defaultQuestionDurationSeconds;
         const startedAt = new Date();
         const sequenceNumber =
           (await tx.askedQuestion.count({ where: { liveSessionId: id } })) + 1;
@@ -401,13 +392,7 @@ export class LiveSessionsRepository {
           where: { id },
           data: { state: LIVE_SESSION_STATE.QUESTION_ACTIVE },
         });
-        return {
-          asked,
-          quizId: session.quizId,
-          hostUserId: session.hostUserId,
-          type: question.type,
-          options: question.options,
-        };
+        return asked;
       }, lockedTransaction);
     } catch (error) {
       if (isUniqueViolation(error)) throw alreadyAsked();
@@ -582,7 +567,7 @@ export class LiveSessionsRepository {
     return this.db.question.findMany({
       where: { quizId },
       orderBy: { position: 'asc' },
-      include: { options: { orderBy: { position: 'asc' } } },
+      include: { options: { orderBy: { position: 'asc' } }, image: true },
     });
   }
 }

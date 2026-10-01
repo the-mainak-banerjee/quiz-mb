@@ -169,6 +169,7 @@ export function HostLiveIdle({
   rail,
   onAsk,
   asking,
+  idleMain,
 }: {
   header: ReactNode;
   questions: QueueQuestion[];
@@ -178,6 +179,8 @@ export function HostLiveIdle({
   rail: ReactNode;
   onAsk?: ((questionId: string) => void) | undefined;
   asking?: boolean;
+  /** Shown while nothing is selected, e.g. the question that just ended. */
+  idleMain?: ReactNode;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(
     questions.find((question) => question.state === 'selected')?.id ?? null,
@@ -232,6 +235,8 @@ export function HostLiveIdle({
             onAsk={onAsk}
             asking={asking ?? false}
           />
+        ) : idleMain ? (
+          idleMain
         ) : (
           <Surface className="flex flex-col items-center gap-space-xs py-space-xl text-center">
             <ListChecks size={24} aria-hidden="true" className="text-accent" />

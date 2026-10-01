@@ -22,7 +22,7 @@ import {
   DOMAIN_EVENT,
   type DomainEvents,
 } from '../../infrastructure/domain-events.js';
-import type { LiveSessionRow } from './repository.js';
+import type { AskedQuestionRow, LiveSessionRow } from './repository.js';
 import type { LiveSessionsService } from './service.js';
 import { ROOM_AUDIENCE, SOCKET_EVENT, liveRoom } from './constants.js';
 
@@ -134,17 +134,30 @@ export function attachLiveRealtime(
     );
   });
 
-  async function broadcast(session: LiveSessionRow) {
-    const [host, participant] = await Promise.all([
-      service.hostSnapshot(session),
-      service.participantSnapshot(session),
-    ]);
+  /**
+   * Sends role-safe snapshots after a lifecycle change. Participants are
+   * sent theirs as soon as it is ready; the host snapshot is returned so
+   * the command's ack reuses it instead of building it twice.
+   */
+  async function broadcast(
+    session: LiveSessionRow,
+    preloaded?: AskedQuestionRow | null,
+  ) {
+    const asked =
+      preloaded === undefined ? await service.askedFor(session) : preloaded;
+    const participants = service
+      .participantSnapshot(session, undefined, asked)
+      .then((snapshot) =>
+        nsp
+          .to(liveRoom(session.id, ROOM_AUDIENCE.PARTICIPANTS))
+          .emit(LIVE_EVENTS.snapshot, snapshot),
+      );
+    const host = await service.hostSnapshot(session, asked);
     nsp
       .to(liveRoom(session.id, ROOM_AUDIENCE.HOST))
       .emit(LIVE_EVENTS.snapshot, host);
-    nsp
-      .to(liveRoom(session.id, ROOM_AUDIENCE.PARTICIPANTS))
-      .emit(LIVE_EVENTS.snapshot, participant);
+    await participants;
+    return host;
   }
 
   // Participants see the connected count too, throttled per session so a
@@ -371,8 +384,7 @@ export function attachLiveRealtime(
         requireHost();
         const session = await service.start(liveSessionId, userId);
         logger.info({ liveSessionId }, 'Live quiz started');
-        await broadcast(session);
-        return service.hostSnapshot(session);
+        return broadcast(session);
       },
     );
 
@@ -381,14 +393,13 @@ export function attachLiveRealtime(
       questionStartCommandSchema,
       async ({ liveSessionId, questionId }) => {
         requireHost();
-        const session = await service.startQuestion(
+        const { session, asked } = await service.startQuestion(
           liveSessionId,
           userId,
           questionId,
         );
         logger.info({ liveSessionId }, 'Live question started');
-        await broadcast(session);
-        return service.hostSnapshot(session);
+        return broadcast(session, asked);
       },
     );
 
@@ -410,8 +421,7 @@ export function attachLiveRealtime(
       async ({ liveSessionId, allow }) => {
         requireHost();
         const session = await service.setLateJoin(liveSessionId, userId, allow);
-        await broadcast(session);
-        return service.hostSnapshot(session);
+        return broadcast(session);
       },
     );
 
@@ -422,8 +432,7 @@ export function attachLiveRealtime(
         requireHost();
         const session = await service.end(liveSessionId, userId);
         logger.info({ liveSessionId }, 'Live quiz ended');
-        await broadcast(session);
-        return service.hostSnapshot(session);
+        return broadcast(session);
       },
     );
 

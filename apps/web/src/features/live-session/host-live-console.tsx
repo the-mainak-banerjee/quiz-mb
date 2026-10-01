@@ -62,7 +62,7 @@ function ActiveQuestionMain({
   onExpired: () => unknown;
 }) {
   const remainingSeconds = useRemainingSeconds(current.endsAt, clockOffsetMs);
-  const expired = remainingSeconds === 0;
+  const expired = !current.ended && remainingSeconds === 0;
   useEffect(() => {
     if (!expired) return;
     const timer = window.setInterval(onExpired, CLOSE_NUDGE_MS);
@@ -71,9 +71,10 @@ function ActiveQuestionMain({
   const shared = {
     question: entry,
     questionCount,
-    remainingSeconds,
+    remainingSeconds: current.ended ? 0 : remainingSeconds,
     submitted: current.submittedCount,
     connected,
+    ended: current.ended,
   };
   return question.type === QUESTION_TYPE.DESCRIPTIVE ? (
     <HostActiveQuestion
@@ -223,6 +224,10 @@ export function HostLiveConsole({
   const activeQuestion = host.questions.find((item) => item.id === activeId);
   const justEnded =
     host.state === LIVE_SESSION_STATE.QUESTION_RESULT ? current : null;
+  const endedEntry = queue.find((item) => item.id === justEnded?.questionId);
+  const endedQuestion = host.questions.find(
+    (item) => item.id === justEnded?.questionId,
+  );
   const header = (
     <HostConsoleHeader
       projectName={quiz.projectName}
@@ -354,6 +359,20 @@ export function HostLiveConsole({
           asking={busy}
           onAsk={(questionId) =>
             void run(LIVE_EVENTS.questionStart, { questionId })
+          }
+          idleMain={
+            justEnded && endedEntry && endedQuestion ? (
+              <ActiveQuestionMain
+                key={justEnded.askedQuestionId}
+                entry={endedEntry}
+                question={endedQuestion}
+                current={justEnded}
+                questionCount={quiz.questionCount}
+                connected={host.counts.connected}
+                clockOffsetMs={clockOffsetMs}
+                onExpired={resync}
+              />
+            ) : undefined
           }
         />
       )}
