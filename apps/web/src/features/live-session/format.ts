@@ -1,9 +1,10 @@
 import type { LiveQuestionType } from './types';
+import { QUESTION_TYPE } from '@quizmb/contracts';
 
 export const questionTypeLabels: Record<LiveQuestionType, string> = {
-  SINGLE_CHOICE: 'Single Choice',
-  MULTIPLE_CHOICE: 'Multiple Answer',
-  DESCRIPTIVE: 'Descriptive',
+  [QUESTION_TYPE.SINGLE_CHOICE]: 'Single Choice',
+  [QUESTION_TYPE.MULTIPLE_CHOICE]: 'Multiple Answer',
+  [QUESTION_TYPE.DESCRIPTIVE]: 'Descriptive',
 };
 
 export function questionNumber(position: number) {

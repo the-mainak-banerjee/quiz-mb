@@ -1,19 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import type { RedisClient } from '../../infrastructure/redis.js';
 import { ApiError } from '../../http/api-error.js';
+import { ERROR_CODE } from '@quizmb/contracts';
+import { lockKey, presenceKey } from './constants.js';
 
-// Key layout follows DATABASE_REDIS_SOCKET_DESIGN §39–§54:
-//   lq:{liveSessionId}:presence   HASH participant userId → active socket id
-//   lock:{operation}:{resourceId} STRING random owner token (short TTL)
-// The presence hash doubles as the "one active device" record: the newest
+// Key layout: see ./constants.ts. The presence hash doubles as the "one active device" record: the newest
 // socket id per user wins. Only accepted join/leave events write here — no
 // heartbeats or polling — to keep Upstash free-tier command usage low.
 
 const ACTIVE_TTL_SECONDS = 24 * 60 * 60;
 const COMPLETED_TTL_SECONDS = 6 * 60 * 60;
 const LOCK_TTL_MS = 10_000;
-
-const presenceKey = (liveSessionId: string) => `lq:${liveSessionId}:presence`;
 
 // Atomically record the newest socket for a user and return the replaced one.
 const CLAIM_SCRIPT = `
@@ -46,7 +43,7 @@ return 0`;
 function unavailable(): never {
   throw new ApiError(
     503,
-    'LIVE_UNAVAILABLE',
+    ERROR_CODE.LIVE_UNAVAILABLE,
     'The live room is temporarily unavailable. Please try again.',
   );
 }
@@ -139,7 +136,7 @@ export class LiveStore {
     resourceId: string,
     work: () => Promise<T>,
   ): Promise<T> {
-    const key = `lock:${operation}:${resourceId}`;
+    const key = lockKey(operation, resourceId);
     const token = randomUUID();
     const acquired = await guard(
       this.redis.set(key, token, 'PX', LOCK_TTL_MS, 'NX'),
@@ -147,7 +144,7 @@ export class LiveStore {
     if (acquired !== 'OK')
       throw new ApiError(
         409,
-        'OPERATION_IN_PROGRESS',
+        ERROR_CODE.OPERATION_IN_PROGRESS,
         'Another update to this live session is in progress. Try again.',
       );
     try {

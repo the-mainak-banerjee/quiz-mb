@@ -6,10 +6,12 @@ import {
   type QuizStatusDto,
 } from '@quizmb/contracts';
 import type { ApiError } from '../../http/api-error.js';
-import type { DomainEvents } from '../../infrastructure/domain-events.js';
+import {
+  DOMAIN_EVENT,
+  type DomainEvents,
+} from '../../infrastructure/domain-events.js';
 import type { LiveSessionsService } from './service.js';
-
-const statusRoom = (quizId: string) => `status:${quizId}`;
+import { statusRoom } from './constants.js';
 
 /**
  * Read-only lifecycle updates for the public quiz page. A socket watches the
@@ -49,7 +51,7 @@ export function attachQuizStatusRealtime(
     );
   });
 
-  events.on('quizStatusChanged', ({ quizId, status }) => {
+  events.on(DOMAIN_EVENT.quizStatusChanged, ({ quizId, status }) => {
     const payload: QuizStatusDto = { quizId, status };
     nsp.to(statusRoom(quizId)).emit(QUIZ_STATUS_EVENT, payload);
     logger.debug({ quizId, status }, 'Quiz status broadcast');

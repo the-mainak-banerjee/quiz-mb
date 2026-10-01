@@ -16,6 +16,7 @@ import { HostConsoleLayout } from './host-console-layout';
 import { OptionLetter, QuestionChip } from './question-parts';
 import { QuestionQueue } from './question-queue';
 import type { HostQuestion, QueueQuestion } from './types';
+import { QUESTION_TYPE } from '@quizmb/contracts';
 
 function SelectedQuestionPreview({
   question,
@@ -26,7 +27,7 @@ function SelectedQuestionPreview({
   onDeselect: () => void;
   actionsRef: RefObject<HTMLDivElement | null>;
 }) {
-  const descriptive = question.type === 'DESCRIPTIVE';
+  const descriptive = question.type === QUESTION_TYPE.DESCRIPTIVE;
   return (
     <Surface as="section" className="flex flex-col gap-space-sm sm:p-space-md">
       <div className="border-b border-border-surface pb-3">

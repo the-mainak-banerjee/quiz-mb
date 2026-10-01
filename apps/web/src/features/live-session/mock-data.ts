@@ -8,6 +8,7 @@ import type {
   QueueQuestion,
   QueueQuestionState,
 } from './types';
+import { QUESTION_TYPE } from '@quizmb/contracts';
 
 // Development preview fixtures only; never used by product routes.
 
@@ -98,82 +99,82 @@ const bank: Array<{
   durationSeconds: number;
 }> = [
   {
-    type: 'SINGLE_CHOICE',
+    type: QUESTION_TYPE.SINGLE_CHOICE,
     text: 'What does semantic scope mean in design tokens?',
     durationSeconds: 20,
   },
   {
-    type: 'MULTIPLE_CHOICE',
+    type: QUESTION_TYPE.MULTIPLE_CHOICE,
     text: 'Select all valid token tier layers',
     durationSeconds: 30,
   },
   {
-    type: 'DESCRIPTIVE',
+    type: QUESTION_TYPE.DESCRIPTIVE,
     text: 'Explain how component tokens inherit aliases',
     durationSeconds: 60,
   },
   {
-    type: 'SINGLE_CHOICE',
+    type: QUESTION_TYPE.SINGLE_CHOICE,
     text: 'Which contrast ratio satisfies WCAG 2.2 AA for large text?',
     durationSeconds: 15,
   },
   {
-    type: 'SINGLE_CHOICE',
+    type: QUESTION_TYPE.SINGLE_CHOICE,
     text: 'Identify the primary source of token drift',
     durationSeconds: 25,
   },
   {
-    type: 'DESCRIPTIVE',
+    type: QUESTION_TYPE.DESCRIPTIVE,
     text: 'Explain how semantic tokens help maintain a scalable multi-brand design system.',
     durationSeconds: 60,
   },
   {
-    type: 'MULTIPLE_CHOICE',
+    type: QUESTION_TYPE.MULTIPLE_CHOICE,
     text: 'Select all valid dark mode luminance mapping strategies',
     durationSeconds: 30,
   },
   {
-    type: 'SINGLE_CHOICE',
+    type: QUESTION_TYPE.SINGLE_CHOICE,
     text: 'Where should a component token resolve its default value?',
     durationSeconds: 20,
   },
   {
-    type: 'SINGLE_CHOICE',
+    type: QUESTION_TYPE.SINGLE_CHOICE,
     text: 'Which layer owns brand colour decisions?',
     durationSeconds: 20,
   },
   {
-    type: 'DESCRIPTIVE',
+    type: QUESTION_TYPE.DESCRIPTIVE,
     text: 'Describe one risk of skipping the semantic token layer',
     durationSeconds: 45,
   },
   {
-    type: 'MULTIPLE_CHOICE',
+    type: QUESTION_TYPE.MULTIPLE_CHOICE,
     text: 'Select the properties that belong in a spacing scale',
     durationSeconds: 30,
   },
   {
-    type: 'SINGLE_CHOICE',
+    type: QUESTION_TYPE.SINGLE_CHOICE,
     text: 'What triggers a token rebuild in a typical pipeline?',
     durationSeconds: 20,
   },
   {
-    type: 'SINGLE_CHOICE',
+    type: QUESTION_TYPE.SINGLE_CHOICE,
     text: 'Which naming pattern keeps tokens platform neutral?',
     durationSeconds: 20,
   },
   {
-    type: 'MULTIPLE_CHOICE',
+    type: QUESTION_TYPE.MULTIPLE_CHOICE,
     text: 'Select every valid elevation token consumer',
     durationSeconds: 25,
   },
   {
-    type: 'DESCRIPTIVE',
+    type: QUESTION_TYPE.DESCRIPTIVE,
     text: 'How would you migrate a legacy palette to semantic tokens?',
     durationSeconds: 60,
   },
   {
-    type: 'SINGLE_CHOICE',
+    type: QUESTION_TYPE.SINGLE_CHOICE,
     text: 'Which token type should a focus ring reference?',
     durationSeconds: 20,
   },
@@ -258,9 +259,12 @@ export const hostQuestions: Record<string, HostQuestion> = Object.fromEntries(
               text,
               isCorrect,
             }))
-          : question.type === 'DESCRIPTIVE'
+          : question.type === QUESTION_TYPE.DESCRIPTIVE
             ? []
-            : genericOptions(question.id, question.type === 'MULTIPLE_CHOICE'),
+            : genericOptions(
+                question.id,
+                question.type === QUESTION_TYPE.MULTIPLE_CHOICE,
+              ),
     },
   ]),
 );

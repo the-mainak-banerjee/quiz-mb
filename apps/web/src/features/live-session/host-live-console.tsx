@@ -3,7 +3,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, CircleX, DoorClosed, WifiOff } from 'lucide-react';
-import { LIVE_EVENTS, type HostLiveSnapshotDto } from '@quizmb/contracts';
+import {
+  LIVE_EVENTS,
+  type HostLiveSnapshotDto,
+  ERROR_CODE,
+  LIVE_ROLE,
+  LIVE_SESSION_STATE,
+} from '@quizmb/contracts';
 import { Button, Callout, Text } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
 import { NavigationItem } from '@/components/workspace/navigation-item';
@@ -78,7 +84,7 @@ export function HostLiveConsole({
     return ack.ok;
   }
 
-  if (connection === 'failed' && failure?.code === 'LOBBY_CLOSED')
+  if (connection === 'failed' && failure?.code === ERROR_CODE.LOBBY_CLOSED)
     return (
       <LiveNotice
         eyebrow="Lobby closed"
@@ -97,7 +103,7 @@ export function HostLiveConsole({
         action={backToQuiz}
       />
     );
-  if (!snapshot || snapshot.role !== 'HOST')
+  if (!snapshot || snapshot.role !== LIVE_ROLE.HOST)
     return (
       <LiveNotice
         eyebrow={connection === 'failed' ? 'Connection lost' : 'Connecting'}
@@ -121,7 +127,7 @@ export function HostLiveConsole({
     );
 
   const host: HostLiveSnapshotDto = snapshot;
-  if (host.state === 'COMPLETED')
+  if (host.state === LIVE_SESSION_STATE.COMPLETED)
     return (
       <LiveNotice
         eyebrow="Quiz ended"
@@ -176,7 +182,7 @@ export function HostLiveConsole({
   return (
     <>
       {notices}
-      {host.state === 'LOBBY' ? (
+      {host.state === LIVE_SESSION_STATE.LOBBY ? (
         <HostLobby
           quiz={quiz}
           roster={roster}

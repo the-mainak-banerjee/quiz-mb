@@ -2,7 +2,11 @@
 import Image from 'next/image';
 import { useState } from 'react';
 import { Upload } from 'lucide-react';
-import type { MediaDto } from '@quizmb/contracts';
+import {
+  MEDIA_PURPOSE,
+  type MediaDto,
+  type MediaPurpose,
+} from '@quizmb/contracts';
 import { Button, Input, Text } from '@/components/ui';
 import { uploadImage } from '@/lib/api/authoring';
 import { apiError } from '@/lib/api/client';
@@ -14,7 +18,7 @@ export function ImageUpload({
   onBusy,
 }: {
   quizId?: string | undefined;
-  purpose: 'QUIZ_COVER' | 'QUESTION_IMAGE';
+  purpose: MediaPurpose;
   value: MediaDto | null;
   onChange: (media: MediaDto | null) => void;
   onBusy: (busy: boolean) => void;
@@ -38,7 +42,9 @@ export function ImageUpload({
   return (
     <div className="space-y-space-sm">
       <Text variant="label">
-        {purpose === 'QUIZ_COVER' ? 'Cover artwork' : 'Question image'}{' '}
+        {purpose === MEDIA_PURPOSE.QUIZ_COVER
+          ? 'Cover artwork'
+          : 'Question image'}{' '}
         (optional)
       </Text>
       <div

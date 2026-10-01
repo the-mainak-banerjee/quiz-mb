@@ -1,4 +1,16 @@
 import { z } from 'zod';
+import {
+  LIVE_ROLE,
+  MEDIA_PURPOSE,
+  QUESTION_TYPE,
+  type LiveSessionState,
+  type LiveRole,
+  type PublicQuizStatus,
+  type QuestionType,
+  type QuizStatus,
+} from './constants.js';
+
+export * from './constants.js';
 
 // Central authoring limits: design text counters plus protective API bounds.
 export const AUTHORING_LIMITS = {
@@ -56,7 +68,7 @@ export const quizSchema = z
   .strict();
 export const questionSchema = z
   .object({
-    type: z.enum(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'DESCRIPTIVE']),
+    type: z.enum(QUESTION_TYPE),
     text: z
       .string()
       .trim()
@@ -87,7 +99,7 @@ export const questionSchema = z
   .strict()
   .superRefine((value, ctx) => {
     const correct = value.options.filter((o) => o.isCorrect).length;
-    if (value.type === 'DESCRIPTIVE') {
+    if (value.type === QUESTION_TYPE.DESCRIPTIVE) {
       if (value.options.length)
         ctx.addIssue({
           code: 'custom',
@@ -102,14 +114,14 @@ export const questionSchema = z
           message: 'Add at least two options.',
         });
       if (
-        (value.type === 'SINGLE_CHOICE' && correct !== 1) ||
-        (value.type === 'MULTIPLE_CHOICE' && correct < 1)
+        (value.type === QUESTION_TYPE.SINGLE_CHOICE && correct !== 1) ||
+        (value.type === QUESTION_TYPE.MULTIPLE_CHOICE && correct < 1)
       )
         ctx.addIssue({
           code: 'custom',
           path: ['options'],
           message:
-            value.type === 'SINGLE_CHOICE'
+            value.type === QUESTION_TYPE.SINGLE_CHOICE
               ? 'Choose exactly one correct answer.'
               : 'Choose at least one correct answer.',
         });
@@ -120,7 +132,7 @@ export const reorderSchema = z
   .strict();
 export const uploadSchema = z
   .object({
-    purpose: z.enum(['QUIZ_COVER', 'QUESTION_IMAGE']),
+    purpose: z.enum(MEDIA_PURPOSE),
     fileName: z.string().min(1).max(255),
     mimeType: z.enum(MEDIA_LIMITS.mimeTypes),
     sizeBytes: z.number().int().min(1).max(MEDIA_LIMITS.maxBytes),
@@ -149,7 +161,7 @@ export type QuizDto = Omit<QuizInput, 'plannedStartAt'> & {
   projectName: string;
   publicId: string;
   plannedStartAt: string | null;
-  status: string;
+  status: QuizStatus;
   updatedAt: string;
   cover: MediaDto | null;
   questions: QuestionDto[];
@@ -158,7 +170,7 @@ export type QuizSummaryDto = {
   id: string;
   projectId: string;
   title: string;
-  status: string;
+  status: QuizStatus;
   updatedAt: string;
   questionCount: number;
 };
@@ -172,7 +184,7 @@ export type PublicQuizDto = {
   publicId: string;
   title: string;
   description: string;
-  status: 'PUBLISHED' | 'LOBBY' | 'LIVE' | 'COMPLETED';
+  status: PublicQuizStatus;
   plannedStartAt: string;
   registrationLimit: number;
   registrationCount: number;
@@ -209,7 +221,7 @@ export type HostDashboardQuizDto = {
   projectName: string;
   title: string;
   description: string;
-  status: string;
+  status: QuizStatus;
   plannedStartAt: string | null;
   updatedAt: string;
   questionCount: number;
@@ -235,16 +247,6 @@ export const LIVE_SOCKET_NAMESPACE = '/quiz';
 /** Read-only quiz lifecycle updates for the public quiz page. */
 export const QUIZ_STATUS_NAMESPACE = '/quiz-status';
 export const QUIZ_STATUS_EVENT = 'quiz:status';
-
-export const LIVE_SESSION_STATES = [
-  'LOBBY',
-  'LIVE_IDLE',
-  'QUESTION_ACTIVE',
-  'QUESTION_RESULT',
-  'LEADERBOARD',
-  'COMPLETED',
-] as const;
-export type LiveSessionState = (typeof LIVE_SESSION_STATES)[number];
 
 export const LIVE_EVENTS = {
   join: 'session:join',
@@ -273,8 +275,6 @@ export const lateJoinCommandSchema = z
 export type LiveSessionCommand = z.infer<typeof liveSessionCommandSchema>;
 export type LateJoinCommand = z.infer<typeof lateJoinCommandSchema>;
 
-export type LiveRole = 'HOST' | 'PARTICIPANT';
-
 export type LiveSessionRefDto = {
   id: string;
   quizId: string;
@@ -299,7 +299,7 @@ export type SocketTicketDto = { ticket: string; expiresAt: string };
 
 export type QuizStatusDto = {
   quizId: string;
-  status: 'PUBLISHED' | 'LOBBY' | 'LIVE' | 'COMPLETED';
+  status: PublicQuizStatus;
 };
 
 export type LiveQuizInfoDto = {
@@ -324,7 +324,7 @@ export type LiveRosterEntryDto = {
 export type HostLiveQuestionDto = {
   id: string;
   position: number;
-  type: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'DESCRIPTIVE';
+  type: QuestionType;
   text: string;
   durationSeconds: number;
   options: Array<{ id: string; text: string; isCorrect: boolean }>;
@@ -341,14 +341,14 @@ type LiveSnapshotBase = {
 };
 
 export type HostLiveSnapshotDto = LiveSnapshotBase & {
-  role: 'HOST';
+  role: typeof LIVE_ROLE.HOST;
   /** First registrations by time; `counts.registered` is the full total. */
   roster: LiveRosterEntryDto[];
   questions: HostLiveQuestionDto[];
 };
 
 export type ParticipantLiveSnapshotDto = LiveSnapshotBase & {
-  role: 'PARTICIPANT';
+  role: typeof LIVE_ROLE.PARTICIPANT;
 };
 
 export type LiveSnapshotDto = HostLiveSnapshotDto | ParticipantLiveSnapshotDto;

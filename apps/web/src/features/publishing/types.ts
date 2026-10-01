@@ -1,11 +1,11 @@
-import type { MediaDto } from '@quizmb/contracts';
+import type { MediaDto, PublicQuizStatus } from '@quizmb/contracts';
 
 export type PublicQuizState =
   'logged-out' | 'open' | 'registered' | 'full' | 'closed';
 
 export type PublishedQuizViewModel = {
   id: string;
-  status: 'PUBLISHED' | 'LOBBY' | 'LIVE' | 'COMPLETED';
+  status: PublicQuizStatus;
   slug: string;
   title: string;
   description: string;

@@ -1,14 +1,15 @@
 import { api } from './browser';
-import type {
-  ProjectDto,
-  ProjectInput,
-  QuizDto,
-  QuizInput,
-  QuestionInput,
-  MediaDto,
-  UploadDto,
+import {
+  MEDIA_LIMITS,
+  type MediaDto,
+  type MediaPurpose,
+  type ProjectDto,
+  type ProjectInput,
+  type QuestionInput,
+  type QuizDto,
+  type QuizInput,
+  type UploadDto,
 } from '@quizmb/contracts';
-import { MEDIA_LIMITS } from '@quizmb/contracts';
 import { ApiError } from './client';
 const auth = { authenticated: true };
 export const authoringApi = {
@@ -37,7 +38,7 @@ export const authoringApi = {
 // no broad storage keys and no automatic retries of a non-idempotent upload.
 export async function uploadImage(
   quizId: string,
-  purpose: 'QUIZ_COVER' | 'QUESTION_IMAGE',
+  purpose: MediaPurpose,
   file: File,
 ): Promise<MediaDto> {
   if (

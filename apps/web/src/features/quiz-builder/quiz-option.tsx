@@ -3,8 +3,10 @@ import { Check } from 'lucide-react';
 import { Choice } from '@/components/ui/choice';
 import { Text } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { QUESTION_TYPE } from '@quizmb/contracts';
 
-type ChoiceType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE';
+type ChoiceType =
+  typeof QUESTION_TYPE.SINGLE_CHOICE | typeof QUESTION_TYPE.MULTIPLE_CHOICE;
 
 export function QuizOption({
   type,
@@ -25,7 +27,7 @@ export function QuizOption({
   const indicator = (
     <>
       <Choice
-        type={type === 'SINGLE_CHOICE' ? 'radio' : 'checkbox'}
+        type={type === QUESTION_TYPE.SINGLE_CHOICE ? 'radio' : 'checkbox'}
         name={onCorrectChange ? 'correct-answer' : undefined}
         aria-label={`Option ${letter} is correct`}
         checked={isCorrect}

@@ -1,15 +1,22 @@
-import type {
-  ActiveHostSessionDto,
-  QuizStatusDto,
-  HostLiveSnapshotDto,
-  LiveQuizInfoDto,
-  LiveRole,
-  LiveSessionRefDto,
-  LiveSnapshotDto,
-  ParticipantLiveSnapshotDto,
+import {
+  type ActiveHostSessionDto,
+  ERROR_CODE,
+  type HostLiveSnapshotDto,
+  LIVE_ROLE,
+  LIVE_SESSION_STATE,
+  type LiveQuizInfoDto,
+  type LiveRole,
+  type LiveSessionRefDto,
+  type LiveSnapshotDto,
+  type ParticipantLiveSnapshotDto,
+  QUIZ_STATUS,
+  type QuizStatusDto,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
-import type { DomainEvents } from '../../infrastructure/domain-events.js';
+import {
+  DOMAIN_EVENT,
+  type DomainEvents,
+} from '../../infrastructure/domain-events.js';
 import type { LiveStore } from './live-store.js';
 import type { LiveSessionRow, LiveSessionsRepository } from './repository.js';
 import type { SocketTickets } from './tickets.js';
@@ -18,7 +25,7 @@ import type { SocketTickets } from './tickets.js';
 export const HOST_ROSTER_LIMIT = 100;
 
 const notFound = () =>
-  new ApiError(404, 'SESSION_NOT_FOUND', 'Live session not found.');
+  new ApiError(404, ERROR_CODE.SESSION_NOT_FOUND, 'Live session not found.');
 
 export class LiveSessionsService {
   constructor(
@@ -30,13 +37,13 @@ export class LiveSessionsService {
 
   /** Lifecycle changes are published in-process for the status namespace. */
   private publishStatus(quizId: string, status: QuizStatusDto['status']) {
-    this.events?.emit('quizStatusChanged', { quizId, status });
+    this.events?.emit(DOMAIN_EVENT.quizStatusChanged, { quizId, status });
   }
 
   /** Current public lifecycle status; drafts are not watchable. */
   async quizStatus(quizId: string): Promise<QuizStatusDto> {
     const quiz = await this.repository.publicStatus(quizId);
-    if (!quiz) throw new ApiError(404, 'NOT_FOUND', 'Quiz not found.');
+    if (!quiz) throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');
     return { quizId: quiz.id, status: quiz.status as QuizStatusDto['status'] };
   }
 
@@ -54,12 +61,12 @@ export class LiveSessionsService {
 
   /** Server-side role resolution; the client never asserts its own role. */
   private async roleFor(session: LiveSessionRow, userId: string) {
-    if (session.hostUserId === userId) return 'HOST' as const;
+    if (session.hostUserId === userId) return LIVE_ROLE.HOST;
     if (await this.repository.registration(session.quizId, userId))
-      return 'PARTICIPANT' as const;
+      return LIVE_ROLE.PARTICIPANT;
     throw new ApiError(
       403,
-      'REGISTRATION_REQUIRED',
+      ERROR_CODE.REGISTRATION_REQUIRED,
       'Register for this quiz to join its live session.',
     );
   }
@@ -68,7 +75,7 @@ export class LiveSessionsService {
     if (session.hostUserId !== userId)
       throw new ApiError(
         403,
-        'FORBIDDEN',
+        ERROR_CODE.FORBIDDEN,
         'Only the quiz host can control this live session.',
       );
   }
@@ -111,7 +118,7 @@ export class LiveSessionsService {
     ]);
     return {
       ...this.base(session, connectedIds.size),
-      role: 'HOST',
+      role: LIVE_ROLE.HOST,
       roster: roster.map((registration) => ({
         userId: registration.user.id,
         name: registration.user.name,
@@ -140,7 +147,7 @@ export class LiveSessionsService {
   ): Promise<ParticipantLiveSnapshotDto> {
     return {
       ...this.base(session, await this.store.connectedCount(session.id)),
-      role: 'PARTICIPANT',
+      role: LIVE_ROLE.PARTICIPANT,
     };
   }
 
@@ -148,7 +155,7 @@ export class LiveSessionsService {
     session: LiveSessionRow,
     role: LiveRole,
   ): Promise<LiveSnapshotDto> {
-    return role === 'HOST'
+    return role === LIVE_ROLE.HOST
       ? this.hostSnapshot(session)
       : this.participantSnapshot(session);
   }
@@ -157,8 +164,8 @@ export class LiveSessionsService {
 
   async openLobby(quizId: string, hostUserId: string) {
     const id = await this.repository.openLobby(quizId, hostUserId);
-    this.publishStatus(quizId, 'LOBBY');
-    return this.ref(await this.load(id), 'HOST');
+    this.publishStatus(quizId, QUIZ_STATUS.LOBBY);
+    return this.ref(await this.load(id), LIVE_ROLE.HOST);
   }
 
   async currentForQuiz(
@@ -215,23 +222,27 @@ export class LiveSessionsService {
   async join(liveSessionId: string, userId: string, socketId: string) {
     const session = await this.load(liveSessionId);
     const role = await this.roleFor(session, userId);
-    if (role === 'HOST')
+    if (role === LIVE_ROLE.HOST)
       return {
         role,
         snapshot: await this.hostSnapshot(session),
         replacedSocketId: null,
         newlyConnected: false,
       };
-    if (session.state === 'COMPLETED')
-      throw new ApiError(409, 'QUIZ_COMPLETED', 'This live quiz has ended.');
+    if (session.state === LIVE_SESSION_STATE.COMPLETED)
+      throw new ApiError(
+        409,
+        ERROR_CODE.QUIZ_COMPLETED,
+        'This live quiz has ended.',
+      );
     if (
-      session.state !== 'LOBBY' &&
+      session.state !== LIVE_SESSION_STATE.LOBBY &&
       !session.allowLateJoin &&
       !(await this.repository.participation(session.id, userId))
     )
       throw new ApiError(
         403,
-        'LATE_JOIN_DISABLED',
+        ERROR_CODE.LATE_JOIN_DISABLED,
         'The host is not admitting new participants right now.',
       );
     await this.repository.recordJoin(session.id, userId);
@@ -308,7 +319,7 @@ export class LiveSessionsService {
     const session = await this.hostTransition(liveSessionId, userId, () =>
       this.repository.start(liveSessionId),
     );
-    this.publishStatus(session.quizId, 'LIVE');
+    this.publishStatus(session.quizId, QUIZ_STATUS.LIVE);
     return session;
   }
 
@@ -328,7 +339,7 @@ export class LiveSessionsService {
       () => this.repository.closeLobby(liveSessionId),
     );
     await this.store.clearPresence(liveSessionId);
-    this.publishStatus(quizId, 'PUBLISHED');
+    this.publishStatus(quizId, QUIZ_STATUS.PUBLISHED);
     return quizId;
   }
 
@@ -337,7 +348,7 @@ export class LiveSessionsService {
       this.repository.end(liveSessionId),
     );
     await this.store.expireCompleted(liveSessionId);
-    this.publishStatus(session.quizId, 'COMPLETED');
+    this.publishStatus(session.quizId, QUIZ_STATUS.COMPLETED);
     return session;
   }
 }

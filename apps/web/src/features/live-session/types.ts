@@ -1,8 +1,8 @@
+import type { QuestionType } from '@quizmb/contracts';
 // View models for live-session screens. They mirror the role-safe session
 // snapshots in API_DESIGN §22–23 so realtime data can replace fixtures later.
 
-export type LiveQuestionType =
-  'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'DESCRIPTIVE';
+export type LiveQuestionType = QuestionType;
 
 export type LiveQuizSummary = {
   id: string;

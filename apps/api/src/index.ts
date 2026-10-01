@@ -13,6 +13,7 @@ import { LiveSessionsRepository } from './modules/live-sessions/repository.js';
 import { LiveSessionsService } from './modules/live-sessions/service.js';
 import { LiveStore } from './modules/live-sessions/live-store.js';
 import { SocketTickets } from './modules/live-sessions/tickets.js';
+import { NODE_ENV } from './config/constants.js';
 
 const env = parseEnv(process.env);
 const authConfig = parseAuthEnv(process.env);
@@ -36,7 +37,7 @@ export default createApp({
   logger: createLogger(env.LOG_LEVEL),
   auth: new AuthService(new AuthRepository(database), authConfig),
   users: new UsersService(database),
-  production: env.NODE_ENV === 'production',
+  production: env.NODE_ENV === NODE_ENV.PRODUCTION,
   database,
   storage: createStorage(process.env),
   live,

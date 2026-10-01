@@ -1,9 +1,10 @@
 import pino from 'pino';
+import { SERVICE_NAME } from '../config/constants.js';
 
 export function createLogger(level: string) {
   return pino({
     level,
-    base: { service: 'quizmb-api' },
+    base: { service: SERVICE_NAME },
     redact: {
       paths: [
         'password',

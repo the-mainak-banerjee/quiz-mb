@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import type { PublicQuizStatus } from '@quizmb/contracts';
 
 export type RegistrationChange = {
   quizId: string;
@@ -14,10 +15,16 @@ export type RegistrationChange = {
  */
 export type QuizStatusChange = {
   quizId: string;
-  status: 'PUBLISHED' | 'LOBBY' | 'LIVE' | 'COMPLETED';
+  status: PublicQuizStatus;
 };
 
+/** Names of the in-process events carried by `DomainEvents`. */
+export const DOMAIN_EVENT = {
+  registrationChanged: 'registrationChanged',
+  quizStatusChanged: 'quizStatusChanged',
+} as const;
+
 export class DomainEvents extends EventEmitter<{
-  registrationChanged: [RegistrationChange];
-  quizStatusChanged: [QuizStatusChange];
+  [DOMAIN_EVENT.registrationChanged]: [RegistrationChange];
+  [DOMAIN_EVENT.quizStatusChanged]: [QuizStatusChange];
 }> {}

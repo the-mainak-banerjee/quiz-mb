@@ -12,11 +12,17 @@ import {
   type LiveRemovedDto,
   type LiveRole,
   type SocketAck,
+  ERROR_CODE,
+  LIVE_ROLE,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
-import type { DomainEvents } from '../../infrastructure/domain-events.js';
+import {
+  DOMAIN_EVENT,
+  type DomainEvents,
+} from '../../infrastructure/domain-events.js';
 import type { LiveSessionRow } from './repository.js';
 import type { LiveSessionsService } from './service.js';
+import { ROOM_AUDIENCE, SOCKET_EVENT, liveRoom } from './constants.js';
 
 type SocketData = {
   userId: string;
@@ -31,17 +37,17 @@ type LiveSocket = Socket<
   SocketData
 >;
 
-const room = (id: string, audience?: 'host' | 'participants') =>
-  audience ? `quiz:${id}:${audience}` : `quiz:${id}`;
-
 function failure(error: unknown, logger: Logger, event: string) {
   if (error instanceof ApiError)
     return { ok: false, error: { code: error.code, message: error.message } };
-  logger.error({ event, code: 'INTERNAL_ERROR' }, 'Live socket command failed');
+  logger.error(
+    { event, code: ERROR_CODE.INTERNAL_ERROR },
+    'Live socket command failed',
+  );
   return {
     ok: false,
     error: {
-      code: 'INTERNAL_ERROR',
+      code: ERROR_CODE.INTERNAL_ERROR,
       message: 'Something went wrong. Please try again.',
     },
   } as const;
@@ -101,9 +107,11 @@ export function attachLiveRealtime(
       service.hostSnapshot(session),
       service.participantSnapshot(session),
     ]);
-    nsp.to(room(session.id, 'host')).emit(LIVE_EVENTS.snapshot, host);
     nsp
-      .to(room(session.id, 'participants'))
+      .to(liveRoom(session.id, ROOM_AUDIENCE.HOST))
+      .emit(LIVE_EVENTS.snapshot, host);
+    nsp
+      .to(liveRoom(session.id, ROOM_AUDIENCE.PARTICIPANTS))
       .emit(LIVE_EVENTS.snapshot, participant);
   }
 
@@ -117,7 +125,7 @@ export function attachLiveRealtime(
   function sendCount(liveSessionId: string, connectedCount: number) {
     const payload: LiveCountDto = { connectedCount };
     nsp
-      .to(room(liveSessionId, 'participants'))
+      .to(liveRoom(liveSessionId, ROOM_AUDIENCE.PARTICIPANTS))
       .emit(LIVE_EVENTS.count, payload);
   }
   function publishCount(liveSessionId: string, connectedCount: number) {
@@ -138,33 +146,37 @@ export function attachLiveRealtime(
 
   // Registration can change while the lobby is open: keep the host's roster
   // and counts current, and remove participants who unregistered.
-  events?.on('registrationChanged', ({ quizId, userId, registered }) => {
-    service
-      .applyRegistrationChange(quizId, userId, registered)
-      .then(async (result) => {
-        if (!result) return;
-        if (result.removedSocketId) {
-          const removed: LiveRemovedDto = {
-            code: 'REGISTRATION_REQUIRED',
-            message: 'You unregistered from this quiz, so you left its lobby.',
-          };
-          nsp.to(result.removedSocketId).emit(LIVE_EVENTS.removed, removed);
-          nsp.in(result.removedSocketId).disconnectSockets(true);
-        }
-        const hostSnapshot = await service.hostSnapshot(result.session);
-        nsp
-          .to(room(result.session.id, 'host'))
-          .emit(LIVE_EVENTS.snapshot, hostSnapshot);
-        if (result.removedSocketId)
-          publishCount(result.session.id, hostSnapshot.counts.connected);
-      })
-      .catch(() =>
-        logger.warn(
-          { quizId, code: 'LIVE_UNAVAILABLE' },
-          'Live registration update failed',
-        ),
-      );
-  });
+  events?.on(
+    DOMAIN_EVENT.registrationChanged,
+    ({ quizId, userId, registered }) => {
+      service
+        .applyRegistrationChange(quizId, userId, registered)
+        .then(async (result) => {
+          if (!result) return;
+          if (result.removedSocketId) {
+            const removed: LiveRemovedDto = {
+              code: ERROR_CODE.REGISTRATION_REQUIRED,
+              message:
+                'You unregistered from this quiz, so you left its lobby.',
+            };
+            nsp.to(result.removedSocketId).emit(LIVE_EVENTS.removed, removed);
+            nsp.in(result.removedSocketId).disconnectSockets(true);
+          }
+          const hostSnapshot = await service.hostSnapshot(result.session);
+          nsp
+            .to(liveRoom(result.session.id, ROOM_AUDIENCE.HOST))
+            .emit(LIVE_EVENTS.snapshot, hostSnapshot);
+          if (result.removedSocketId)
+            publishCount(result.session.id, hostSnapshot.counts.connected);
+        })
+        .catch(() =>
+          logger.warn(
+            { quizId, code: ERROR_CODE.LIVE_UNAVAILABLE },
+            'Live registration update failed',
+          ),
+        );
+    },
+  );
 
   nsp.on('connection', (raw) => {
     const socket = raw as unknown as LiveSocket;
@@ -185,14 +197,18 @@ export function attachLiveRealtime(
           try {
             const parsed = schema.safeParse(payload);
             if (!parsed.success)
-              throw new ApiError(422, 'VALIDATION_ERROR', 'Invalid request.');
+              throw new ApiError(
+                422,
+                ERROR_CODE.VALIDATION_ERROR,
+                'Invalid request.',
+              );
             if (
               (parsed.data as { liveSessionId: string }).liveSessionId !==
               socket.data.ticketSessionId
             )
               throw new ApiError(
                 403,
-                'FORBIDDEN',
+                ERROR_CODE.FORBIDDEN,
                 'This connection is not authorised for that live session.',
               );
             response = { ok: true, data: await handler(parsed.data) };
@@ -208,17 +224,17 @@ export function attachLiveRealtime(
       if (!socket.data.role)
         throw new ApiError(
           409,
-          'NOT_JOINED',
+          ERROR_CODE.NOT_JOINED,
           'Join the live session before sending commands.',
         );
       return socket.data.role;
     }
 
     function requireHost() {
-      if (requireJoined() !== 'HOST')
+      if (requireJoined() !== LIVE_ROLE.HOST)
         throw new ApiError(
           403,
-          'FORBIDDEN',
+          ERROR_CODE.FORBIDDEN,
           'Only the quiz host can control this live session.',
         );
     }
@@ -230,8 +246,13 @@ export function attachLiveRealtime(
         const result = await service.join(liveSessionId, userId, socket.id);
         socket.data.role = result.role;
         await socket.join([
-          room(liveSessionId),
-          room(liveSessionId, result.role === 'HOST' ? 'host' : 'participants'),
+          liveRoom(liveSessionId),
+          liveRoom(
+            liveSessionId,
+            result.role === LIVE_ROLE.HOST
+              ? ROOM_AUDIENCE.HOST
+              : ROOM_AUDIENCE.PARTICIPANTS,
+          ),
         ]);
         if (result.replacedSocketId) {
           nsp.to(result.replacedSocketId).emit(LIVE_EVENTS.replaced, {
@@ -240,14 +261,14 @@ export function attachLiveRealtime(
           nsp.in(result.replacedSocketId).disconnectSockets(true);
           logger.info({ liveSessionId, userId }, 'Live participant replaced');
         }
-        if (result.role === 'PARTICIPANT' && result.newlyConnected) {
+        if (result.role === LIVE_ROLE.PARTICIPANT && result.newlyConnected) {
           const presence: LivePresenceDto = {
             userId,
             connected: true,
             connectedCount: result.snapshot.counts.connected,
           };
           nsp
-            .to(room(liveSessionId, 'host'))
+            .to(liveRoom(liveSessionId, ROOM_AUDIENCE.HOST))
             .emit(LIVE_EVENTS.presence, presence);
           publishCount(liveSessionId, presence.connectedCount);
         }
@@ -261,12 +282,12 @@ export function attachLiveRealtime(
       async ({ liveSessionId }) => {
         const role = requireJoined();
         if (
-          role === 'PARTICIPANT' &&
+          role === LIVE_ROLE.PARTICIPANT &&
           !(await service.isActiveSocket(liveSessionId, userId, socket.id))
         )
           throw new ApiError(
             409,
-            'SESSION_REPLACED',
+            ERROR_CODE.SESSION_REPLACED,
             'This quiz is open on another device.',
           );
         return service.sync(liveSessionId, userId, role);
@@ -316,14 +337,17 @@ export function attachLiveRealtime(
         await service.closeLobby(liveSessionId, userId);
         logger.info({ liveSessionId }, 'Live lobby closed');
         const closed: LiveRemovedDto = {
-          code: 'LOBBY_CLOSED',
+          code: ERROR_CODE.LOBBY_CLOSED,
           message: 'The host closed the lobby before starting the quiz.',
         };
         // Everyone else in the room (participants and other host tabs) is
         // told and disconnected; the closing socket gets the ack instead.
-        const others = nsp.to(room(liveSessionId)).except(socket.id);
+        const others = nsp.to(liveRoom(liveSessionId)).except(socket.id);
         others.emit(LIVE_EVENTS.removed, closed);
-        nsp.in(room(liveSessionId)).except(socket.id).disconnectSockets(true);
+        nsp
+          .in(liveRoom(liveSessionId))
+          .except(socket.id)
+          .disconnectSockets(true);
         socket.data.role = undefined;
         return null;
       },
@@ -331,7 +355,7 @@ export function attachLiveRealtime(
 
     async function release() {
       const liveSessionId = socket.data.ticketSessionId;
-      if (socket.data.role !== 'PARTICIPANT') return;
+      if (socket.data.role !== LIVE_ROLE.PARTICIPANT) return;
       socket.data.role = undefined;
       const connectedCount = await service.leave(
         liveSessionId,
@@ -344,7 +368,9 @@ export function attachLiveRealtime(
         connected: false,
         connectedCount,
       };
-      nsp.to(room(liveSessionId, 'host')).emit(LIVE_EVENTS.presence, presence);
+      nsp
+        .to(liveRoom(liveSessionId, ROOM_AUDIENCE.HOST))
+        .emit(LIVE_EVENTS.presence, presence);
       publishCount(liveSessionId, connectedCount);
     }
 
@@ -353,17 +379,20 @@ export function attachLiveRealtime(
       liveSessionCommandSchema,
       async ({ liveSessionId }) => {
         await release();
-        await socket.leave(room(liveSessionId));
-        await socket.leave(room(liveSessionId, 'participants'));
-        await socket.leave(room(liveSessionId, 'host'));
+        await socket.leave(liveRoom(liveSessionId));
+        await socket.leave(liveRoom(liveSessionId, ROOM_AUDIENCE.PARTICIPANTS));
+        await socket.leave(liveRoom(liveSessionId, ROOM_AUDIENCE.HOST));
         socket.data.role = undefined;
         return null;
       },
     );
 
-    socket.on('disconnect', () => {
+    socket.on(SOCKET_EVENT.DISCONNECT, () => {
       release().catch(() =>
-        logger.warn({ code: 'LIVE_UNAVAILABLE' }, 'Presence release failed'),
+        logger.warn(
+          { code: ERROR_CODE.LIVE_UNAVAILABLE },
+          'Presence release failed',
+        ),
       );
     });
   });

@@ -1,7 +1,11 @@
 'use client';
 
 import { RefreshCw } from 'lucide-react';
-import type { LiveQuizInfoDto } from '@quizmb/contracts';
+import {
+  ERROR_CODE,
+  LIVE_SESSION_STATE,
+  type LiveQuizInfoDto,
+} from '@quizmb/contracts';
 import { Button } from '@/components/ui';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import {
@@ -14,24 +18,33 @@ import { MAX_RECONNECT_ATTEMPTS, useLiveSession } from './use-live-session';
 import { toQuizSummary } from './view-models';
 
 const refusals: Record<string, { eyebrow: string; title: string }> = {
-  LATE_JOIN_DISABLED: {
+  [ERROR_CODE.LATE_JOIN_DISABLED]: {
     eyebrow: 'Joining closed',
     title: 'The host is not admitting new participants',
   },
-  REGISTRATION_REQUIRED: {
+  [ERROR_CODE.REGISTRATION_REQUIRED]: {
     eyebrow: 'Registration required',
     title: 'Register for this quiz to join',
   },
-  QUIZ_COMPLETED: { eyebrow: 'Quiz ended', title: 'This live quiz has ended' },
-  LOBBY_CLOSED: {
+  [ERROR_CODE.QUIZ_COMPLETED]: {
+    eyebrow: 'Quiz ended',
+    title: 'This live quiz has ended',
+  },
+  [ERROR_CODE.LOBBY_CLOSED]: {
     eyebrow: 'Lobby closed',
     title: 'The host closed the lobby',
   },
-  SESSION_NOT_FOUND: {
+  [ERROR_CODE.SESSION_NOT_FOUND]: {
     eyebrow: 'Not live',
     title: 'This quiz is not live right now',
   },
 };
+
+/** Refusals that are an expected end state, not a fault. */
+const NEUTRAL_REFUSALS = new Set<string>([
+  ERROR_CODE.QUIZ_COMPLETED,
+  ERROR_CODE.LOBBY_CLOSED,
+]);
 
 /** Participant live experience driven by the authoritative snapshot. */
 export function ParticipantLiveView({
@@ -78,11 +91,7 @@ export function ParticipantLiveView({
     return (
       <LiveNotice
         eyebrow={known?.eyebrow ?? 'Unable to join'}
-        tone={
-          ['QUIZ_COMPLETED', 'LOBBY_CLOSED'].includes(failure.code)
-            ? 'neutral'
-            : 'danger'
-        }
+        tone={NEUTRAL_REFUSALS.has(failure.code) ? 'neutral' : 'danger'}
         title={known?.title ?? 'We could not join the live room'}
         description={failure.message}
         action={backToQuiz}
@@ -90,7 +99,7 @@ export function ParticipantLiveView({
     );
   }
 
-  if (snapshot?.state === 'COMPLETED')
+  if (snapshot?.state === LIVE_SESSION_STATE.COMPLETED)
     return (
       <LiveNotice
         eyebrow="Quiz ended"
@@ -118,7 +127,7 @@ export function ParticipantLiveView({
       />
     );
 
-  return snapshot.state === 'LOBBY' ? (
+  return snapshot.state === LIVE_SESSION_STATE.LOBBY ? (
     <ParticipantLobby quiz={quiz} connected={snapshot.counts.connected} />
   ) : (
     <ParticipantLiveIdle quiz={quiz} participantName={participantName} />

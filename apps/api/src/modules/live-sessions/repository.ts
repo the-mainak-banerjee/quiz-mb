@@ -1,6 +1,13 @@
 import { Prisma, type PrismaClient } from '@quizmb/database';
 import { ApiError } from '../../http/api-error.js';
 import { lockedTransaction } from '../../infrastructure/transactions.js';
+import {
+  PUBLIC_QUIZ_STATUSES,
+  ERROR_CODE,
+  LIVE_SESSION_STATE,
+  QUIZ_STATUS,
+  REGISTRATION_STATUS,
+} from '@quizmb/contracts';
 
 export const liveSessionInclude = {
   quiz: {
@@ -10,7 +17,7 @@ export const liveSessionInclude = {
       _count: {
         select: {
           questions: true,
-          registrations: { where: { status: 'REGISTERED' } },
+          registrations: { where: { status: REGISTRATION_STATUS.REGISTERED } },
         },
       },
     },
@@ -21,12 +28,12 @@ export type LiveSessionRow = Prisma.LiveQuizSessionGetPayload<{
   include: typeof liveSessionInclude;
 }>;
 
-const active = { state: { not: 'COMPLETED' } } as const;
+const active = { state: { not: LIVE_SESSION_STATE.COMPLETED } } as const;
 
 function activeSessionConflict(liveSessionId: string, quizId: string) {
   return new ApiError(
     409,
-    'ACTIVE_SESSION_EXISTS',
+    ERROR_CODE.ACTIVE_SESSION_EXISTS,
     'You already have an active live quiz in progress.',
     { liveSessionId, quizId },
   );
@@ -35,7 +42,7 @@ function activeSessionConflict(liveSessionId: string, quizId: string) {
 function invalidTransition(): never {
   throw new ApiError(
     409,
-    'INVALID_STATE_TRANSITION',
+    ERROR_CODE.INVALID_STATE_TRANSITION,
     'This action is not available in the current live state.',
   );
 }
@@ -44,7 +51,11 @@ async function lockSession(tx: Prisma.TransactionClient, id: string) {
   await tx.$queryRaw`SELECT id FROM live_quiz_sessions WHERE id = ${id}::uuid FOR UPDATE`;
   const session = await tx.liveQuizSession.findUnique({ where: { id } });
   if (!session)
-    throw new ApiError(404, 'SESSION_NOT_FOUND', 'Live session not found.');
+    throw new ApiError(
+      404,
+      ERROR_CODE.SESSION_NOT_FOUND,
+      'Live session not found.',
+    );
   return session;
 }
 
@@ -92,21 +103,22 @@ export class LiveSessionsRepository {
             project: { ownerUserId: hostUserId },
           },
         });
-        if (!quiz) throw new ApiError(404, 'NOT_FOUND', 'Quiz not found.');
+        if (!quiz)
+          throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');
         const existing = await tx.liveQuizSession.findFirst({
           where: { quizId, ...active },
         });
         if (existing) return existing.id;
-        if (quiz.status === 'COMPLETED')
+        if (quiz.status === QUIZ_STATUS.COMPLETED)
           throw new ApiError(
             409,
-            'QUIZ_COMPLETED',
+            ERROR_CODE.QUIZ_COMPLETED,
             'This quiz has already been completed.',
           );
-        if (quiz.status !== 'PUBLISHED')
+        if (quiz.status !== QUIZ_STATUS.PUBLISHED)
           throw new ApiError(
             409,
-            'QUIZ_NOT_OPEN',
+            ERROR_CODE.QUIZ_NOT_OPEN,
             'Publish this quiz before opening its live lobby.',
           );
         const other = await tx.liveQuizSession.findFirst({
@@ -118,7 +130,7 @@ export class LiveSessionsRepository {
         });
         await tx.quiz.update({
           where: { id: quizId },
-          data: { status: 'LOBBY' },
+          data: { status: QUIZ_STATUS.LOBBY },
         });
         return session.id;
       }, lockedTransaction);
@@ -142,7 +154,7 @@ export class LiveSessionsRepository {
     return this.db.quiz.findFirst({
       where: {
         id: quizId,
-        status: { in: ['PUBLISHED', 'LOBBY', 'LIVE', 'COMPLETED'] },
+        status: { in: [...PUBLIC_QUIZ_STATUSES] },
       },
       select: { id: true, status: true },
     });
@@ -150,7 +162,7 @@ export class LiveSessionsRepository {
 
   registration(quizId: string, userId: string) {
     return this.db.quizRegistration.findFirst({
-      where: { quizId, userId, status: 'REGISTERED' },
+      where: { quizId, userId, status: REGISTRATION_STATUS.REGISTERED },
       select: { id: true },
     });
   }
@@ -182,15 +194,15 @@ export class LiveSessionsRepository {
   start(id: string) {
     return this.db.$transaction(async (tx) => {
       const session = await lockSession(tx, id);
-      if (session.state !== 'LOBBY') invalidTransition();
+      if (session.state !== LIVE_SESSION_STATE.LOBBY) invalidTransition();
       const startedAt = new Date();
       await tx.liveQuizSession.update({
         where: { id },
-        data: { state: 'LIVE_IDLE', startedAt },
+        data: { state: LIVE_SESSION_STATE.LIVE_IDLE, startedAt },
       });
       await tx.quiz.update({
         where: { id: session.quizId },
-        data: { status: 'LIVE' },
+        data: { status: QUIZ_STATUS.LIVE },
       });
     }, lockedTransaction);
   }
@@ -198,7 +210,7 @@ export class LiveSessionsRepository {
   setLateJoin(id: string, allowLateJoin: boolean) {
     return this.db.$transaction(async (tx) => {
       const session = await lockSession(tx, id);
-      if (session.state === 'COMPLETED') invalidTransition();
+      if (session.state === LIVE_SESSION_STATE.COMPLETED) invalidTransition();
       await tx.liveQuizSession.update({
         where: { id },
         data: { allowLateJoin },
@@ -214,11 +226,11 @@ export class LiveSessionsRepository {
   closeLobby(id: string) {
     return this.db.$transaction(async (tx) => {
       const session = await lockSession(tx, id);
-      if (session.state !== 'LOBBY') invalidTransition();
+      if (session.state !== LIVE_SESSION_STATE.LOBBY) invalidTransition();
       await tx.liveQuizSession.delete({ where: { id } });
       await tx.quiz.update({
         where: { id: session.quizId },
-        data: { status: 'PUBLISHED' },
+        data: { status: QUIZ_STATUS.PUBLISHED },
       });
       return session.quizId;
     }, lockedTransaction);
@@ -228,14 +240,14 @@ export class LiveSessionsRepository {
   end(id: string) {
     return this.db.$transaction(async (tx) => {
       const session = await lockSession(tx, id);
-      if (session.state === 'COMPLETED') return false;
+      if (session.state === LIVE_SESSION_STATE.COMPLETED) return false;
       await tx.liveQuizSession.update({
         where: { id },
-        data: { state: 'COMPLETED', endedAt: new Date() },
+        data: { state: LIVE_SESSION_STATE.COMPLETED, endedAt: new Date() },
       });
       await tx.quiz.update({
         where: { id: session.quizId },
-        data: { status: 'COMPLETED' },
+        data: { status: QUIZ_STATUS.COMPLETED },
       });
       return true;
     }, lockedTransaction);
@@ -243,7 +255,7 @@ export class LiveSessionsRepository {
 
   roster(quizId: string, limit: number) {
     return this.db.quizRegistration.findMany({
-      where: { quizId, status: 'REGISTERED' },
+      where: { quizId, status: REGISTRATION_STATUS.REGISTERED },
       orderBy: { registeredAt: 'asc' },
       take: limit,
       include: { user: { select: { id: true, name: true } } },
