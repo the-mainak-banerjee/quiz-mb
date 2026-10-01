@@ -5,7 +5,7 @@ import { Bold, Italic, Code, List } from 'lucide-react';
 import { Button, Text } from '@/components/ui';
 import { Textarea } from '@/components/ui/textarea';
 import { VisuallyHidden } from '@/components/visually-hidden';
-const Preview = dynamic(() => import('./markdown-preview'), {
+const Preview = dynamic(() => import('@/components/markdown-preview'), {
   loading: () => <Text tone="secondary">Loading preview…</Text>,
 });
 export function MarkdownEditor({

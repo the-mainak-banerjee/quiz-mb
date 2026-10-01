@@ -25,6 +25,8 @@ export const AUTHORING_LIMITS = {
   duration: 3600,
   participants: 10000,
 } as const;
+/** Protective bound for a descriptive answer; not a product rule. */
+export const ANSWER_LIMITS = { text: 2000 } as const;
 export const MEDIA_LIMITS = {
   maxBytes: 10 * 1024 * 1024,
   mimeTypes: ['image/png', 'image/jpeg', 'image/webp'] as const,

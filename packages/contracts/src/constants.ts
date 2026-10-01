@@ -47,6 +47,13 @@ export const QUESTION_TYPE = {
 } as const;
 export type QuestionType = ValueOf<typeof QUESTION_TYPE>;
 
+/** A participant's outcome for one asked question. */
+export const ANSWER_STATUS = {
+  SUBMITTED: 'SUBMITTED',
+  NOT_ATTEMPTED: 'NOT_ATTEMPTED',
+} as const;
+export type AnswerStatus = ValueOf<typeof ANSWER_STATUS>;
+
 export const MEDIA_PURPOSE = {
   QUIZ_COVER: 'QUIZ_COVER',
   QUESTION_IMAGE: 'QUESTION_IMAGE',

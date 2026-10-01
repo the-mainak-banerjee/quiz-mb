@@ -24,7 +24,15 @@ import {
   scoredQuestion,
   scoredQueue,
   hostQuestions,
+  participantQuestions,
+  previewDescriptiveAnswer,
+  previewResult,
+  previewStanding,
+  type ParticipantQuestionFixture,
 } from './mock-data';
+import { ParticipantQuestionView } from './participant-question';
+import { ParticipantQuestionDemo } from './participant-question-demo';
+import type { ParticipantQuestionPhase, SubmittedAnswer } from './types';
 import {
   ParticipantLiveIdle,
   ParticipantLobby,
@@ -44,13 +52,176 @@ export const LIVE_PREVIEW_SCREENS = [
   { slug: 'host-live-idle', title: 'Host — quiz live, idle' },
   { slug: 'host-descriptive', title: 'Host — active descriptive question' },
   { slug: 'host-scored', title: 'Host — active scored question' },
+  {
+    slug: 'participant-flow-single',
+    title: 'Participant — single choice, full flow (interactive)',
+  },
+  {
+    slug: 'participant-flow-multiple',
+    title: 'Participant — multiple answer, full flow (interactive)',
+  },
+  {
+    slug: 'participant-flow-descriptive',
+    title: 'Participant — descriptive, full flow (interactive)',
+  },
+  {
+    slug: 'participant-single-active',
+    title: 'Participant — single choice, answering',
+  },
+  {
+    slug: 'participant-multiple-active',
+    title: 'Participant — multiple answer, answering',
+  },
+  {
+    slug: 'participant-descriptive-active',
+    title: 'Participant — descriptive, answering',
+  },
+  {
+    slug: 'participant-late-join',
+    title: 'Participant — late join, answering',
+  },
+  {
+    slug: 'participant-submitted',
+    title: 'Participant — submitted and locked',
+  },
+  {
+    slug: 'participant-time-up',
+    title: 'Participant — time up, checking answers',
+  },
+  {
+    slug: 'participant-result-updating',
+    title: 'Participant — revealed, updating score and rank',
+  },
+  {
+    slug: 'participant-result-correct',
+    title: 'Participant — result, correct',
+  },
+  {
+    slug: 'participant-result-incorrect',
+    title: 'Participant — result, incorrect',
+  },
+  {
+    slug: 'participant-result-not-attempted',
+    title: 'Participant — result, not attempted',
+  },
+  {
+    slug: 'participant-result-multiple',
+    title: 'Participant — result, multiple answer',
+  },
+  {
+    slug: 'participant-result-descriptive',
+    title: 'Participant — result, descriptive',
+  },
 ] as const;
+
+type PreviewSlug = (typeof LIVE_PREVIEW_SCREENS)[number]['slug'];
 
 const previewHost = {
   id: 'preview',
   name: liveQuiz.hostName,
   email: 'elena@example.com',
   avatarUrl: null,
+};
+
+const { single, multiple, descriptive } = participantQuestions;
+const singleAnswer: SubmittedAnswer = {
+  selectedOptionIds: ['option-b'],
+  answerText: null,
+};
+
+/** A fixed revealed phase for a fixture and answer. */
+function revealed(
+  fixture: ParticipantQuestionFixture,
+  answer: SubmittedAnswer | null,
+  withStanding = true,
+): ParticipantQuestionPhase {
+  const result = previewResult(fixture, answer);
+  return {
+    kind: 'revealed',
+    result,
+    standing: withStanding ? previewStanding(result) : null,
+  };
+}
+
+const participantPreviews: Partial<
+  Record<
+    PreviewSlug,
+    {
+      fixture: ParticipantQuestionFixture;
+      phase: ParticipantQuestionPhase;
+      lateJoin?: boolean;
+      defaultSelectedOptionIds?: string[];
+      defaultAnswerText?: string;
+    }
+  >
+> = {
+  'participant-single-active': {
+    fixture: single,
+    phase: { kind: 'answering', remainingSeconds: 11 },
+    defaultSelectedOptionIds: ['option-b'],
+  },
+  'participant-multiple-active': {
+    fixture: multiple,
+    phase: { kind: 'answering', remainingSeconds: 18 },
+    defaultSelectedOptionIds: ['tier-a', 'tier-b'],
+  },
+  'participant-descriptive-active': {
+    fixture: descriptive,
+    phase: { kind: 'answering', remainingSeconds: 42 },
+    defaultAnswerText: previewDescriptiveAnswer,
+  },
+  'participant-late-join': {
+    fixture: single,
+    phase: { kind: 'answering', remainingSeconds: 8 },
+    lateJoin: true,
+  },
+  'participant-submitted': {
+    fixture: single,
+    phase: { kind: 'submitted', remainingSeconds: 7, answer: singleAnswer },
+  },
+  'participant-time-up': {
+    fixture: single,
+    phase: { kind: 'closed', answer: singleAnswer },
+  },
+  'participant-result-updating': {
+    fixture: single,
+    phase: revealed(single, singleAnswer, false),
+  },
+  'participant-result-correct': {
+    fixture: single,
+    phase: revealed(single, singleAnswer),
+  },
+  'participant-result-incorrect': {
+    fixture: single,
+    phase: revealed(single, {
+      selectedOptionIds: ['option-c'],
+      answerText: null,
+    }),
+  },
+  'participant-result-not-attempted': {
+    fixture: single,
+    phase: revealed(single, null),
+  },
+  'participant-result-multiple': {
+    fixture: multiple,
+    phase: revealed(multiple, {
+      selectedOptionIds: ['tier-a', 'tier-b'],
+      answerText: null,
+    }),
+  },
+  'participant-result-descriptive': {
+    fixture: descriptive,
+    phase: revealed(descriptive, {
+      selectedOptionIds: [],
+      answerText: previewDescriptiveAnswer,
+    }),
+  },
+};
+
+const flowPreviews: Partial<Record<PreviewSlug, ParticipantQuestionFixture>> = {
+  'participant-flow-single': single,
+  'participant-flow-multiple': multiple,
+  'participant-flow-descriptive': descriptive,
 };
 
 function askedCount(queue: QueueQuestion[]) {
@@ -146,9 +317,26 @@ export function LivePreviewScreen({
   screen,
   publicUrl,
 }: {
-  screen: (typeof LIVE_PREVIEW_SCREENS)[number]['slug'];
+  screen: PreviewSlug;
   publicUrl: string;
 }) {
+  const flow = flowPreviews[screen];
+  if (flow) {
+    return (
+      <LiveSessionShell>
+        <ParticipantQuestionDemo fixture={flow} />
+      </LiveSessionShell>
+    );
+  }
+  const participant = participantPreviews[screen];
+  if (participant) {
+    const { fixture, ...props } = participant;
+    return (
+      <LiveSessionShell>
+        <ParticipantQuestionView question={fixture.question} {...props} />
+      </LiveSessionShell>
+    );
+  }
   switch (screen) {
     case 'host-lobby':
       return (
@@ -239,5 +427,7 @@ export function LivePreviewScreen({
       return <ActiveHostScreen kind="descriptive" />;
     case 'host-scored':
       return <ActiveHostScreen kind="scored" />;
+    default:
+      return null;
   }
 }
