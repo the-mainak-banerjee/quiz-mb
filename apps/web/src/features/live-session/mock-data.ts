@@ -11,7 +11,11 @@ import type {
   QueueQuestion,
   QueueQuestionState,
 } from './types';
-import { ANSWER_STATUS, QUESTION_TYPE } from '@quizmb/contracts';
+import {
+  ANSWER_STATUS,
+  QUESTION_TYPE,
+  type LeaderboardDto,
+} from '@quizmb/contracts';
 
 // Development preview fixtures only; never used by product routes.
 
@@ -449,3 +453,33 @@ export function previewStanding(
     rank: result.pointsAwarded > 0 ? 9 : 18,
   };
 }
+
+// ---- Leaderboard ----------------------------------------------------------------
+
+const leaderboardScores: Array<[string, number]> = [
+  ['Sophia Lin', 4890],
+  ['Marcus Vance', 4750],
+  ['Aidan Chen', 4620],
+  ['Amara Rhee', 4410],
+  ['Julian Lewis', 4410],
+  ['Priya Desai', 4250],
+  ['Liam Torres', 4190],
+  [previewParticipantName, 4120],
+  ['Maya Hart', 4060],
+  ['Chloe Vidal', 3980],
+];
+
+/** Top 10 after question 3, with a tie at 4th place. */
+export const previewLeaderboard: LeaderboardDto = {
+  entries: leaderboardScores.map(([name, score], index) => ({
+    rank: index === 4 ? 4 : index + 1,
+    userId: `user-${index + 1}`,
+    name,
+    score,
+  })),
+  participantCount: 500,
+  afterQuestionNumber: 3,
+};
+
+/** The previewed participant: user-8 is inside the top 10. */
+export const previewParticipantId = 'user-8';

@@ -403,6 +403,30 @@ export function attachLiveRealtime(
       },
     );
 
+    on(
+      LIVE_EVENTS.leaderboardGet,
+      liveSessionCommandSchema,
+      async ({ liveSessionId }) => {
+        requireHost();
+        return service.hostLeaderboard(liveSessionId, userId);
+      },
+    );
+
+    for (const [event, shown] of [
+      [LIVE_EVENTS.leaderboardShow, true],
+      [LIVE_EVENTS.leaderboardHide, false],
+    ] as const)
+      on(event, liveSessionCommandSchema, async ({ liveSessionId }) => {
+        requireHost();
+        const session = await service.setLeaderboard(
+          liveSessionId,
+          userId,
+          shown,
+        );
+        logger.info({ liveSessionId, shown }, 'Live leaderboard toggled');
+        return broadcast(session);
+      });
+
     on(LIVE_EVENTS.answerSubmit, answerSubmitCommandSchema, async (command) => {
       if (requireJoined() !== LIVE_ROLE.PARTICIPANT)
         throw new ApiError(

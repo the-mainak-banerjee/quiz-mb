@@ -26,10 +26,13 @@ import {
   hostQuestions,
   participantQuestions,
   previewDescriptiveAnswer,
+  previewLeaderboard,
+  previewParticipantId,
   previewResult,
   previewStanding,
   type ParticipantQuestionFixture,
 } from './mock-data';
+import { HostLeaderboardView, ParticipantLeaderboard } from './leaderboard';
 import { ParticipantQuestionView } from './participant-question';
 import { ParticipantQuestionDemo } from './participant-question-demo';
 import type { ParticipantQuestionPhase, SubmittedAnswer } from './types';
@@ -111,6 +114,22 @@ export const LIVE_PREVIEW_SCREENS = [
   {
     slug: 'participant-result-descriptive',
     title: 'Participant — result, descriptive',
+  },
+  {
+    slug: 'host-leaderboard-private',
+    title: 'Host — leaderboard, private view',
+  },
+  {
+    slug: 'host-leaderboard-shown',
+    title: 'Host — leaderboard shown to participants',
+  },
+  {
+    slug: 'participant-leaderboard-top',
+    title: 'Participant — leaderboard, in the top 10',
+  },
+  {
+    slug: 'participant-leaderboard-outside',
+    title: 'Participant — leaderboard, outside the top 10',
   },
 ] as const;
 
@@ -232,10 +251,12 @@ function HostRail({
   asked,
   submitted,
   questionLive,
+  leaderboardShown = false,
 }: {
   asked: number;
   submitted?: number | undefined;
   questionLive: boolean;
+  leaderboardShown?: boolean;
 }) {
   return (
     <>
@@ -244,7 +265,10 @@ function HostRail({
         questionCount={liveQuiz.questionCount}
         questionLive={questionLive}
       />
-      <LeaderboardPanel canShowParticipants={!questionLive} />
+      <LeaderboardPanel
+        canShowParticipants={!questionLive}
+        shown={leaderboardShown}
+      />
       <ParticipantsPanel
         participants={connectedParticipants}
         connected={liveCounts.connected}
@@ -325,6 +349,72 @@ export function LivePreviewScreen({
     return (
       <LiveSessionShell>
         <ParticipantQuestionDemo fixture={flow} />
+      </LiveSessionShell>
+    );
+  }
+  if (
+    screen === 'host-leaderboard-private' ||
+    screen === 'host-leaderboard-shown'
+  ) {
+    const shown = screen === 'host-leaderboard-shown';
+    const asked = askedCount(idleQueue);
+    return (
+      <LiveSessionShell>
+        <HostConsoleLayout
+          header={
+            <HostConsoleHeader
+              projectName={liveQuiz.projectName}
+              quizTitle={liveQuiz.title}
+              title={shown ? 'Leaderboard on screen' : 'Question 3 ended'}
+              description={
+                shown
+                  ? 'Participants see the top 10. Hide it, or select the next question when you are ready.'
+                  : 'Participants now see the correct answer and their own result. Choose the next question when you are ready.'
+              }
+              status={shown ? 'Showing leaderboard' : 'Idle between questions'}
+              connected={liveCounts.connected}
+              registered={liveCounts.registered}
+              asked={asked}
+              questionCount={liveQuiz.questionCount}
+            />
+          }
+          queue={
+            <QuestionQueue
+              questions={idleQueue}
+              defaultDurationSeconds={liveQuiz.defaultDurationSeconds}
+            />
+          }
+          main={
+            <HostLeaderboardView board={previewLeaderboard} shown={shown} />
+          }
+          rail={
+            <HostRail
+              asked={asked}
+              questionLive={false}
+              leaderboardShown={shown}
+            />
+          }
+        />
+      </LiveSessionShell>
+    );
+  }
+  if (
+    screen === 'participant-leaderboard-top' ||
+    screen === 'participant-leaderboard-outside'
+  ) {
+    const inside = screen === 'participant-leaderboard-top';
+    return (
+      <LiveSessionShell>
+        <ParticipantLeaderboard
+          board={previewLeaderboard}
+          participantId={inside ? previewParticipantId : 'user-outside'}
+          standing={{
+            askedQuestionId: 'asked-3',
+            totalScore: inside ? 4120 : 3240,
+            rank: inside ? 8 : 18,
+            participantCount: 500,
+          }}
+        />
       </LiveSessionShell>
     );
   }

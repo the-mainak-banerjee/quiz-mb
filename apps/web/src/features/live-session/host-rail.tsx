@@ -15,7 +15,6 @@ import {
   Surface,
   Text,
 } from '@/components/ui';
-import { PreviewButton } from '@/components/workspace/preview-actions';
 import { ActionButton } from './action-button';
 import { percentOf } from './format';
 import { LateJoinToggle } from './late-join-toggle';
@@ -140,10 +139,24 @@ export function ParticipantsPanel({
 }
 
 /** Host-controlled leaderboard visibility. */
+/**
+ * Leaderboard controls: a host-only view, or showing the top 10 on every
+ * participant screen. Available between questions once one has ended.
+ */
 export function LeaderboardPanel({
   canShowParticipants,
+  shown = false,
+  busy = false,
+  onView,
+  onShow,
+  onHide,
 }: {
   canShowParticipants: boolean;
+  shown?: boolean;
+  busy?: boolean;
+  onView?: (() => void) | undefined;
+  onShow?: (() => void) | undefined;
+  onHide?: (() => void) | undefined;
 }) {
   return (
     <Surface as="section" className="flex flex-col gap-space-sm">
@@ -156,30 +169,58 @@ export function LeaderboardPanel({
           <Trophy size={18} aria-hidden="true" className="text-accent" />
           Leaderboard
         </Text>
-        <Badge variant="draft" label="Hidden" />
+        <Badge
+          variant={shown ? 'live' : 'draft'}
+          label={shown ? 'Showing' : 'Hidden'}
+        />
       </div>
-      <Callout icon={<EyeOff size={16} aria-hidden="true" />}>
-        Hidden from participants. Check standings privately or show the top 10
-        on every screen.
+      <Callout
+        icon={
+          shown ? (
+            <MonitorUp size={16} aria-hidden="true" />
+          ) : (
+            <EyeOff size={16} aria-hidden="true" />
+          )
+        }
+      >
+        {shown
+          ? 'Every participant screen shows the top 10. Hide it or ask the next question.'
+          : 'Hidden from participants. Check standings privately or show the top 10 on every screen.'}
       </Callout>
       <div className="flex flex-col gap-2">
-        <PreviewButton
-          action="Viewing the leaderboard"
+        <ActionButton
+          preview="Viewing the leaderboard"
+          onAction={onView}
           variant="secondary"
           className="w-full"
+          disabled={!canShowParticipants || busy}
           icon={<Eye size={18} aria-hidden="true" />}
         >
           View leaderboard (host only)
-        </PreviewButton>
-        <PreviewButton
-          action="Showing the leaderboard"
-          variant="outline"
-          className="w-full"
-          disabled={!canShowParticipants}
-          icon={<MonitorUp size={18} aria-hidden="true" />}
-        >
-          Show to participants
-        </PreviewButton>
+        </ActionButton>
+        {shown ? (
+          <ActionButton
+            preview="Hiding the leaderboard"
+            onAction={onHide}
+            variant="outline"
+            className="w-full"
+            disabled={busy}
+            icon={<EyeOff size={18} aria-hidden="true" />}
+          >
+            Hide from participants
+          </ActionButton>
+        ) : (
+          <ActionButton
+            preview="Showing the leaderboard"
+            onAction={onShow}
+            variant="outline"
+            className="w-full"
+            disabled={!canShowParticipants || busy}
+            icon={<MonitorUp size={18} aria-hidden="true" />}
+          >
+            Show to participants
+          </ActionButton>
+        )}
         {!canShowParticipants && (
           <Text variant="caption" tone="secondary" className="text-center">
             Available between questions

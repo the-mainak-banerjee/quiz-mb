@@ -9,6 +9,7 @@ import {
 } from '@quizmb/contracts';
 import { Button } from '@/components/ui';
 import { NavigationItem } from '@/components/workspace/navigation-item';
+import { ParticipantLeaderboard } from './leaderboard';
 import { ParticipantLiveQuestion } from './participant-live-question';
 import {
   LiveNotice,
@@ -52,12 +53,15 @@ const NEUTRAL_REFUSALS = new Set<string>([
 export function ParticipantLiveView({
   liveSessionId,
   quiz: initialQuiz,
+  participantId,
   participantName,
   quizHref,
 }: {
   liveSessionId: string;
   /** Server-loaded quiz details for screens shown before the first snapshot. */
   quiz: LiveQuizInfoDto;
+  /** The signed-in user, to highlight their own leaderboard row. */
+  participantId: string;
   participantName: string;
   quizHref: string;
 }) {
@@ -144,6 +148,15 @@ export function ParticipantLiveView({
         eyebrow="Connecting"
         title="Joining the live room…"
         description={`Connecting you to ${quiz.title}.`}
+      />
+    );
+
+  if (snapshot.role === LIVE_ROLE.PARTICIPANT && snapshot.leaderboard)
+    return (
+      <ParticipantLeaderboard
+        board={snapshot.leaderboard}
+        standing={myStanding}
+        participantId={participantId}
       />
     );
 

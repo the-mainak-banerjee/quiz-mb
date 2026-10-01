@@ -305,6 +305,19 @@ export function useLiveSession(liveSessionId: string) {
     [liveSessionId, receive],
   );
 
+  /** A read-only request whose reply is not a snapshot (e.g. leaderboard). */
+  const query = useCallback(
+    async <T>(event: string) => {
+      const socket = socketRef.current;
+      if (!socket?.connected) return notConnected;
+      return (await socket
+        .timeout(10_000)
+        .emitWithAck(event, { liveSessionId })
+        .catch(() => timedOut)) as SocketAck<T>;
+    },
+    [liveSessionId],
+  );
+
   /** Submits this participant's answer; the server locks it on success. */
   const submitAnswer = useCallback(
     async (
@@ -359,6 +372,7 @@ export function useLiveSession(liveSessionId: string) {
     failure,
     attempt,
     command,
+    query,
     reconnect,
     myAnswer,
     myStanding,

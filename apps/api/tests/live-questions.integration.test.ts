@@ -15,6 +15,7 @@ import {
   QUESTION_TYPE,
   type HostLiveSnapshotDto,
   type HostQuestionProgressDto,
+  type LeaderboardDto,
   type LiveSessionRefDto,
   type LiveSnapshotDto,
   type ParticipantAnswerDto,
@@ -493,6 +494,72 @@ test(
     assert.equal(bStanding.rank, 2);
     assert.equal(lateStanding.rank, 2, 'equal scores share a rank');
     assert.equal(lateStanding.totalScore, 0);
+
+    // ---- Leaderboard: host-only private view, then shown and hidden.
+    assert.equal(
+      errorCode(await emit(a.socket, LIVE_EVENTS.leaderboardGet, {})),
+      ERROR_CODE.FORBIDDEN,
+    );
+    const privateBoard = ok(
+      await emit<LeaderboardDto>(host.socket, LIVE_EVENTS.leaderboardGet, {}),
+    );
+    assert.equal(privateBoard.participantCount, 3);
+    assert.equal(privateBoard.afterQuestionNumber, 1);
+    assert.deepEqual(
+      privateBoard.entries.map((entry) => [entry.rank, entry.score]),
+      [
+        [1, firstPoints],
+        [2, 0],
+        [2, 0],
+      ],
+      'tied participants share a rank and are all listed',
+    );
+    assert.equal(privateBoard.entries[0]?.name, 'Questions a');
+    const boardOnA = waitFor<ParticipantLiveSnapshotDto>(
+      a.socket,
+      LIVE_EVENTS.snapshot,
+      (snapshot) => snapshot.state === LIVE_SESSION_STATE.LEADERBOARD,
+    );
+    const shownHost = ok(
+      await emit<HostLiveSnapshotDto>(
+        host.socket,
+        LIVE_EVENTS.leaderboardShow,
+        {},
+      ),
+    );
+    assert.equal(shownHost.state, LIVE_SESSION_STATE.LEADERBOARD);
+    assert.equal(shownHost.leaderboard?.entries.length, 3);
+    const aBoard = await boardOnA;
+    assert.equal(aBoard.leaderboard?.entries[0]?.name, 'Questions a');
+    assert.equal(
+      aBoard.question?.askedQuestionId,
+      askedFirst,
+      'the latest result stays underneath the leaderboard',
+    );
+    assert.equal(
+      errorCode(await emit(host.socket, LIVE_EVENTS.leaderboardShow, {})),
+      ERROR_CODE.INVALID_STATE_TRANSITION,
+    );
+    const lateDuringBoard = ok(
+      await emit<ParticipantLiveSnapshotDto>(late.socket, LIVE_EVENTS.sync, {}),
+    );
+    assert.equal(lateDuringBoard.state, LIVE_SESSION_STATE.LEADERBOARD);
+    assert.equal(
+      lateDuringBoard.myStanding?.rank,
+      2,
+      'personal rank stays available',
+    );
+    const hiddenOnA = waitFor<ParticipantLiveSnapshotDto>(
+      a.socket,
+      LIVE_EVENTS.snapshot,
+      (snapshot) => snapshot.state === LIVE_SESSION_STATE.QUESTION_RESULT,
+    );
+    ok(await emit(host.socket, LIVE_EVENTS.leaderboardHide, {}));
+    const backToResult = await hiddenOnA;
+    assert.equal(backToResult.leaderboard, null);
+    assert.equal(backToResult.question?.askedQuestionId, askedFirst);
+    // Shown again: asking the next question from the leaderboard hides it.
+    ok(await emit(host.socket, LIVE_EVENTS.leaderboardShow, {}));
     assert.equal(
       errorCode(
         await submit(late.socket, {
@@ -519,6 +586,12 @@ test(
       }),
     );
     const askedSecond = descriptiveHost.currentQuestion!.askedQuestionId;
+    assert.equal(descriptiveHost.leaderboard, null);
+    assert.equal(
+      errorCode(await emit(host.socket, LIVE_EVENTS.leaderboardShow, {})),
+      ERROR_CODE.INVALID_STATE_TRANSITION,
+      'never during a question',
+    );
     (live as unknown as { clearTimer(id: string): void }).clearTimer(
       liveSessionId,
     );

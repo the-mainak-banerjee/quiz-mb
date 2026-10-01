@@ -8,6 +8,7 @@ import {
   type HostCurrentQuestionDto,
   type HostLiveQuestionDto,
   type HostLiveSnapshotDto,
+  type LeaderboardDto,
   ERROR_CODE,
   LIVE_ROLE,
   LIVE_SESSION_STATE,
@@ -21,6 +22,7 @@ import { HostActiveQuestion } from './host-active-question';
 import { HostConsoleHeader, HostConsoleLayout } from './host-console-layout';
 import { HostLiveIdle } from './host-live-idle';
 import { HostLobby } from './host-lobby';
+import { HostLeaderboardView } from './leaderboard';
 import {
   LeaderboardPanel,
   ParticipantsPanel,
@@ -126,10 +128,15 @@ export function HostLiveConsole({
     failure,
     attempt,
     command,
+    query,
     reconnect,
     clockOffsetMs,
     resync,
   } = useLiveSession(liveSessionId);
+  /** Host-only leaderboard preview; participants' screens do not change. */
+  const [privateBoard, setPrivateBoard] = useState<LeaderboardDto | null>(null);
+  /** Bumped when the host opens or shows the leaderboard, to scroll to it. */
+  const [boardFocus, setBoardFocus] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState<
@@ -222,8 +229,27 @@ export function HostLiveConsole({
   const asked = host.askedQuestions.length;
   const activeEntry = queue.find((item) => item.id === activeId);
   const activeQuestion = host.questions.find((item) => item.id === activeId);
-  const justEnded =
-    host.state === LIVE_SESSION_STATE.QUESTION_RESULT ? current : null;
+  const showing = host.state === LIVE_SESSION_STATE.LEADERBOARD;
+  const betweenQuestions =
+    host.state === LIVE_SESSION_STATE.QUESTION_RESULT || showing;
+  const justEnded = betweenQuestions ? current : null;
+  const board = showing ? host.leaderboard : privateBoard;
+  async function viewLeaderboard() {
+    setBusy(true);
+    setError('');
+    const ack = await query<LeaderboardDto>(LIVE_EVENTS.leaderboardGet);
+    setBusy(false);
+    if (ack.ok) {
+      setPrivateBoard(ack.data);
+      setBoardFocus((count) => count + 1);
+    } else setError(ack.error.message);
+  }
+  const showLeaderboard = async () => {
+    if (!(await run(LIVE_EVENTS.leaderboardShow))) return;
+    setPrivateBoard(null);
+    setBoardFocus((count) => count + 1);
+  };
+  const hideLeaderboard = () => void run(LIVE_EVENTS.leaderboardHide);
   const endedEntry = queue.find((item) => item.id === justEnded?.questionId);
   const endedQuestion = host.questions.find(
     (item) => item.id === justEnded?.questionId,
@@ -235,18 +261,28 @@ export function HostLiveConsole({
       title={
         activeId
           ? 'Question live'
-          : justEnded
-            ? `Question ${justEnded.number} ended`
-            : 'Quiz is live'
+          : showing
+            ? 'Leaderboard on screen'
+            : justEnded
+              ? `Question ${justEnded.number} ended`
+              : 'Quiz is live'
       }
       description={
         activeId
           ? 'Submissions close automatically when the timer ends.'
-          : justEnded
-            ? 'Participants now see the correct answer and their own result. Choose the next question when you are ready.'
-            : 'No question is active. Connected participants are waiting for your next question.'
+          : showing
+            ? 'Participants see the top 10. Hide it, or select the next question when you are ready.'
+            : justEnded
+              ? 'Participants now see the correct answer and their own result. Choose the next question when you are ready.'
+              : 'No question is active. Connected participants are waiting for your next question.'
       }
-      status={activeId ? 'Question live' : 'Idle between questions'}
+      status={
+        activeId
+          ? 'Question live'
+          : showing
+            ? 'Showing leaderboard'
+            : 'Idle between questions'
+      }
       connected={host.counts.connected}
       registered={host.counts.registered}
       asked={asked}
@@ -261,7 +297,14 @@ export function HostLiveConsole({
         questionLive={!!activeId}
         onEndQuiz={() => setConfirming('end')}
       />
-      <LeaderboardPanel canShowParticipants={!activeId} />
+      <LeaderboardPanel
+        canShowParticipants={betweenQuestions}
+        shown={showing}
+        busy={busy}
+        onView={() => void viewLeaderboard()}
+        onShow={() => void showLeaderboard()}
+        onHide={hideLeaderboard}
+      />
       <ParticipantsPanel
         participants={roster.filter((participant) => participant.connected)}
         connected={host.counts.connected}
@@ -351,17 +394,29 @@ export function HostLiveConsole({
         />
       ) : (
         <HostLiveIdle
+          key={board ? 'leaderboard' : 'question'}
           header={header}
           questions={queue}
           hostQuestions={toHostQuestions(host.questions)}
           defaultDurationSeconds={quiz.defaultDurationSeconds}
           rail={rail}
           asking={busy}
-          onAsk={(questionId) =>
-            void run(LIVE_EVENTS.questionStart, { questionId })
-          }
+          onAsk={(questionId) => {
+            setPrivateBoard(null);
+            void run(LIVE_EVENTS.questionStart, { questionId });
+          }}
           idleMain={
-            justEnded && endedEntry && endedQuestion ? (
+            board ? (
+              <HostLeaderboardView
+                board={board}
+                shown={showing}
+                busy={busy}
+                onShow={() => void showLeaderboard()}
+                onHide={hideLeaderboard}
+                onClose={() => setPrivateBoard(null)}
+                focusKey={boardFocus}
+              />
+            ) : justEnded && endedEntry && endedQuestion ? (
               <ActiveQuestionMain
                 key={justEnded.askedQuestionId}
                 entry={endedEntry}

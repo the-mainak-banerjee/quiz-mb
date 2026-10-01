@@ -352,7 +352,7 @@ function ResultBanner({
 }
 
 /** Live status line at the foot of the question card. */
-function StatusStrip({
+export function StatusStrip({
   tone = 'neutral',
   icon,
   title,

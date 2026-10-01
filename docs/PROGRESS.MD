@@ -2,9 +2,19 @@
 
 ## Current status
 
-Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Phase 5 (lobby and live-session foundation) and Phases 6–8 (live questions, submission, scoring, personal rank and live distribution) are implemented end to end, including a minimal End quiz; host presentation controls, leaderboard, final results and history remain for Phases 9–10. No deployment has been performed.
+Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Phase 5 (lobby and live-session foundation), Phases 6–8 (live questions, submission, scoring, personal rank and live distribution) and Phase 9 (host presentation controls and leaderboard) are implemented end to end, including a minimal End quiz; final results and history remain for Phase 10. No deployment has been performed.
 
 This document records implementation progress, verification results, limitations, and approved scope adjustments. Project setup and usage instructions belong in the root README.
+
+## Phase 9 — Host presentation controls and leaderboard — October 1, 2026
+
+Branch `phase-9-leaderboard`. QA approved.
+
+- Host can view the Top 10 privately (replaces the console's main area and scrolls into view), show it on every participant screen, and hide it again; participants then return to the latest question result. Asking the next question from the leaderboard hides it. Nothing advances automatically.
+- Participants see the Top 10 in the same live page, with their own row highlighted and their rank and score always available (with the gap to the top 10 when outside it).
+- Top 10 includes everyone ranked 10th or better, so ties at the boundary add rows; ties share a rank. Uses the existing `LEADERBOARD` session state; no migration.
+- Performance: leaderboard and final question results are cached per session until the next question ends; show/hide is one conditional update; the session row loads in one query (show/hide about 2.2 s → 0.85 s at high database latency).
+- Checks: format, lint, typecheck, unit tests, build, and both live integration tests (now covering the leaderboard) passed.
 
 ## Phases 6–8 — Live questions, scoring and distribution — October 1, 2026
 
