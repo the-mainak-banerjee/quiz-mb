@@ -20,7 +20,7 @@ No rate limiting exists yet. It was deliberately deferred and must be added befo
 Scope, following API_DESIGN §46 and DATABASE_REDIS_SOCKET_DESIGN §52:
 
 - REST: `POST /api/auth/signup`, `/auth/login`, `/auth/refresh` (per IP and per normalized email/account), `POST /api/quizzes/:id/register`, `POST /api/media/upload-request`, `POST /api/quizzes/:id/live-session` and `POST /api/live-sessions/:id/socket-ticket`.
-- Socket.IO: `session:join`, and later `answer:submit`, `host:question-start` and `host:quiz-end`, per user.
+- Socket.IO: `session:join`, `session:sync`, `answer:submit`, `host:question-start` and `host:quiz-end`, per user. Today a joined participant can loop `answer:submit` with unknown question ids (one database read each) or `session:sync` (several reads each), which can exhaust the small connection pool for every session.
 - Use Redis counters with TTL (`rate:{scope}:{identifier}:{window}`) so limits hold across instances; return `429 RATE_LIMITED` (REST) or a `RATE_LIMITED` acknowledgement (sockets). Do not add an in-memory per-instance fallback.
 - Upstash free tier: each limited request costs at least one Redis command (`INCR` plus `EXPIRE`, or a single Lua script). Choose windows and scopes that keep monthly usage within the free quota.
 - Behind Render's proxy, derive the client IP from a trusted `X-Forwarded-For` hop (configure Express `trust proxy` accordingly), never from an arbitrary header.
@@ -51,3 +51,7 @@ Question prompts are written in Markdown, but its behaviour is not production re
 - Decide the supported syntax (headings, lists, code, links, images are currently disallowed) and how large elements such as headings look inside a prompt on each screen and on phones.
 - Confirm sanitization and link handling are safe for participant-facing content, and that long or complex prompts stay readable.
 - Improve the editor experience (toolbar, preview, character limits) as needed.
+
+## Phase 10: reveal and standings when the host ends during a question
+
+`LiveSessionsRepository.end()` force-completes the active asked question but no `questionEnded` event follows, so participants never see that question's reveal, their own correctness and points, or standings that include it (accepted answers are kept and scored). Handle it with Phase 10's End Quiz and final leaderboard: show the final question's result and recalculated standings, or the final results, after ending mid-question. Cover it in the live questions integration test.

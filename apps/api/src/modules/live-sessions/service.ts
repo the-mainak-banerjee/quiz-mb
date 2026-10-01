@@ -25,6 +25,7 @@ import {
   QUIZ_STATUS,
   type QuizStatusDto,
 } from '@quizmb/contracts';
+import type { Logger } from 'pino';
 import { ApiError } from '../../http/api-error.js';
 import {
   DOMAIN_EVENT,
@@ -55,6 +56,15 @@ const CLOSE_GRACE_MS = 50;
 const CLOSE_RETRY_MS = 2_000;
 const CLOSE_MAX_RETRIES = 5;
 
+/** Signed image URLs live an hour; reuse them for a little less. */
+const IMAGE_URL_CACHE_MS = 50 * 60_000;
+/** A failed signing is retried on a later snapshot, not cached for long. */
+const IMAGE_URL_RETRY_MS = 30_000;
+/** Session caches unused this long are dropped (abandoned sessions). */
+const CACHE_IDLE_MS = 2 * 60 * 60_000;
+/** How often idle session caches are swept, lazily on cache access. */
+const CACHE_SWEEP_MS = 10 * 60_000;
+
 /** States in which the latest asked question stays on screen. */
 const QUESTION_STATES: readonly string[] = [
   LIVE_SESSION_STATE.QUESTION_ACTIVE,
@@ -78,6 +88,36 @@ type AnswerKey = {
   options: Array<{ id: string; isCorrect: boolean }>;
   startedAt: Date;
   endsAt: Date;
+};
+
+type HostQuestions = Awaited<
+  ReturnType<LiveSessionsRepository['hostQuestions']>
+>;
+type Progress = Awaited<ReturnType<LiveSessionsRepository['progress']>>;
+
+/**
+ * In-process caches for one live session (single API instance). Everything
+ * here can be rebuilt from PostgreSQL, so dropping an entry is always safe.
+ */
+type SessionCache = {
+  lastUsedAt: number;
+  /** Quiz content; it is locked once the quiz starts. */
+  questions?: HostQuestions;
+  /** Participants whose registration was confirmed (frozen once live). */
+  confirmed: Set<string>;
+  /** Answer keys per asked question, so an answer costs one round trip. */
+  answerKeys: Map<string, AnswerKey>;
+  /** Signed image URL of the latest asked question. */
+  image?: { askedQuestionId: string; url: string | null; expiresAt: number };
+  /**
+   * Values that cannot change until the next question ends: the ended
+   * question's final progress (submissions are closed) and the leaderboard
+   * (standings move only when a question ends or someone new enters).
+   * Promises, so concurrent host and participant snapshots share one query.
+   */
+  finalProgress?:
+    { askedQuestionId: string; progress: Promise<Progress> } | undefined;
+  board?: Promise<LeaderboardDto> | undefined;
 };
 
 const submissionClosed = () =>
@@ -117,60 +157,43 @@ function answerDto(
 }
 
 export class LiveSessionsService {
-  /** One close timer per session with an active question (in process). */
-  private timers = new Map<string, NodeJS.Timeout>();
-  /** Signed image URLs per asked question, valid for an hour. */
-  private imageUrls = new Map<string, string | null>();
-  /**
-   * Hot-path caches so an answer costs one database round trip: answer keys
-   * per asked question, and participants whose registration was confirmed
-   * (registration is frozen once the quiz is live).
-   */
-  private answerKeys = new Map<string, AnswerKey>();
-  private confirmed = new Map<string, Set<string>>();
-  /** Quiz content per started session; it is locked once the quiz starts. */
-  private questionCache = new Map<
+  /** The close timer of each session's active question (in process). */
+  private timers = new Map<
     string,
-    Awaited<ReturnType<LiveSessionsRepository['hostQuestions']>>
+    { askedQuestionId: string; timer: NodeJS.Timeout }
   >();
+  private caches = new Map<string, SessionCache>();
+  private lastSweepAt = Date.now();
 
-  private async quizQuestions(session: LiveSessionRow) {
-    const cached = this.questionCache.get(session.id);
-    if (cached) return cached;
-    const questions = await this.repository.hostQuestions(session.quizId);
-    if (session.state !== LIVE_SESSION_STATE.LOBBY)
-      this.questionCache.set(session.id, questions);
-    return questions;
+  /** The session's caches, created on first use; sweeps idle ones. */
+  private cacheFor(liveSessionId: string) {
+    const now = Date.now();
+    if (now - this.lastSweepAt > CACHE_SWEEP_MS) {
+      this.lastSweepAt = now;
+      for (const [id, cache] of this.caches)
+        if (now - cache.lastUsedAt > CACHE_IDLE_MS) this.caches.delete(id);
+    }
+    let cache = this.caches.get(liveSessionId);
+    if (!cache) {
+      cache = { lastUsedAt: now, confirmed: new Set(), answerKeys: new Map() };
+      this.caches.set(liveSessionId, cache);
+    }
+    cache.lastUsedAt = now;
+    return cache;
   }
 
-  /**
-   * Values that cannot change until the next question ends, per session:
-   * the ended question's final progress (submissions are closed) and the
-   * leaderboard (standings move only when a question ends or someone new
-   * enters). Promises are cached so concurrent host and participant
-   * snapshots share one query; showing or hiding the leaderboard and
-   * re-reading a result cost no queries.
-   */
-  private finalProgress = new Map<
-    string,
-    {
-      askedQuestionId: string;
-      progress: Promise<
-        Awaited<ReturnType<LiveSessionsRepository['progress']>>
-      >;
-    }
-  >();
-  private boards = new Map<string, Promise<LeaderboardDto>>();
+  private async quizQuestions(session: LiveSessionRow) {
+    const cache = this.cacheFor(session.id);
+    if (cache.questions) return cache.questions;
+    const questions = await this.repository.hostQuestions(session.quizId);
+    if (session.state !== LIVE_SESSION_STATE.LOBBY) cache.questions = questions;
+    return questions;
+  }
 
   /** Forgets in-memory state for a session that has finished. */
   private forget(liveSessionId: string) {
     this.clearTimer(liveSessionId);
-    this.confirmed.delete(liveSessionId);
-    this.questionCache.delete(liveSessionId);
-    this.finalProgress.delete(liveSessionId);
-    this.boards.delete(liveSessionId);
-    for (const [id, key] of this.answerKeys)
-      if (key.liveSessionId === liveSessionId) this.answerKeys.delete(id);
+    this.caches.delete(liveSessionId);
   }
 
   constructor(
@@ -179,6 +202,7 @@ export class LiveSessionsService {
     readonly tickets: SocketTickets,
     private events?: DomainEvents,
     private media?: Pick<MediaService, 'dto'>,
+    private logger?: Pick<Logger, 'warn' | 'error'>,
   ) {}
 
   /** Lifecycle changes are published in-process for the status namespace. */
@@ -278,11 +302,18 @@ export class LiveSessionsService {
 
   private async imageUrl(asked: AskedQuestionRow) {
     if (!asked.question.image || !this.media) return null;
-    const cached = this.imageUrls.get(asked.id);
-    if (cached !== undefined) return cached;
+    const cache = this.cacheFor(asked.liveSessionId);
+    const cached = cache.image;
+    if (cached?.askedQuestionId === asked.id && cached.expiresAt > Date.now())
+      return cached.url;
     const media = await this.media.dto(asked.question.image).catch(() => null);
-    this.imageUrls.set(asked.id, media?.url ?? null);
-    return media?.url ?? null;
+    const url = media?.url ?? null;
+    cache.image = {
+      askedQuestionId: asked.id,
+      url,
+      expiresAt: Date.now() + (url ? IMAGE_URL_CACHE_MS : IMAGE_URL_RETRY_MS),
+    };
+    return url;
   }
 
   private async participantQuestion(
@@ -322,20 +353,21 @@ export class LiveSessionsService {
         asked.question.type === QUESTION_TYPE.DESCRIPTIVE,
       );
     if (asked.status !== ASKED_QUESTION_STATUS.COMPLETED) return load();
-    const cached = this.finalProgress.get(asked.liveSessionId);
-    if (cached?.askedQuestionId === asked.id) return cached.progress;
+    const cache = this.cacheFor(asked.liveSessionId);
+    if (cache.finalProgress?.askedQuestionId === asked.id)
+      return cache.finalProgress.progress;
     const progress = load();
-    this.finalProgress.set(asked.liveSessionId, {
-      askedQuestionId: asked.id,
-      progress,
+    const entry = { askedQuestionId: asked.id, progress };
+    cache.finalProgress = entry;
+    progress.catch(() => {
+      if (cache.finalProgress === entry) cache.finalProgress = undefined;
     });
-    progress.catch(() => this.finalProgress.delete(asked.liveSessionId));
     return progress;
   }
 
   private toProgressDto(
     askedQuestionId: string,
-    progress: Awaited<ReturnType<LiveSessionsRepository['progress']>>,
+    progress: Progress,
   ): HostQuestionProgressDto {
     return {
       askedQuestionId,
@@ -363,32 +395,34 @@ export class LiveSessionsService {
     };
   }
 
-  /** Top standings with names (ties at the last rank included). */
+  /** Top standings with names (at most LEADERBOARD_SIZE, scorers only). */
   leaderboard(liveSessionId: string): Promise<LeaderboardDto> {
-    const cached = this.boards.get(liveSessionId);
-    if (cached) return cached;
+    const cache = this.cacheFor(liveSessionId);
+    if (cache.board) return cache.board;
     const board = this.loadLeaderboard(liveSessionId);
-    this.boards.set(liveSessionId, board);
-    board.catch(() => this.boards.delete(liveSessionId));
+    cache.board = board;
+    board.catch(() => {
+      if (cache.board === board) cache.board = undefined;
+    });
     return board;
   }
 
   private async loadLeaderboard(
     liveSessionId: string,
   ): Promise<LeaderboardDto> {
-    const rows = await this.repository.leaderboard(
+    const board = await this.repository.leaderboard(
       liveSessionId,
       LEADERBOARD_SIZE,
     );
     return {
-      entries: rows.map(({ rank, userId, name, score }) => ({
+      entries: board.entries.map(({ rank, userId, name, totalScore }) => ({
         rank,
         userId,
         name,
-        score,
+        score: totalScore,
       })),
-      participantCount: rows[0]?.participantCount ?? 0,
-      afterQuestionNumber: rows[0]?.lastQuestion ?? null,
+      participantCount: board.participantCount,
+      afterQuestionNumber: board.lastQuestion,
     };
   }
 
@@ -399,10 +433,13 @@ export class LiveSessionsService {
   }
 
   /** Host-only progress for throttled realtime updates. */
-  async progressFor(askedQuestionId: string) {
-    const type =
-      this.answerKeys.get(askedQuestionId)?.type ??
-      (await this.repository.findAsked(askedQuestionId))?.question.type;
+  async progressFor(liveSessionId: string, askedQuestionId: string) {
+    let type =
+      this.cacheFor(liveSessionId).answerKeys.get(askedQuestionId)?.type;
+    if (!type) {
+      const asked = await this.repository.findAsked(askedQuestionId);
+      if (asked?.liveSessionId === liveSessionId) type = asked.question.type;
+    }
     return type
       ? this.toProgressDto(
           askedQuestionId,
@@ -554,20 +591,17 @@ export class LiveSessionsService {
    */
   async questionEndedDeliveries(liveSessionId: string) {
     const session = await this.load(liveSessionId);
-    const [host, shared, presence, asked] = await Promise.all([
-      this.hostSnapshot(session),
-      this.participantSnapshot(session),
+    // Resolved once and shared, so every snapshot shows the same question.
+    const asked = await this.currentAsked(session);
+    const [host, shared, presence, rows] = await Promise.all([
+      this.hostSnapshot(session, asked),
+      this.participantSnapshot(session, undefined, asked),
       this.store.presence(liveSessionId),
-      this.currentAsked(session),
+      asked ? this.repository.submissions(asked.id) : Promise.resolve([]),
     ]);
-    const submissions = asked
-      ? new Map(
-          (await this.repository.submissions(asked.id)).map((submission) => [
-            submission.userId,
-            submission,
-          ]),
-        )
-      : new Map<string, SubmissionRow>();
+    const submissions = new Map<string, SubmissionRow>(
+      rows.map((submission) => [submission.userId, submission]),
+    );
     const participants = [...presence].map(([userId, socketId]) => ({
       socketId,
       snapshot: {
@@ -582,30 +616,56 @@ export class LiveSessionsService {
 
   // ---- Question timing -----------------------------------------------------
 
-  private clearTimer(liveSessionId: string) {
-    clearTimeout(this.timers.get(liveSessionId));
+  /**
+   * Cancels the session's close timer. With `askedQuestionId` only that
+   * question's timer is cancelled, so a late caller finishing an older
+   * question never disarms the timer of the one asked after it.
+   */
+  private clearTimer(liveSessionId: string, askedQuestionId?: string) {
+    const entry = this.timers.get(liveSessionId);
+    if (!entry) return;
+    if (askedQuestionId && entry.askedQuestionId !== askedQuestionId) return;
+    clearTimeout(entry.timer);
     this.timers.delete(liveSessionId);
   }
 
-  /** Closes the session's active question once its deadline has passed. */
-  private schedule(liveSessionId: string, endsAt: Date, attempt = 0) {
+  /** Closes the asked question once its deadline has passed. */
+  private schedule(
+    liveSessionId: string,
+    askedQuestionId: string,
+    endsAt: Date,
+    attempt = 0,
+  ) {
     this.clearTimer(liveSessionId);
     const timer = setTimeout(
       () => {
-        this.timers.delete(liveSessionId);
-        this.closeExpired(liveSessionId).catch(() => {
-          if (attempt < CLOSE_MAX_RETRIES)
-            this.schedule(
-              liveSessionId,
-              new Date(Date.now() + CLOSE_RETRY_MS),
-              attempt + 1,
-            );
+        if (this.timers.get(liveSessionId)?.timer === timer)
+          this.timers.delete(liveSessionId);
+        this.closeExpired(liveSessionId).catch((error: unknown) => {
+          const context = {
+            liveSessionId,
+            askedQuestionId,
+            attempt,
+            err: error,
+          };
+          if (attempt >= CLOSE_MAX_RETRIES) {
+            // The next join, sync, submit or host action still closes it.
+            this.logger?.error(context, 'Question close timer gave up');
+            return;
+          }
+          this.logger?.warn(context, 'Question close failed; retrying');
+          this.schedule(
+            liveSessionId,
+            askedQuestionId,
+            new Date(Date.now() + CLOSE_RETRY_MS),
+            attempt + 1,
+          );
         });
       },
       Math.max(0, endsAt.getTime() - Date.now()) + CLOSE_GRACE_MS,
     );
     timer.unref();
-    this.timers.set(liveSessionId, timer);
+    this.timers.set(liveSessionId, { askedQuestionId, timer });
   }
 
   /**
@@ -619,10 +679,13 @@ export class LiveSessionsService {
       liveSessionId,
       active.id,
     );
-    this.clearTimer(liveSessionId);
-    this.answerKeys.delete(active.id);
-    // Standings change once the question has ended.
-    this.boards.delete(liveSessionId);
+    this.clearTimer(liveSessionId, active.id);
+    const cache = this.caches.get(liveSessionId);
+    if (cache) {
+      cache.answerKeys.delete(active.id);
+      // Standings change once the question has ended.
+      cache.board = undefined;
+    }
     if (closed)
       this.events?.emit(DOMAIN_EVENT.questionEnded, {
         liveSessionId,
@@ -635,7 +698,7 @@ export class LiveSessionsService {
   async recoverQuestionTimers() {
     const active = await this.repository.allActiveAsked();
     for (const asked of active)
-      this.schedule(asked.liveSessionId, asked.endsAt);
+      this.schedule(asked.liveSessionId, asked.id, asked.endsAt);
     return active.length;
   }
 
@@ -732,9 +795,13 @@ export class LiveSessionsService {
         ERROR_CODE.LATE_JOIN_DISABLED,
         'The host is not admitting new participants right now.',
       );
-    await this.repository.recordJoin(session.id, userId);
-    // A new entrant changes the participant count (and zero-score ranks).
-    this.boards.delete(session.id);
+    const attendance = await this.repository.recordJoin(session.id, userId);
+    // Only a first entry changes the participant count (and zero-score
+    // ranks); reconnects keep the cached leaderboard.
+    if (
+      attendance.firstJoinedAt.getTime() === attendance.lastJoinedAt.getTime()
+    )
+      this.cacheFor(session.id).board = undefined;
     const replacedSocketId = await this.store.claimPresence(
       session.id,
       userId,
@@ -847,8 +914,10 @@ export class LiveSessionsService {
     userId: string,
     questionId: string,
   ) {
-    const session = await this.current(await this.load(liveSessionId));
-    this.requireHost(session, userId);
+    const loaded = await this.load(liveSessionId);
+    // Authorize before current(), which can close a question and broadcast.
+    this.requireHost(loaded, userId);
+    const session = await this.current(loaded);
     const question = (await this.quizQuestions(session)).find(
       (item) => item.id === questionId,
     );
@@ -865,8 +934,7 @@ export class LiveSessionsService {
             session.quiz.defaultQuestionDurationSeconds,
         ),
     );
-    this.imageUrls.clear();
-    this.answerKeys.set(asked.id, {
+    this.cacheFor(liveSessionId).answerKeys.set(asked.id, {
       liveSessionId,
       quizId: session.quizId,
       hostUserId: session.hostUserId,
@@ -875,19 +943,24 @@ export class LiveSessionsService {
       startedAt: asked.startedAt,
       endsAt: asked.endsAt,
     });
-    this.schedule(liveSessionId, asked.endsAt);
+    this.schedule(liveSessionId, asked.id, asked.endsAt);
     return {
       session: { ...session, state: LIVE_SESSION_STATE.QUESTION_ACTIVE },
       asked: { ...asked, question } satisfies AskedQuestionRow,
     };
   }
 
-  /** Cached answer key; reloaded after a restart. Null once closed. */
-  private async answerKey(askedQuestionId: string) {
-    const cached = this.answerKeys.get(askedQuestionId);
+  /**
+   * Cached answer key; reloaded after a restart. Null when the question is
+   * not part of this session, checked before its status so other sessions'
+   * questions reveal nothing. Throws once the question has closed.
+   */
+  private async answerKey(liveSessionId: string, askedQuestionId: string) {
+    const cache = this.cacheFor(liveSessionId);
+    const cached = cache.answerKeys.get(askedQuestionId);
     if (cached) return cached;
     const asked = await this.repository.findAsked(askedQuestionId);
-    if (!asked) return null;
+    if (!asked || asked.liveSessionId !== liveSessionId) return null;
     if (asked.status !== ASKED_QUESTION_STATUS.ACTIVE) throw submissionClosed();
     const key: AnswerKey = {
       liveSessionId: asked.liveSessionId,
@@ -898,7 +971,7 @@ export class LiveSessionsService {
       startedAt: asked.startedAt,
       endsAt: asked.endsAt,
     };
-    this.answerKeys.set(askedQuestionId, key);
+    cache.answerKeys.set(askedQuestionId, key);
     return key;
   }
 
@@ -907,10 +980,10 @@ export class LiveSessionsService {
     quizId: string,
     userId: string,
   ) {
-    const known = this.confirmed.get(liveSessionId);
-    if (known?.has(userId)) return true;
+    const { confirmed } = this.cacheFor(liveSessionId);
+    if (confirmed.has(userId)) return true;
     if (!(await this.repository.registration(quizId, userId))) return false;
-    this.confirmed.set(liveSessionId, (known ?? new Set()).add(userId));
+    confirmed.add(userId);
     return true;
   }
 
@@ -947,9 +1020,11 @@ export class LiveSessionsService {
     command: AnswerSubmitCommand,
   ): Promise<ParticipantAnswerDto> {
     const receivedAt = new Date();
-    const key = await this.answerKey(command.askedQuestionId);
-    if (!key || key.liveSessionId !== command.liveSessionId)
-      throw questionNotActive();
+    const key = await this.answerKey(
+      command.liveSessionId,
+      command.askedQuestionId,
+    );
+    if (!key) throw questionNotActive();
     if (key.hostUserId === userId)
       throw new ApiError(
         403,

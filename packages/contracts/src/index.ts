@@ -283,7 +283,7 @@ export const LIVE_EVENTS = {
   leaderboardHide: 'host:leaderboard-hide',
 } as const;
 
-/** Leaderboard size; ties at the last rank are all included. */
+/** Most rows a leaderboard lists; tied scores share a rank. */
 export const LEADERBOARD_SIZE = 10;
 
 export const liveSessionCommandSchema = z
@@ -412,7 +412,10 @@ export type LeaderboardEntryDto = {
   score: number;
 };
 
-/** Top standings (rank ≤ LEADERBOARD_SIZE, so ties may add rows). */
+/**
+ * Top standings: at most LEADERBOARD_SIZE participants who have scored,
+ * ties ordered by name. `rank` is the participant's overall rank.
+ */
 export type LeaderboardDto = {
   entries: LeaderboardEntryDto[];
   /** Everyone who entered the live session. */

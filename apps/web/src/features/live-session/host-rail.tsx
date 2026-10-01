@@ -138,7 +138,6 @@ export function ParticipantsPanel({
   );
 }
 
-/** Host-controlled leaderboard visibility. */
 /**
  * Leaderboard controls: a host-only view, or showing the top 10 on every
  * participant screen. Available between questions once one has ended.
