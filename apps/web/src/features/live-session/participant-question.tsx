@@ -269,9 +269,11 @@ function LockedResponse({ text }: { text: string }) {
 function ResultBanner({
   result,
   descriptive,
+  showPoints,
 }: {
   result: ParticipantQuestionResult;
   descriptive: boolean;
+  showPoints: boolean;
 }) {
   const attempted = result.status === ANSWER_STATUS.SUBMITTED;
   const outcome = !attempted
@@ -335,7 +337,7 @@ function ResultBanner({
           {outcome.detail}
         </Text>
       </div>
-      {!descriptive && (
+      {showPoints && (
         <div className="shrink-0 rounded-control bg-surface px-space-sm py-space-xs text-right">
           <Text as="span" variant="caption" tone="secondary" className="block">
             Points
@@ -498,6 +500,8 @@ export type ParticipantQuestionViewProps = {
   lateJoin?: boolean;
   submitting?: boolean;
   onSubmit?: (answer: SubmittedAnswer) => void;
+  /** Why the last submission was refused, if it was. */
+  error?: string | undefined;
   /** Preview seeding only; live drafts start empty. */
   defaultSelectedOptionIds?: string[];
   defaultAnswerText?: string;
@@ -514,6 +518,7 @@ export function ParticipantQuestionView({
   lateJoin = false,
   submitting = false,
   onSubmit,
+  error,
   defaultSelectedOptionIds = [],
   defaultAnswerText = '',
 }: ParticipantQuestionViewProps) {
@@ -736,10 +741,25 @@ export function ParticipantQuestionView({
             )}
           </div>
 
-          {result && <ResultBanner result={result} descriptive={descriptive} />}
+          {result && (
+            <ResultBanner
+              result={result}
+              descriptive={descriptive}
+              showPoints={!descriptive}
+            />
+          )}
 
           <form onSubmit={submit} className="flex flex-col gap-space-md">
             {body}
+            {error && answering && (
+              <Callout
+                role="alert"
+                icon={<Info size={16} aria-hidden="true" />}
+                className="bg-danger-surface text-danger-on-surface"
+              >
+                {error}
+              </Callout>
+            )}
             {footer}
           </form>
         </Surface>

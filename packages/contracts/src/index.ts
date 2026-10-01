@@ -4,6 +4,7 @@ import {
   MEDIA_PURPOSE,
   QUESTION_TYPE,
   type LiveSessionState,
+  type AnswerStatus,
   type LiveRole,
   type PublicQuizStatus,
   type QuestionType,
@@ -266,6 +267,14 @@ export const LIVE_EVENTS = {
   presence: 'host:presence-updated',
   /** Throttled connected count for participant screens. */
   count: 'session:connected-count',
+  /** Host asks a question; it starts immediately for everyone. */
+  questionStart: 'host:question-start',
+  /** Participant submits the answer for the active question. */
+  answerSubmit: 'answer:submit',
+  /** Host-only, throttled: submissions for the active question. */
+  submissions: 'host:submissions-updated',
+  /** One participant's recalculated score and rank after a question ends. */
+  standing: 'participant:standing',
 } as const;
 
 export const liveSessionCommandSchema = z
@@ -274,7 +283,25 @@ export const liveSessionCommandSchema = z
 export const lateJoinCommandSchema = z
   .object({ liveSessionId: z.uuid(), allow: z.boolean() })
   .strict();
+export const questionStartCommandSchema = z
+  .object({ liveSessionId: z.uuid(), questionId: z.uuid() })
+  .strict();
+/** Choice questions send option ids; descriptive questions send text. */
+export const answerSubmitCommandSchema = z
+  .object({
+    liveSessionId: z.uuid(),
+    askedQuestionId: z.uuid(),
+    selectedOptionIds: z
+      .array(z.uuid())
+      .min(1)
+      .max(AUTHORING_LIMITS.options)
+      .optional(),
+    answerText: z.string().trim().min(1).max(ANSWER_LIMITS.text).optional(),
+  })
+  .strict();
 export type LiveSessionCommand = z.infer<typeof liveSessionCommandSchema>;
+export type QuestionStartCommand = z.infer<typeof questionStartCommandSchema>;
+export type AnswerSubmitCommand = z.infer<typeof answerSubmitCommandSchema>;
 export type LateJoinCommand = z.infer<typeof lateJoinCommandSchema>;
 
 export type LiveSessionRefDto = {
@@ -332,8 +359,73 @@ export type HostLiveQuestionDto = {
   options: Array<{ id: string; text: string; isCorrect: boolean }>;
 };
 
+/** Participant-safe question: never carries correctness. */
+export type LiveQuestionDto = {
+  askedQuestionId: string;
+  /** Order in which the host asked it (1-based). */
+  number: number;
+  type: QuestionType;
+  text: string;
+  imageUrl: string | null;
+  options: Array<{ id: string; text: string }>;
+  durationSeconds: number;
+  startedAt: string;
+  endsAt: string;
+};
+
+/** Shared once the question has ended; identical for every participant. */
+export type LiveQuestionRevealDto = {
+  correctOptionIds: string[];
+  /** Final submissions per option id. */
+  distribution: Record<string, number>;
+  submittedCount: number;
+};
+
+export type ParticipantQuestionStateDto = LiveQuestionDto & {
+  /** Null while the question is active. */
+  reveal: LiveQuestionRevealDto | null;
+};
+
+/** One participant's own answer; correctness appears only after it ends. */
+export type ParticipantAnswerDto = {
+  askedQuestionId: string;
+  status: AnswerStatus;
+  selectedOptionIds: string[];
+  answerText: string | null;
+  isCorrect: boolean | null;
+  pointsAwarded: number;
+};
+
+/** Score and rank after the given asked question; ties share a rank. */
+export type ParticipantStandingDto = {
+  askedQuestionId: string;
+  totalScore: number;
+  rank: number;
+  /** Everyone who entered the live session, including zero scores. */
+  participantCount: number;
+};
+
+export type HostQuestionProgressDto = {
+  askedQuestionId: string;
+  submittedCount: number;
+  distribution: Record<string, number>;
+  /** Newest descriptive responses first, without participant identity. */
+  responses: Array<{ id: string; text: string; submittedAt: string }>;
+};
+
+export type HostCurrentQuestionDto = HostQuestionProgressDto & {
+  questionId: string;
+  number: number;
+  durationSeconds: number;
+  startedAt: string;
+  endsAt: string;
+  ended: boolean;
+};
+
 type LiveSnapshotBase = {
   liveSessionId: string;
+  /** Server clock when the snapshot was built; clients derive an offset. */
+  serverTime: string;
   state: LiveSessionState;
   allowLateJoin: boolean;
   startedAt: string | null;
@@ -347,10 +439,29 @@ export type HostLiveSnapshotDto = LiveSnapshotBase & {
   /** First registrations by time; `counts.registered` is the full total. */
   roster: LiveRosterEntryDto[];
   questions: HostLiveQuestionDto[];
+  /** Questions asked so far, in live order. */
+  askedQuestions: Array<{
+    askedQuestionId: string;
+    questionId: string;
+    number: number;
+  }>;
+  /** The active question, or the one that just ended (QUESTION_RESULT). */
+  currentQuestion: HostCurrentQuestionDto | null;
 };
 
 export type ParticipantLiveSnapshotDto = LiveSnapshotBase & {
   role: typeof LIVE_ROLE.PARTICIPANT;
+  /** The active question, or the one that just ended (QUESTION_RESULT). */
+  question: ParticipantQuestionStateDto | null;
+  /**
+   * Personal fields: present only when the snapshot is addressed to one
+   * participant (join, sync, question end). Absent means unchanged.
+   */
+  myAnswer?: ParticipantAnswerDto | null;
+  /** True when this participant first joined after the question started. */
+  joinedDuringQuestion?: boolean;
+  /** Present once the current question has ended (personal snapshots). */
+  myStanding?: ParticipantStandingDto | null;
 };
 
 export type LiveSnapshotDto = HostLiveSnapshotDto | ParticipantLiveSnapshotDto;

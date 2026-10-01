@@ -5,10 +5,13 @@ import { io, type Socket } from 'socket.io-client';
 import {
   LIVE_EVENTS,
   LIVE_SOCKET_NAMESPACE,
+  type HostQuestionProgressDto,
   type LiveCountDto,
   type LivePresenceDto,
   type LiveRemovedDto,
   type LiveSnapshotDto,
+  type ParticipantAnswerDto,
+  type ParticipantStandingDto,
   type SocketAck,
   ERROR_CODE,
   LIVE_ROLE,
@@ -61,6 +64,38 @@ function applyPresence(
   };
 }
 
+/** Merges throttled host progress into the current question. */
+function applyProgress(
+  snapshot: LiveSnapshotDto | null,
+  progress: HostQuestionProgressDto,
+): LiveSnapshotDto | null {
+  if (
+    snapshot?.role !== LIVE_ROLE.HOST ||
+    snapshot.currentQuestion?.askedQuestionId !== progress.askedQuestionId
+  )
+    return snapshot;
+  return {
+    ...snapshot,
+    currentQuestion: { ...snapshot.currentQuestion, ...progress },
+  };
+}
+
+const notConnected = {
+  ok: false,
+  error: {
+    code: CLIENT_ERROR_CODE.NOT_CONNECTED,
+    message: 'You are offline. Wait for the connection to return.',
+  },
+} as const;
+
+const timedOut = {
+  ok: false,
+  error: {
+    code: CLIENT_ERROR_CODE.TIMEOUT,
+    message: 'The live room did not respond. Please try again.',
+  },
+} as const;
+
 /**
  * Socket.IO connection to one live session. The server is authoritative: the
  * hook only renders snapshots it receives. Every (re)connect fetches a fresh
@@ -71,11 +106,34 @@ export function useLiveSession(liveSessionId: string) {
   const [connection, setConnection] = useState<LiveConnection>('connecting');
   const [failure, setFailure] = useState<LiveFailure | null>(null);
   const [attempt, setAttempt] = useState(0);
+  /** This participant's own answer; only ever sent to them. */
+  const [myAnswer, setMyAnswer] = useState<ParticipantAnswerDto | null>(null);
+  const [joinedDuringQuestion, setJoinedDuringQuestion] = useState(false);
+  /** Score and rank after the latest ended question (personal). */
+  const [myStanding, setMyStanding] = useState<ParticipantStandingDto | null>(
+    null,
+  );
+  /** Server clock minus browser clock, from the latest snapshot. */
+  const [clockOffsetMs, setClockOffsetMs] = useState(0);
   const socketRef = useRef<Socket | null>(null);
   // True only after the server accepted session:join on the current socket.
   const joinedRef = useRef(false);
   // Bumped by a manual retry to start a fresh connection with reset counters.
   const [generation, setGeneration] = useState(0);
+
+  /**
+   * Applies a snapshot. Personal fields arrive only in snapshots addressed
+   * to this participant; broadcasts omit them, so they are kept as they are.
+   */
+  const receive = useCallback((next: LiveSnapshotDto) => {
+    setSnapshot(next);
+    setClockOffsetMs(Date.parse(next.serverTime) - Date.now());
+    if (next.role !== LIVE_ROLE.PARTICIPANT) return;
+    if ('myAnswer' in next) setMyAnswer(next.myAnswer ?? null);
+    if (next.joinedDuringQuestion !== undefined)
+      setJoinedDuringQuestion(next.joinedDuringQuestion);
+    if ('myStanding' in next) setMyStanding(next.myStanding ?? null);
+  }, []);
 
   useEffect(() => {
     let handshakeRetries = 0;
@@ -128,7 +186,7 @@ export function useLiveSession(liveSessionId: string) {
         joinedRef.current = true;
         setAttempt(0);
         setFailure(null);
-        setSnapshot(ack.data);
+        receive(ack.data);
         setConnection('connected');
         return;
       }
@@ -161,8 +219,10 @@ export function useLiveSession(liveSessionId: string) {
       void join();
     });
     socket.on(LIVE_EVENTS.removed, (removed: LiveRemovedDto) => fail(removed));
-    socket.on(LIVE_EVENTS.snapshot, (next: LiveSnapshotDto) =>
-      setSnapshot(next),
+    socket.on(LIVE_EVENTS.snapshot, receive);
+    socket.on(LIVE_EVENTS.standing, setMyStanding);
+    socket.on(LIVE_EVENTS.submissions, (progress: HostQuestionProgressDto) =>
+      setSnapshot((current) => applyProgress(current, progress)),
     );
     socket.on(LIVE_EVENTS.presence, (presence: LivePresenceDto) =>
       setSnapshot((current) => applyPresence(current, presence)),
@@ -228,35 +288,58 @@ export function useLiveSession(liveSessionId: string) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [liveSessionId, generation]);
+  }, [liveSessionId, generation, receive]);
 
   /** Sends a host command; the returned snapshot is applied on success. */
   const command = useCallback(
     async (event: string, extra: Record<string, unknown> = {}) => {
       const socket = socketRef.current;
-      if (!socket?.connected)
-        return {
-          ok: false,
-          error: {
-            code: CLIENT_ERROR_CODE.NOT_CONNECTED,
-            message: 'You are offline. Wait for the connection to return.',
-          },
-        } as const;
+      if (!socket?.connected) return notConnected;
       const ack = (await socket
         .timeout(10_000)
         .emitWithAck(event, { liveSessionId, ...extra })
-        .catch(() => ({
-          ok: false,
-          error: {
-            code: CLIENT_ERROR_CODE.TIMEOUT,
-            message: 'The live room did not respond. Please try again.',
-          },
-        }))) as SocketAck<LiveSnapshotDto>;
-      if (ack.ok && ack.data) setSnapshot(ack.data);
+        .catch(() => timedOut)) as SocketAck<LiveSnapshotDto>;
+      if (ack.ok && ack.data) receive(ack.data);
+      return ack;
+    },
+    [liveSessionId, receive],
+  );
+
+  /** Submits this participant's answer; the server locks it on success. */
+  const submitAnswer = useCallback(
+    async (
+      askedQuestionId: string,
+      answer: { selectedOptionIds?: string[]; answerText?: string },
+    ) => {
+      const socket = socketRef.current;
+      if (!socket?.connected) return notConnected;
+      const ack = (await socket
+        .timeout(10_000)
+        .emitWithAck(LIVE_EVENTS.answerSubmit, {
+          liveSessionId,
+          askedQuestionId,
+          ...answer,
+        })
+        .catch(() => timedOut)) as SocketAck<ParticipantAnswerDto>;
+      if (ack.ok) setMyAnswer(ack.data);
       return ack;
     },
     [liveSessionId],
   );
+
+  /**
+   * Asks the server for the current state, e.g. when the local countdown
+   * reaches zero; this also closes an overdue question on the server.
+   */
+  const resync = useCallback(async () => {
+    const socket = socketRef.current;
+    if (!socket?.connected || !joinedRef.current) return;
+    const ack = (await socket
+      .timeout(10_000)
+      .emitWithAck(LIVE_EVENTS.sync, { liveSessionId })
+      .catch(() => null)) as SocketAck<LiveSnapshotDto> | null;
+    if (ack?.ok) receive(ack.data);
+  }, [liveSessionId, receive]);
 
   /**
    * Manual retry: replaces the socket so attempts start again from 1. Also
@@ -270,5 +353,18 @@ export function useLiveSession(liveSessionId: string) {
     setGeneration((current) => current + 1);
   }, []);
 
-  return { snapshot, connection, failure, attempt, command, reconnect };
+  return {
+    snapshot,
+    connection,
+    failure,
+    attempt,
+    command,
+    reconnect,
+    myAnswer,
+    myStanding,
+    joinedDuringQuestion,
+    clockOffsetMs,
+    submitAnswer,
+    resync,
+  };
 }

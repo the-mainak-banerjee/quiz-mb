@@ -4,6 +4,7 @@ import { createLogger } from './infrastructure/logger.js';
 import { createDatabase } from '@quizmb/database';
 import { parseAuthEnv } from './modules/auth/config.js';
 import { createStorage } from './modules/media/storage.js';
+import { MediaService } from './modules/media/service.js';
 import { AuthRepository } from './modules/auth/repository.js';
 import { AuthService } from './modules/auth/service.js';
 import { UsersService } from './modules/users/service.js';
@@ -22,6 +23,7 @@ export const database = createDatabase(
   authConfig.DATABASE_SSL_CA_BASE64,
 );
 export const events = new DomainEvents();
+const storage = createStorage(process.env);
 // Live sessions need Redis; without REDIS_URL the REST-only API still runs.
 export const redis = env.REDIS_URL ? createRedis(env.REDIS_URL) : undefined;
 export const live = redis
@@ -30,6 +32,7 @@ export const live = redis
       new LiveStore(redis),
       new SocketTickets(authConfig.AUTH_ACCESS_SECRET),
       events,
+      new MediaService(database, storage),
     )
   : undefined;
 export default createApp({
@@ -39,7 +42,7 @@ export default createApp({
   users: new UsersService(database),
   production: env.NODE_ENV === NODE_ENV.PRODUCTION,
   database,
-  storage: createStorage(process.env),
+  storage,
   live,
   events,
 });

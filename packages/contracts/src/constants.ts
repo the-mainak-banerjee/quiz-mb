@@ -54,6 +54,13 @@ export const ANSWER_STATUS = {
 } as const;
 export type AnswerStatus = ValueOf<typeof ANSWER_STATUS>;
 
+/** Lifecycle of a question the host actually asked in a live session. */
+export const ASKED_QUESTION_STATUS = {
+  ACTIVE: 'ACTIVE',
+  COMPLETED: 'COMPLETED',
+} as const;
+export type AskedQuestionStatus = ValueOf<typeof ASKED_QUESTION_STATUS>;
+
 export const MEDIA_PURPOSE = {
   QUIZ_COVER: 'QUIZ_COVER',
   QUESTION_IMAGE: 'QUESTION_IMAGE',
@@ -112,6 +119,12 @@ export const ERROR_CODE = {
   LOBBY_CLOSED: 'LOBBY_CLOSED',
   LIVE_UNAVAILABLE: 'LIVE_UNAVAILABLE',
   OPERATION_IN_PROGRESS: 'OPERATION_IN_PROGRESS',
+  // Live questions
+  QUESTION_ALREADY_ASKED: 'QUESTION_ALREADY_ASKED',
+  QUESTION_NOT_ACTIVE: 'QUESTION_NOT_ACTIVE',
+  SUBMISSION_CLOSED: 'SUBMISSION_CLOSED',
+  ALREADY_SUBMITTED: 'ALREADY_SUBMITTED',
+  INVALID_ANSWER: 'INVALID_ANSWER',
 } as const;
 export type ErrorCode = ValueOf<typeof ERROR_CODE>;
 

@@ -18,13 +18,18 @@ export type QuizStatusChange = {
   status: PublicQuizStatus;
 };
 
+/** A live question closed (timer, recovery or quiz end). */
+export type QuestionEnded = { liveSessionId: string; askedQuestionId: string };
+
 /** Names of the in-process events carried by `DomainEvents`. */
 export const DOMAIN_EVENT = {
   registrationChanged: 'registrationChanged',
   quizStatusChanged: 'quizStatusChanged',
+  questionEnded: 'questionEnded',
 } as const;
 
 export class DomainEvents extends EventEmitter<{
   [DOMAIN_EVENT.registrationChanged]: [RegistrationChange];
   [DOMAIN_EVENT.quizStatusChanged]: [QuizStatusChange];
+  [DOMAIN_EVENT.questionEnded]: [QuestionEnded];
 }> {}

@@ -22,6 +22,10 @@ async function start() {
     io = createSocketServer(server, env.ALLOWED_ORIGINS);
     attachLiveRealtime(io, live, logger, events);
     attachQuizStatusRealtime(io, live, logger, events);
+    // Questions that were running when the process stopped close on time
+    // (or at once if overdue) instead of waiting for the next interaction.
+    const recovered = await live.recoverQuestionTimers();
+    if (recovered) logger.info({ recovered }, 'Live question timers restored');
   } else {
     logger.warn('REDIS_URL is not set; live sessions are disabled');
   }
