@@ -458,7 +458,9 @@ export function ProjectQuizzes({
                     ? APP_LINKS.WORKSPACE.LIVE_QUIZ(quiz.id)
                     : quiz.status === QUIZ_STATUS.DRAFT
                       ? APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)
-                      : APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id)
+                      : quiz.status === QUIZ_STATUS.COMPLETED
+                        ? APP_LINKS.WORKSPACE.QUIZ_RESULTS(quiz.id)
+                        : APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id)
                 }
               />
             );

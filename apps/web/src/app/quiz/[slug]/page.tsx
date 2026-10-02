@@ -31,16 +31,18 @@ export default async function PublicQuizPage({
   // Registration stays open while the lobby is open; registered
   // participants keep their panel (with the live-room link) once live.
   const initialState: PublicQuizState =
-    !isHost && registration?.registered && quiz.status !== QUIZ_STATUS.COMPLETED
+    !isHost && registration?.registered
       ? 'registered'
-      : quiz.status !== QUIZ_STATUS.PUBLISHED &&
-          quiz.status !== QUIZ_STATUS.LOBBY
-        ? 'closed'
-        : quiz.isFull
-          ? 'full'
-          : user
-            ? 'open'
-            : 'logged-out';
+      : quiz.status === QUIZ_STATUS.COMPLETED
+        ? 'completed'
+        : quiz.status !== QUIZ_STATUS.PUBLISHED &&
+            quiz.status !== QUIZ_STATUS.LOBBY
+          ? 'closed'
+          : quiz.isFull
+            ? 'full'
+            : user
+              ? 'open'
+              : 'logged-out';
 
   return (
     <PublicQuizView

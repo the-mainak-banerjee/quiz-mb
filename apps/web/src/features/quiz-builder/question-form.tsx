@@ -47,9 +47,12 @@ export function QuestionForm({
   questionCount,
   onSaved,
   onReview,
+  readOnly = false,
   ref,
 }: {
   quiz: QuizDto;
+  /** Show the saved question with every control disabled. */
+  readOnly?: boolean;
   initial?: QuestionDto;
   questionNumber: number;
   questionCount: number;
@@ -117,7 +120,10 @@ export function QuestionForm({
   return (
     <>
       <form noValidate onSubmit={submitQuestion(false)}>
-        <fieldset disabled={isSubmitting} className="min-w-0 space-y-space-md">
+        <fieldset
+          disabled={isSubmitting || readOnly}
+          className="min-w-0 space-y-space-md"
+        >
           <Surface className="space-y-space-md">
             <div className="flex flex-wrap items-start justify-between gap-space-sm border-b border-border-surface pb-space-md">
               <div className="space-y-space-xs">
@@ -125,7 +131,7 @@ export function QuestionForm({
                   QUESTION {questionNumber} OF {Math.max(questionCount, 1)}
                 </Text>
                 <Text as="h2" variant="section-heading">
-                  Build your question
+                  {readOnly ? 'Question details' : 'Build your question'}
                 </Text>
               </div>
               <Text
@@ -192,6 +198,7 @@ export function QuestionForm({
                   value={field.value}
                   onChange={field.onChange}
                   error={errors.text?.message}
+                  readOnly={readOnly}
                 />
               )}
             />
@@ -199,6 +206,7 @@ export function QuestionForm({
               quizId={quiz.id}
               purpose="QUESTION_IMAGE"
               value={image}
+              readOnly={readOnly}
               onBusy={setUploading}
               onChange={(m) => {
                 setImage(m);
@@ -215,7 +223,9 @@ export function QuestionForm({
                 <Text variant="body-secondary" tone="secondary">
                   {type === QUESTION_TYPE.DESCRIPTIVE
                     ? 'Participants will enter a written response. Descriptive questions are ungraded and award no points.'
-                    : 'Use the selection control to mark each correct response.'}
+                    : readOnly
+                      ? 'Correct responses are highlighted.'
+                      : 'Use the selection control to mark each correct response.'}
                 </Text>
               </div>
               {type !== QUESTION_TYPE.DESCRIPTIVE && (
@@ -267,17 +277,19 @@ export function QuestionForm({
                         setValue(`options.${index}.isCorrect`, checked, touch);
                     }}
                     action={
-                      <Button
-                        variant="ghost"
-                        className="px-space-xs"
-                        icon={<Trash2 size={18} />}
-                        disabled={fields.length <= 2}
-                        onClick={() => remove(index)}
-                      >
-                        <VisuallyHidden>
-                          Remove option {index + 1}
-                        </VisuallyHidden>
-                      </Button>
+                      readOnly ? undefined : (
+                        <Button
+                          variant="ghost"
+                          className="px-space-xs"
+                          icon={<Trash2 size={18} />}
+                          disabled={fields.length <= 2}
+                          onClick={() => remove(index)}
+                        >
+                          <VisuallyHidden>
+                            Remove option {index + 1}
+                          </VisuallyHidden>
+                        </Button>
+                      )
                     }
                   >
                     <div className="space-y-space-xs">
@@ -300,14 +312,16 @@ export function QuestionForm({
                     </div>
                   </QuizOption>
                 ))}
-                <Button
-                  variant="secondary"
-                  icon={<Plus size={18} />}
-                  disabled={fields.length >= AUTHORING_LIMITS.options}
-                  onClick={() => append({ text: '', isCorrect: false })}
-                >
-                  Add option
-                </Button>
+                {!readOnly && (
+                  <Button
+                    variant="secondary"
+                    icon={<Plus size={18} />}
+                    disabled={fields.length >= AUTHORING_LIMITS.options}
+                    onClick={() => append({ text: '', isCorrect: false })}
+                  >
+                    Add option
+                  </Button>
+                )}
                 {(errors.options?.message || errors.options?.root?.message) && (
                   <Text role="alert" className="text-danger">
                     {errors.options.message || errors.options.root?.message}
@@ -320,43 +334,45 @@ export function QuestionForm({
                 {errors.root.message}
               </Text>
             )}
-            <div className="flex flex-col gap-space-sm border-t border-border-surface pt-space-md md:flex-row md:items-center md:justify-between">
-              <div className="flex flex-wrap gap-space-xs">
+            {!readOnly && (
+              <div className="flex flex-col gap-space-sm border-t border-border-surface pt-space-md md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-wrap gap-space-xs">
+                  <Button
+                    variant="secondary"
+                    type="submit"
+                    icon={<Save size={18} />}
+                    disabled={uploading}
+                    onClick={() => setSubmittingAction('save')}
+                  >
+                    {isSubmitting && submittingAction === 'save'
+                      ? 'Saving…'
+                      : 'Save question'}
+                  </Button>
+                  <Button
+                    type="button"
+                    icon={<Plus size={18} />}
+                    disabled={uploading}
+                    onClick={async () => {
+                      setSubmittingAction('next');
+                      await submitQuestion(true)();
+                    }}
+                  >
+                    {isSubmitting && submittingAction === 'next'
+                      ? 'Saving…'
+                      : 'Add next question'}
+                  </Button>
+                </div>
                 <Button
-                  variant="secondary"
-                  type="submit"
-                  icon={<Save size={18} />}
-                  disabled={uploading}
-                  onClick={() => setSubmittingAction('save')}
+                  variant="ghost"
+                  icon={<ArrowRight size={18} />}
+                  iconPosition="right"
+                  disabled={isSubmitting || uploading}
+                  onClick={() => guard.confirm(onReview)}
                 >
-                  {isSubmitting && submittingAction === 'save'
-                    ? 'Saving…'
-                    : 'Save question'}
-                </Button>
-                <Button
-                  type="button"
-                  icon={<Plus size={18} />}
-                  disabled={uploading}
-                  onClick={async () => {
-                    setSubmittingAction('next');
-                    await submitQuestion(true)();
-                  }}
-                >
-                  {isSubmitting && submittingAction === 'next'
-                    ? 'Saving…'
-                    : 'Add next question'}
+                  Move to review & publish
                 </Button>
               </div>
-              <Button
-                variant="ghost"
-                icon={<ArrowRight size={18} />}
-                iconPosition="right"
-                disabled={isSubmitting || uploading}
-                onClick={() => guard.confirm(onReview)}
-              >
-                Move to review & publish
-              </Button>
-            </div>
+            )}
           </Surface>
         </fieldset>
       </form>

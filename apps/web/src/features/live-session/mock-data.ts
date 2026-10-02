@@ -14,7 +14,14 @@ import type {
 import {
   ANSWER_STATUS,
   QUESTION_TYPE,
+  QUIZ_STATUS,
+  type FinalSummaryDto,
+  type HostQuizResultsDto,
   type LeaderboardDto,
+  type ParticipantFinalResultDto,
+  type ParticipantHistoryDto,
+  type ParticipantQuizResultDto,
+  type PublicQuizDto,
 } from '@quizmb/contracts';
 
 // Development preview fixtures only; never used by product routes.
@@ -483,3 +490,125 @@ export const previewLeaderboard: LeaderboardDto = {
 
 /** The previewed participant: user-8 is inside the top 10. */
 export const previewParticipantId = 'user-8';
+
+// ---- Final results (Phase 10) ------------------------------------------------
+
+export const previewFinalSummary: FinalSummaryDto = {
+  participantCount: 500,
+  askedQuestionCount: 12,
+  quizQuestionCount: 16,
+  scoredQuestionCount: 12,
+  averageScore: 5420,
+  completedAt: '2026-10-24T19:42:00.000Z',
+};
+
+/** Final Top 10 with correct counts out of 12 scored questions. */
+export const previewFinalBoard: LeaderboardDto = {
+  ...previewLeaderboard,
+  afterQuestionNumber: 12,
+  entries: previewLeaderboard.entries.map((entry, index) => ({
+    ...entry,
+    score: entry.score + 3500,
+    correctCount: 12 - Math.floor(index / 2),
+  })),
+};
+
+export const previewFinalResult: ParticipantFinalResultDto = {
+  totalScore: 8420,
+  rank: 18,
+  participantCount: 500,
+  correctCount: 8,
+  incorrectCount: 3,
+  notAttemptedCount: 1,
+};
+
+const previewPublicQuiz = (
+  title: string,
+  projectName: string,
+): PublicQuizDto => ({
+  id: `quiz-${title.length}`,
+  publicId: `public-${title.length}`,
+  title,
+  description: '',
+  status: QUIZ_STATUS.COMPLETED,
+  plannedStartAt: '2026-10-24T19:00:00.000Z',
+  registrationLimit: 500,
+  registrationCount: 420,
+  isFull: false,
+  questionCount: 16,
+  cover: null,
+  project: { id: 'project-1', name: projectName },
+  host: { id: 'host-1', name: liveQuiz.hostName },
+});
+
+export const previewHistory: ParticipantHistoryDto[] = [
+  {
+    liveSessionId: 'session-1',
+    quiz: previewPublicQuiz(liveQuiz.title, liveQuiz.projectName),
+    completedAt: '2026-10-24T19:42:00.000Z',
+    result: previewFinalResult,
+  },
+  {
+    liveSessionId: 'session-2',
+    quiz: previewPublicQuiz(
+      'Quarterly Product Milestone Sync',
+      'Company All-Hands',
+    ),
+    completedAt: '2026-10-12T17:30:00.000Z',
+    result: {
+      totalScore: 4120,
+      rank: 4,
+      participantCount: 86,
+      correctCount: 11,
+      incorrectCount: 1,
+      notAttemptedCount: 0,
+    },
+  },
+  {
+    liveSessionId: 'session-3',
+    quiz: previewPublicQuiz(
+      'Distributed Systems Live Sprint',
+      'Core Infrastructure',
+    ),
+    completedAt: '2026-09-29T16:10:00.000Z',
+    result: null,
+  },
+];
+
+export const previewParticipantResult: ParticipantQuizResultDto = {
+  liveSessionId: 'session-1',
+  quiz: {
+    id: liveQuiz.id,
+    publicId: liveQuiz.publicId,
+    title: liveQuiz.title,
+    projectName: liveQuiz.projectName,
+    hostName: liveQuiz.hostName,
+  },
+  startedAt: '2026-10-24T19:04:00.000Z',
+  completedAt: '2026-10-24T19:42:00.000Z',
+  result: previewFinalResult,
+};
+
+export const previewHostResults: HostQuizResultsDto = {
+  liveSessionId: 'session-1',
+  quiz: {
+    id: liveQuiz.id,
+    publicId: liveQuiz.publicId,
+    title: liveQuiz.title,
+    projectName: liveQuiz.projectName,
+  },
+  summary: previewFinalSummary,
+  entries: previewFinalBoard.entries.map((entry, index) => ({
+    rank: entry.rank,
+    userId: entry.userId,
+    name: entry.name,
+    score: entry.score,
+    correctCount: entry.correctCount ?? 0,
+    incorrectCount: Math.min(index % 3, 12 - (entry.correctCount ?? 0)),
+    notAttemptedCount:
+      12 -
+      (entry.correctCount ?? 0) -
+      Math.min(index % 3, 12 - (entry.correctCount ?? 0)),
+  })),
+  nextOffset: null,
+};

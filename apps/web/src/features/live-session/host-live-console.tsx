@@ -22,6 +22,7 @@ import { HostActiveQuestion } from './host-active-question';
 import { HostConsoleHeader, HostConsoleLayout } from './host-console-layout';
 import { HostLiveIdle } from './host-live-idle';
 import { HostLobby } from './host-lobby';
+import { HostQuizCompleted } from './quiz-completed';
 import { HostLeaderboardView } from './leaderboard';
 import {
   LeaderboardPanel,
@@ -203,11 +204,35 @@ export function HostLiveConsole({
 
   const host: HostLiveSnapshotDto = snapshot;
   if (host.state === LIVE_SESSION_STATE.COMPLETED)
-    return (
+    return host.final ? (
+      <>
+        {error && (
+          <div className="mx-auto w-full max-w-5xl px-margin-sm pt-space-md md:px-margin">
+            <Callout
+              role="alert"
+              icon={<AlertTriangle size={16} aria-hidden="true" />}
+              className="bg-danger-surface text-danger-on-surface"
+            >
+              {error}
+            </Callout>
+          </div>
+        )}
+        <HostQuizCompleted
+          quiz={{ title: host.quiz.title, projectName: host.quiz.projectName }}
+          summary={host.final.summary}
+          board={host.final.leaderboard}
+          shown={host.final.leaderboardShown}
+          busy={busy || connection !== 'connected'}
+          onReveal={() => void run(LIVE_EVENTS.finalLeaderboardShow)}
+          resultsHref={APP_LINKS.WORKSPACE.QUIZ_RESULTS(quizId)}
+          dashboardHref={APP_LINKS.WORKSPACE.DASHBOARD}
+        />
+      </>
+    ) : (
       <LiveNotice
         eyebrow="Quiz ended"
         title="This live quiz has ended"
-        description="The session is closed. Detailed results arrive in a later release."
+        description="The session is closed."
         action={backToQuiz}
       />
     );

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MonitorPlay, Play } from 'lucide-react';
+import { ChartNoAxesCombined, MonitorPlay, Play } from 'lucide-react';
 import { Button, Text } from '@/components/ui';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
@@ -39,9 +39,13 @@ export function HostLiveEntry({
 
   if (status === QUIZ_STATUS.COMPLETED)
     return (
-      <Button disabled icon={<Play size={18} aria-hidden="true" />}>
-        Quiz completed
-      </Button>
+      <NavigationItem
+        href={APP_LINKS.WORKSPACE.QUIZ_RESULTS(quizId)}
+        icon={<ChartNoAxesCombined size={18} aria-hidden="true" />}
+        className="ds-primary-motion bg-action-primary text-action-on-primary hover:bg-action-primary-hover hover:text-action-on-primary"
+      >
+        View results
+      </NavigationItem>
     );
 
   async function openLobby() {

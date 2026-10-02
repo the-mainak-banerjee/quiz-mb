@@ -10,7 +10,9 @@ import {
 import { Button } from '@/components/ui';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { ParticipantLeaderboard } from './leaderboard';
+import { APP_LINKS } from '@/config/navigation';
 import { ParticipantLiveQuestion } from './participant-live-question';
+import { ParticipantQuizEnded } from './quiz-completed';
 import {
   LiveNotice,
   ParticipantLiveIdle,
@@ -73,12 +75,21 @@ export function ParticipantLiveView({
     reconnect,
     myAnswer,
     myStanding,
+    finalResult,
     lateJoinQuestionId,
     clockOffsetMs,
     submitAnswer,
     resync,
   } = useLiveSession(liveSessionId);
   const quiz = toQuizSummary(snapshot?.quiz ?? initialQuiz);
+  const historyLink = (
+    <NavigationItem
+      href={APP_LINKS.WORKSPACE.HISTORY}
+      className="bg-surface-low"
+    >
+      Open history
+    </NavigationItem>
+  );
   const backToQuiz = (
     <NavigationItem href={quizHref} className="bg-surface-low">
       Back to quiz page
@@ -111,20 +122,33 @@ export function ParticipantLiveView({
         tone={NEUTRAL_REFUSALS.has(failure.code) ? 'neutral' : 'danger'}
         title={known?.title ?? 'We could not join the live room'}
         description={failure.message}
-        action={backToQuiz}
+        action={
+          failure.code === ERROR_CODE.QUIZ_COMPLETED ? historyLink : backToQuiz
+        }
       />
     );
   }
 
-  if (snapshot?.state === LIVE_SESSION_STATE.COMPLETED)
+  // After the end: the final leaderboard once the host reveals it,
+  // otherwise this participant's own result. There is no rejoining.
+  if (snapshot?.state === LIVE_SESSION_STATE.COMPLETED) {
+    if (snapshot.role === LIVE_ROLE.PARTICIPANT && snapshot.leaderboard)
+      return (
+        <ParticipantLeaderboard
+          board={snapshot.leaderboard}
+          standing={finalResult}
+          participantId={participantId}
+          final
+        />
+      );
     return (
-      <LiveNotice
-        eyebrow="Quiz ended"
-        title="This live quiz has ended"
-        description="Thanks for taking part. Your results will be available in a later release."
-        action={backToQuiz}
+      <ParticipantQuizEnded
+        quizTitle={quiz.title}
+        result={finalResult}
+        historyHref={APP_LINKS.WORKSPACE.HISTORY}
       />
     );
+  }
 
   if (connection !== 'connected' || !snapshot)
     return snapshot || connection !== 'connecting' ? (

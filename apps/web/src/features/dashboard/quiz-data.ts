@@ -52,7 +52,7 @@ function hostQuiz(quiz: HostDashboardQuizDto): Quiz {
   };
 }
 
-function participantQuiz(quiz: PublicQuizDto): Quiz {
+function participantQuiz(quiz: PublicQuizDto, liveSessionId?: string): Quiz {
   const status: Quiz['status'] =
     quiz.status === QUIZ_STATUS.COMPLETED
       ? 'completed'
@@ -63,6 +63,7 @@ function participantQuiz(quiz: PublicQuizDto): Quiz {
   return {
     id: quiz.id,
     publicId: quiz.publicId,
+    ...(liveSessionId ? { liveSessionId } : {}),
     project: quiz.project.name,
     role: 'participant',
     status,
@@ -94,10 +95,13 @@ export async function loadUserQuizData() {
     loadApi<ParticipantDashboardDto>(API_ROUTES.DASHBOARD.PARTICIPANT),
   ]);
   const participantQuizzes = [
-    ...participant.upcoming,
-    ...participant.live,
-    ...participant.history.map((item) => item.quiz),
-  ].map(participantQuiz);
+    ...[...participant.upcoming, ...participant.live].map((quiz) =>
+      participantQuiz(quiz),
+    ),
+    ...participant.history.map((item) =>
+      participantQuiz(item.quiz, item.liveSessionId),
+    ),
+  ];
 
   const quizzes = [...host.quizzes.map(hostQuiz), ...participantQuizzes];
   const byId = new Map<string, Quiz>();

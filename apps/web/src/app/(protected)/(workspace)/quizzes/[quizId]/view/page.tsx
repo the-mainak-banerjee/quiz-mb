@@ -4,7 +4,9 @@ import { QUIZ_STATUS, type QuizDto } from '@quizmb/contracts';
 import { APP_LINKS } from '@/config/navigation';
 import { loadApi } from '@/lib/api/server';
 import { QuizEditor } from '@/features/quiz-builder/quiz-editor';
-export default async function EditQuizPage({
+
+/** A completed quiz's details and questions, read only. */
+export default async function ViewQuizPage({
   params,
   searchParams,
 }: {
@@ -14,15 +16,15 @@ export default async function EditQuizPage({
   const { quizId } = await params;
   if (!z.uuid().safeParse(quizId).success) notFound();
   const quiz = await loadApi<QuizDto>(`/api/quizzes/${quizId}`);
-  // A completed quiz can no longer change: it is only viewed.
-  if (quiz.status === QUIZ_STATUS.COMPLETED)
-    redirect(APP_LINKS.WORKSPACE.VIEW_QUIZ(quizId));
+  if (quiz.status !== QUIZ_STATUS.COMPLETED)
+    redirect(APP_LINKS.WORKSPACE.EDIT_QUIZ(quizId));
   const { step } = await searchParams;
   return (
     <QuizEditor
       project={{ id: quiz.projectId, name: quiz.projectName }}
       initial={quiz}
-      initialStep={step === 'questions' || step === 'review' ? step : 'details'}
+      initialStep={step === 'questions' ? step : 'details'}
+      readOnly
     />
   );
 }

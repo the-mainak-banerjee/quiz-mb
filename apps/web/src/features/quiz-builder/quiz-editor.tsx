@@ -5,8 +5,10 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   FileText,
+  Lock,
   Plus,
   Trash2,
   Copy,
@@ -16,12 +18,16 @@ import {
 import {
   type ProjectDto,
   QUESTION_TYPE,
+  QUIZ_STATUS,
   type QuestionDto,
   questionSchema,
   type QuizDto,
+  type QuizStatus,
   quizSchema,
 } from '@quizmb/contracts';
-import { Button, Surface, Text, Badge } from '@/components/ui';
+import { Button, Callout, Surface, Text, Badge } from '@/components/ui';
+import { NavigationItem } from '@/components/workspace/navigation-item';
+import { APP_LINKS } from '@/config/navigation';
 import { VisuallyHidden } from '@/components/visually-hidden';
 import { Modal } from '@/components/ui/modal';
 import { apiError } from '@/lib/api/client';
@@ -38,14 +44,30 @@ import { QuizOption } from './quiz-option';
 import { ReviewPublishPanel } from '@/features/publishing/review-publish-panel';
 const MarkdownPreview = dynamic(() => import('@/components/markdown-preview'));
 type Step = 'details' | 'questions' | 'review';
+function StatusBadge({ status }: { status: QuizStatus | undefined }) {
+  switch (status) {
+    case QUIZ_STATUS.PUBLISHED:
+    case QUIZ_STATUS.LOBBY:
+      return <Badge variant="scheduled" label="Published" />;
+    case QUIZ_STATUS.LIVE:
+      return <Badge variant="live" />;
+    case QUIZ_STATUS.COMPLETED:
+      return <Badge variant="draft" label="Completed" />;
+    default:
+      return <Badge variant="draft" />;
+  }
+}
 export function QuizEditor({
   project,
   initial,
   initialStep = 'details',
+  readOnly = false,
 }: {
   project: Pick<ProjectDto, 'id' | 'name'>;
   initial?: QuizDto;
   initialStep?: Step;
+  /** A completed quiz: details and questions are shown, nothing is editable. */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [quiz, setQuiz] = useState(initial);
@@ -113,8 +135,20 @@ export function QuizEditor({
     quiz.questions.every(
       (q) => questionSchema.safeParse(questionValues(q)).success,
     );
+  const steps = readOnly
+    ? (['details', 'questions'] as const)
+    : (['details', 'questions', 'review'] as const);
   return (
     <main className="mx-auto w-full max-w-content flex-1 space-y-space-lg px-margin-sm py-space-lg md:px-margin lg:px-space-xl">
+      {quiz && quiz.status !== QUIZ_STATUS.DRAFT && (
+        <NavigationItem
+          href={APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id)}
+          icon={<ArrowLeft size={18} aria-hidden="true" />}
+          className="px-space-xs"
+        >
+          Back to manage quiz
+        </NavigationItem>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-space-sm">
         <Text
           variant="caption"
@@ -124,7 +158,7 @@ export function QuizEditor({
           <Folder size={16} />
           {project.name} / {quiz?.title || 'New quiz'}
         </Text>
-        <Badge variant="draft" label="Draft" />
+        <StatusBadge status={quiz?.status} />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-space-sm">
         <Text as="h1" variant="page-title">
@@ -147,7 +181,7 @@ export function QuizEditor({
         aria-label="Quiz creation steps"
         className="flex flex-wrap gap-space-xs border-b border-border-surface pb-space-sm"
       >
-        {(['details', 'questions', 'review'] as const).map((s, i) => (
+        {steps.map((s, i) => (
           <Button
             key={s}
             variant={step === s ? 'primary' : 'ghost'}
@@ -170,6 +204,12 @@ export function QuizEditor({
           </Button>
         ))}
       </nav>
+      {readOnly && (
+        <Callout icon={<Lock size={16} aria-hidden="true" />}>
+          This quiz is completed, so it can no longer be edited. Its details and
+          questions are shown as they were run.
+        </Callout>
+      )}
       {saved && (
         <Text role="status" variant="caption" className="text-accent">
           {saved}
@@ -185,6 +225,7 @@ export function QuizEditor({
           key={quiz?.updatedAt ?? 'new'}
           ref={detailsRef}
           projectId={project.id}
+          readOnly={readOnly}
           {...(quiz ? { initial: quiz } : {})}
           onCancel={() => router.push(`/projects/${project.id}`)}
           onSaved={(q, next) => {
@@ -206,21 +247,23 @@ export function QuizEditor({
                 <Text as="h2" variant="card-title">
                   Questions ({quiz.questions.length})
                 </Text>
-                <Button
-                  variant="ghost"
-                  className="px-space-xs"
-                  icon={<Plus size={18} />}
-                  disabled={busy}
-                  onClick={() => select(null)}
-                >
-                  <VisuallyHidden>Add question</VisuallyHidden>
-                </Button>
+                {!readOnly && (
+                  <Button
+                    variant="ghost"
+                    className="px-space-xs"
+                    icon={<Plus size={18} />}
+                    disabled={busy}
+                    onClick={() => select(null)}
+                  >
+                    <VisuallyHidden>Add question</VisuallyHidden>
+                  </Button>
+                )}
               </div>
               <ol className="space-y-space-xs">
                 {quiz.questions.map((q, index) => (
                   <li
                     key={q.id}
-                    draggable={!busy}
+                    draggable={!busy && !readOnly}
                     onDragStart={() => setDragged(q.id)}
                     onDragEnd={() => setDragged(null)}
                     onDragOver={(e) => e.preventDefault()}
@@ -274,89 +317,96 @@ export function QuizEditor({
                         quiz.defaultQuestionDurationSeconds}
                       s
                     </Text>
-                    <div className="mt-space-sm flex items-center justify-end gap-space-xs border-t border-border-surface pt-space-xs">
-                      {[
-                        { label: 'Move up', Icon: ArrowUp, offset: -1 },
-                        { label: 'Move down', Icon: ArrowDown, offset: 1 },
-                      ].map(({ label, Icon, offset }) => (
+                    {!readOnly && (
+                      <div className="mt-space-sm flex items-center justify-end gap-space-xs border-t border-border-surface pt-space-xs">
+                        {[
+                          { label: 'Move up', Icon: ArrowUp, offset: -1 },
+                          { label: 'Move down', Icon: ArrowDown, offset: 1 },
+                        ].map(({ label, Icon, offset }) => (
+                          <Button
+                            key={label}
+                            variant="ghost"
+                            className="px-space-xs"
+                            icon={<Icon size={16} />}
+                            disabled={
+                              busy ||
+                              index + offset < 0 ||
+                              index + offset >= quiz.questions.length
+                            }
+                            onClick={() =>
+                              confirm(() => {
+                                const ids = quiz.questions.map((x) => x.id);
+                                [ids[index], ids[index + offset]] = [
+                                  ids[index + offset]!,
+                                  ids[index]!,
+                                ];
+                                void reorder(ids);
+                              })
+                            }
+                          >
+                            <VisuallyHidden>
+                              {label} question {index + 1}
+                            </VisuallyHidden>
+                          </Button>
+                        ))}
                         <Button
-                          key={label}
                           variant="ghost"
                           className="px-space-xs"
-                          icon={<Icon size={16} />}
-                          disabled={
-                            busy ||
-                            index + offset < 0 ||
-                            index + offset >= quiz.questions.length
-                          }
+                          icon={<Copy size={16} />}
+                          disabled={busy}
                           onClick={() =>
                             confirm(() => {
-                              const ids = quiz.questions.map((x) => x.id);
-                              [ids[index], ids[index + offset]] = [
-                                ids[index + offset]!,
-                                ids[index]!,
-                              ];
-                              void reorder(ids);
+                              setActive(null);
+                              setDraft({ ...q, id: '' });
+                              setRevision((r) => r + 1);
                             })
                           }
                         >
                           <VisuallyHidden>
-                            {label} question {index + 1}
+                            Duplicate question {index + 1}
                           </VisuallyHidden>
                         </Button>
-                      ))}
-                      <Button
-                        variant="ghost"
-                        className="px-space-xs"
-                        icon={<Copy size={16} />}
-                        disabled={busy}
-                        onClick={() =>
-                          confirm(() => {
-                            setActive(null);
-                            setDraft({ ...q, id: '' });
-                            setRevision((r) => r + 1);
-                          })
-                        }
-                      >
-                        <VisuallyHidden>
-                          Duplicate question {index + 1}
-                        </VisuallyHidden>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="px-space-xs"
-                        icon={<Trash2 size={16} />}
-                        disabled={busy}
-                        onClick={() => confirm(() => setDeleting(q))}
-                      >
-                        <VisuallyHidden>
-                          Delete question {index + 1}
-                        </VisuallyHidden>
-                      </Button>
-                    </div>
+                        <Button
+                          variant="ghost"
+                          className="px-space-xs"
+                          icon={<Trash2 size={16} />}
+                          disabled={busy}
+                          onClick={() => confirm(() => setDeleting(q))}
+                        >
+                          <VisuallyHidden>
+                            Delete question {index + 1}
+                          </VisuallyHidden>
+                        </Button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ol>
-              <Button
-                variant="secondary"
-                className="w-full"
-                icon={<Plus size={18} />}
-                disabled={busy}
-                onClick={() => select(null)}
-              >
-                Add question
-              </Button>
+              {!readOnly && (
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  icon={<Plus size={18} />}
+                  disabled={busy}
+                  onClick={() => select(null)}
+                >
+                  Add question
+                </Button>
+              )}
             </Surface>
-            <Text variant="caption" tone="secondary">
-              Drag to reorder or use the move buttons. Authoring order does not
-              determine the host’s live question sequence.
-            </Text>
+            {!readOnly && (
+              <Text variant="caption" tone="secondary">
+                Drag to reorder or use the move buttons. Authoring order does
+                not determine the host’s live question sequence.
+              </Text>
+            )}
           </aside>
           <div className="min-w-0 space-y-space-lg lg:col-span-2">
             <QuestionForm
               key={`${active ?? 'new'}-${revision}`}
               ref={questionRef}
               quiz={quiz}
+              readOnly={readOnly}
               questionNumber={
                 current
                   ? quiz.questions.indexOf(current) + 1

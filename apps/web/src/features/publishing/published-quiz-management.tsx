@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   CalendarDays,
   Download,
+  Eye,
   FileDown,
   Info,
   Link2,
@@ -21,6 +22,7 @@ import { QuizCover } from './quiz-cover';
 import { pluralize } from '@/lib/utils';
 import { CopyLinkButton } from '@/components/copy-link-button';
 import { HostLiveEntry } from './host-live-entry';
+import { QUIZ_STATUS } from '@quizmb/contracts';
 
 type Participant = {
   id: string;
@@ -107,6 +109,7 @@ export function PublishedQuizManagement({
   const [downloadError, setDownloadError] = useState('');
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const participantPreview = participants.slice(0, 5);
+  const completed = quiz.status === QUIZ_STATUS.COMPLETED;
   const remaining = Math.max(quiz.registrationLimit - quiz.registeredCount, 0);
   const percent = Math.min(
     (quiz.registeredCount / quiz.registrationLimit) * 100,
@@ -162,12 +165,15 @@ export function PublishedQuizManagement({
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-space-xs">
-              <Text variant="label">Manual start required</Text>
-              <Badge variant="draft" label="Host control" />
+              <Text variant="label">
+                {completed ? 'Quiz completed' : 'Manual start required'}
+              </Text>
+              {!completed && <Badge variant="draft" label="Host control" />}
             </div>
             <Text variant="body-secondary" tone="secondary">
-              The planned time never starts the quiz automatically. Open the
-              lobby whenever you are ready, then start from the host console.
+              {completed
+                ? 'This quiz has ended. Final scores and ranks are saved in its results.'
+                : 'The planned time never starts the quiz automatically. Open the lobby whenever you are ready, then start from the host console.'}
             </Text>
           </div>
         </div>
@@ -181,7 +187,11 @@ export function PublishedQuizManagement({
           <div className="flex flex-col gap-space-sm lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0 flex-1 space-y-space-xs">
               <div className="flex flex-wrap items-center gap-space-xs">
-                <Badge variant="scheduled" label="Published" />
+                {completed ? (
+                  <Badge variant="draft" label="Completed" />
+                ) : (
+                  <Badge variant="scheduled" label="Published" />
+                )}
                 <Text variant="caption" tone="secondary">
                   Interactive live session
                 </Text>
@@ -193,11 +203,21 @@ export function PublishedQuizManagement({
             </div>
             <div className="flex shrink-0 flex-wrap items-start gap-space-xs lg:self-start">
               <NavigationItem
-                href={APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)}
-                icon={<Pencil size={18} aria-hidden="true" />}
+                href={
+                  completed
+                    ? APP_LINKS.WORKSPACE.VIEW_QUIZ(quiz.id)
+                    : APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)
+                }
+                icon={
+                  completed ? (
+                    <Eye size={18} aria-hidden="true" />
+                  ) : (
+                    <Pencil size={18} aria-hidden="true" />
+                  )
+                }
                 className="h-control min-h-0 shrink-0 border border-border-surface bg-surface text-text-primary hover:border-accent hover:bg-canvas"
               >
-                Edit details
+                {completed ? 'View quiz' : 'Edit details'}
               </NavigationItem>
               <Link
                 href={APP_LINKS.PUBLIC_QUIZ(quiz.slug)}

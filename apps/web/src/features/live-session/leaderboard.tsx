@@ -57,10 +57,13 @@ function RankMark({ rank }: { rank: number }) {
 export function LeaderboardTable({
   board,
   highlightUserId,
+  scoredQuestionCount,
 }: {
   board: LeaderboardDto;
   /** The viewer's own row, highlighted as "You". */
   highlightUserId?: string;
+  /** Final leaderboard: shows each row's correct answers out of this. */
+  scoredQuestionCount?: number;
 }) {
   if (board.entries.length === 0)
     return (
@@ -83,14 +86,14 @@ export function LeaderboardTable({
         <span>Score</span>
       </div>
       <ol aria-label="Leaderboard">
-        {board.entries.map((entry, index) => {
+        {board.entries.map((entry) => {
           const you = entry.userId === highlightUserId;
           return (
             <li
               key={entry.userId}
               className={cn(
                 'flex items-center gap-space-sm border-b border-border-surface px-space-md py-space-sm last:border-b-0',
-                index === 0 && !you && 'bg-surface-low',
+                entry.rank === 1 && !you && 'bg-surface-low',
                 you && 'bg-status-live-surface',
               )}
             >
@@ -115,6 +118,17 @@ export function LeaderboardTable({
                 {entry.rank === 1 && !you && (
                   <Badge variant="live" dot={false} label="Leader" />
                 )}
+                {scoredQuestionCount !== undefined &&
+                  entry.correctCount !== undefined && (
+                    <Text
+                      as="span"
+                      variant="caption"
+                      tone="secondary"
+                      className="basis-full"
+                    >
+                      {entry.correctCount}/{scoredQuestionCount} correct
+                    </Text>
+                  )}
               </div>
               <Text
                 as="span"
@@ -273,10 +287,16 @@ export function ParticipantLeaderboard({
   board,
   standing,
   participantId,
+  final = false,
 }: {
   board: LeaderboardDto;
-  standing: ParticipantStandingDto | null;
+  standing: Pick<
+    ParticipantStandingDto,
+    'totalScore' | 'rank' | 'participantCount'
+  > | null;
   participantId: string;
+  /** After the quiz ended: the host revealed the final standings. */
+  final?: boolean;
 }) {
   const last = board.entries.at(-1)?.score;
   // Ties at the last rank can be cut from the list; the rank still counts.
@@ -296,9 +316,16 @@ export function ParticipantLeaderboard({
     <ParticipantStage className="justify-start md:py-space-2xl">
       <div className="flex w-full max-w-2xl flex-col gap-space-md">
         <div className="space-y-space-xs">
-          <Badge variant="live" label="Leaderboard from the host" />
+          <Badge
+            variant="live"
+            label={
+              final
+                ? 'Final results from the host'
+                : 'Leaderboard from the host'
+            }
+          />
           <Text as="h1" variant="page-title">
-            Leaderboard — Top 10
+            {final ? 'Final leaderboard — Top 10' : 'Leaderboard — Top 10'}
           </Text>
           <Text tone="secondary">
             {afterLabel(board)}. Tied scores share a rank.
@@ -350,7 +377,11 @@ export function ParticipantLeaderboard({
           icon={
             <span className="ds-live-dot block size-status-dot rounded-pill bg-accent" />
           }
-          title="Waiting for the host to continue…"
+          title={
+            final
+              ? 'The quiz has ended. Your result is saved to your history.'
+              : 'Waiting for the host to continue…'
+          }
         />
       </div>
     </ParticipantStage>
