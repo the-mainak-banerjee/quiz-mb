@@ -268,6 +268,8 @@ export type ParticipantQuizResultDto = {
     projectName: string;
     hostName: string;
   };
+  /** When the host started the quiz; null if it ended from the lobby. */
+  startedAt: string | null;
   completedAt: string | null;
   result: ParticipantFinalResultDto | null;
 };

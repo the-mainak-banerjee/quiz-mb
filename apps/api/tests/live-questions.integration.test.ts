@@ -809,6 +809,8 @@ test(
       ),
     );
     assert.equal(mine.quiz.id, quiz.id);
+    assert.ok(mine.startedAt && mine.completedAt);
+    assert.ok(mine.startedAt <= mine.completedAt, 'started before it ended');
     assert.equal(mine.result?.notAttemptedCount, 2);
     assert.equal(
       (

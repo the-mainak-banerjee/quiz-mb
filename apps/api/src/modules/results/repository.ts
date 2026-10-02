@@ -137,6 +137,7 @@ export class ResultsRepository {
       where: { id: liveSessionId, state: LIVE_SESSION_STATE.COMPLETED },
       select: {
         id: true,
+        startedAt: true,
         endedAt: true,
         quiz: {
           select: {

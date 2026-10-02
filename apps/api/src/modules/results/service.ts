@@ -134,6 +134,7 @@ export class ResultsService {
         projectName: session.quiz.project.name,
         hostName: session.quiz.creator.name,
       },
+      startedAt: session.startedAt?.toISOString() ?? null,
       completedAt: session.endedAt?.toISOString() ?? null,
       result: result ? toResult(result, participantCount) : null,
     };
