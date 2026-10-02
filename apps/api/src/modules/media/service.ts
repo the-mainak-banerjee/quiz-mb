@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient, Prisma } from '@quizmb/database';
-import type { UploadInput, MediaDto } from '@quizmb/contracts';
+import {
+  ERROR_CODE,
+  MEDIA_STATUS,
+  type MediaDto,
+  type UploadInput,
+} from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
 import { lockEditableQuiz } from '../quizzes/repository.js';
 import type { SupabaseStorage } from './storage.js';
@@ -14,13 +19,13 @@ export class MediaService {
     if (!this.storage)
       throw new ApiError(
         503,
-        'STORAGE_UNAVAILABLE',
+        ERROR_CODE.STORAGE_UNAVAILABLE,
         'Image storage is not configured yet.',
       );
     return this.storage;
   }
   async dto(asset: Asset | null): Promise<MediaDto | null> {
-    if (!asset || asset.status !== 'READY') return null;
+    if (!asset || asset.status !== MEDIA_STATUS.READY) return null;
     return {
       id: asset.id,
       fileName: asset.fileName,
@@ -56,9 +61,10 @@ export class MediaService {
   }
   private async owned(id: string, userId: string) {
     const asset = await this.db.mediaAsset.findFirst({
-      where: { id, ownerUserId: userId, status: { not: 'DELETED' } },
+      where: { id, ownerUserId: userId, status: { not: MEDIA_STATUS.DELETED } },
     });
-    if (!asset) throw new ApiError(404, 'NOT_FOUND', 'Image not found.');
+    if (!asset)
+      throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Image not found.');
     return asset;
   }
   async complete(id: string, userId: string) {
@@ -71,11 +77,11 @@ export class MediaService {
     const ready = await this.db.$transaction(async (tx) => {
       await lockEditableQuiz(tx, asset.quizId, userId);
       const current = await tx.mediaAsset.findUniqueOrThrow({ where: { id } });
-      if (current.status === 'DELETED')
-        throw new ApiError(409, 'INVALID_MEDIA', 'Image was removed.');
+      if (current.status === MEDIA_STATUS.DELETED)
+        throw new ApiError(409, ERROR_CODE.INVALID_MEDIA, 'Image was removed.');
       return tx.mediaAsset.update({
         where: { id },
-        data: { status: 'READY', readyAt: new Date() },
+        data: { status: MEDIA_STATUS.READY, readyAt: new Date() },
       });
     });
     return this.dto(ready);
@@ -90,13 +96,13 @@ export class MediaService {
       )
         throw new ApiError(
           409,
-          'MEDIA_IN_USE',
+          ERROR_CODE.MEDIA_IN_USE,
           'Save removal from the quiz before deleting this image.',
         );
       await this.adapter().remove(asset.objectPath);
       await tx.mediaAsset.update({
         where: { id },
-        data: { status: 'DELETED' },
+        data: { status: MEDIA_STATUS.DELETED },
       });
     });
   }

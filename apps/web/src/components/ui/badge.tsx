@@ -2,9 +2,11 @@ import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
 export type BadgeProps = Omit<ComponentProps<'span'>, 'children'> & {
-  variant: 'live' | 'scheduled' | 'draft' | 'completed';
+  variant: 'live' | 'scheduled' | 'draft' | 'completed' | 'danger';
   /** Contextual wording for the existing status, e.g. Live Ready. */
   label?: string;
+  /** Leading status dot. Live and danger show a pulsing dot by default. */
+  dot?: boolean;
 };
 const variants = {
   live: {
@@ -23,11 +25,16 @@ const variants = {
     label: 'Completed',
     style: 'bg-danger-surface text-danger-on-surface',
   },
+  danger: {
+    label: 'Attention',
+    style: 'bg-danger-surface text-danger-on-surface',
+  },
 };
 
 export function Badge({
   variant,
   label: customLabel,
+  dot = variant === 'live' || variant === 'danger',
   className,
   ...props
 }: BadgeProps) {
@@ -41,10 +48,13 @@ export function Badge({
         className,
       )}
     >
-      {variant === 'live' && (
+      {dot && (
         <span
           aria-hidden="true"
-          className="ds-live-dot size-status-dot rounded-pill bg-current"
+          className={cn(
+            'size-status-dot shrink-0 rounded-pill bg-current',
+            (variant === 'live' || variant === 'danger') && 'ds-live-dot',
+          )}
         />
       )}
       {customLabel ?? label}

@@ -41,10 +41,13 @@ export function QuizForm({
   initial,
   onSaved,
   onCancel,
+  readOnly = false,
   ref,
 }: {
   projectId: string;
   initial?: QuizDto;
+  /** Show the saved details with every control disabled. */
+  readOnly?: boolean;
   onSaved: (quiz: QuizDto, next: boolean) => void;
   onCancel: () => void;
   ref?: Ref<{ confirm: (action: () => void) => void }>;
@@ -92,7 +95,7 @@ export function QuizForm({
         className="grid items-start gap-gutter lg:grid-cols-3"
       >
         <fieldset
-          disabled={isSubmitting}
+          disabled={isSubmitting || readOnly}
           className="min-w-0 space-y-space-md lg:col-span-2"
         >
           <Surface className="space-y-space-md">
@@ -100,7 +103,9 @@ export function QuizForm({
               General details
             </Text>
             <Text tone="secondary">
-              Define the essentials for your next live quiz.
+              {readOnly
+                ? 'The essentials this quiz ran with.'
+                : 'Define the essentials for your next live quiz.'}
             </Text>
             <FormField
               label="Quiz title"
@@ -127,6 +132,7 @@ export function QuizForm({
               quizId={initial?.id}
               purpose="QUIZ_COVER"
               value={cover}
+              readOnly={readOnly}
               onBusy={setUploading}
               onChange={(m) => {
                 setCover(m);
@@ -237,38 +243,40 @@ export function QuizForm({
               {errors.root.message}
             </Text>
           )}
-          <div className="flex flex-wrap justify-between gap-space-sm">
-            <Button variant="danger" onClick={() => guard.confirm(onCancel)}>
-              Cancel
-            </Button>
-            <div className="flex flex-wrap gap-space-xs">
-              <Button
-                variant="secondary"
-                type="submit"
-                disabled={uploading}
-                onClick={() => setNext(false)}
-              >
-                {isSubmitting ? 'Saving…' : 'Save draft'}
+          {!readOnly && (
+            <div className="flex flex-wrap justify-between gap-space-sm">
+              <Button variant="danger" onClick={() => guard.confirm(onCancel)}>
+                Cancel
               </Button>
-              <Button
-                type={continueWithoutSaving ? 'button' : 'submit'}
-                disabled={uploading}
-                onClick={() => {
-                  if (continueWithoutSaving) onSaved(initial, true);
-                  else setNext(true);
-                }}
-              >
-                {continueWithoutSaving
-                  ? 'Continue to questions'
-                  : 'Save & add questions'}
-              </Button>
+              <div className="flex flex-wrap gap-space-xs">
+                <Button
+                  variant="secondary"
+                  type="submit"
+                  disabled={uploading}
+                  onClick={() => setNext(false)}
+                >
+                  {isSubmitting ? 'Saving…' : 'Save draft'}
+                </Button>
+                <Button
+                  type={continueWithoutSaving ? 'button' : 'submit'}
+                  disabled={uploading}
+                  onClick={() => {
+                    if (continueWithoutSaving) onSaved(initial, true);
+                    else setNext(true);
+                  }}
+                >
+                  {continueWithoutSaving
+                    ? 'Continue to questions'
+                    : 'Save & add questions'}
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </fieldset>
         <aside className="space-y-space-md">
           <Surface className="space-y-space-sm">
             <Text variant="caption" tone="secondary">
-              DRAFT PREVIEW
+              {readOnly ? 'QUIZ SUMMARY' : 'DRAFT PREVIEW'}
             </Text>
             <Text as="h2" variant="card-title" className="break-words">
               {title || 'Your quiz title'}
@@ -281,13 +289,15 @@ export function QuizForm({
               {values.defaultQuestionDurationSeconds || 0}s default
             </Text>
           </Surface>
-          <Surface className="space-y-space-xs bg-surface-low">
-            <Text variant="label">You control the pace</Text>
-            <Text variant="body-secondary" tone="secondary">
-              Each question can override the default timer. Save explicitly
-              before leaving; your changes are not autosaved.
-            </Text>
-          </Surface>
+          {!readOnly && (
+            <Surface className="space-y-space-xs bg-surface-low">
+              <Text variant="label">You control the pace</Text>
+              <Text variant="body-secondary" tone="secondary">
+                Each question can override the default timer. Save explicitly
+                before leaving; your changes are not autosaved.
+              </Text>
+            </Surface>
+          )}
         </aside>
       </form>
       {guard.dialog}

@@ -99,6 +99,8 @@ Before creating a new shared component:
 
 ## Backend Boundaries
 
+For backend work, use the `backend-design` skill.
+
 Keep backend transport layers thin.
 
 Use the general flow:
@@ -154,3 +156,13 @@ After coding:
 9. Stop at the requested scope.
 
 Do not automatically start the next phase.
+
+## Manual QA
+
+Local test accounts and seeded QA quizzes are in `docs/test-credentials.md` (gitignored).
+
+Before creating any test account, read that file and reuse the existing accounts.
+
+Only create a new account if none fits, then add it to that file.
+
+Never commit that file.

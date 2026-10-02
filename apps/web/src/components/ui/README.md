@@ -11,6 +11,13 @@ Import primitives from `@/components/ui`. Tokens live in `src/styles/tokens.css`
 - `Surface`: `as="div" | "section" | "article"`, native HTML attributes, className. One resting card treatment: white surface, stone border, 24px padding, 16px radius, ambient shadow. It does not imply clickability. No product metadata/footer structure is baked in.
 - `Badge`: required `variant="live" | "scheduled" | "draft" | "completed"`, native span attributes/ref, matching default text. Optional `label` supplies contextual wording such as "Live Ready" or a scheduled time without adding a visual variant. Live, scheduled, draft, and completed use distinct semantic palettes; live includes a decorative pulse dot, and reduced-motion disables animation. No extra status variants or implicit live-region announcements.
 
+- `Badge` also has `variant="danger"` for blocking or urgent states, and an optional `dot` flag. Live and danger show a pulsing dot by default; pass `dot` to add a static dot to other variants (for example an "Offline" draft badge) or `dot={false}` to remove it.
+- `Switch`: controlled on/off `role="switch"` button with `checked` and `onCheckedChange`. It has no visible label; connect one with `aria-labelledby` (or pass `aria-label`). Handlers must come from a client component.
+- `ProgressBar`: `value`, optional `max` (default 100) and a required accessible `label`. Renders an 8px accent track with `role="progressbar"`.
+- `Avatar`: initials avatar from `name`; pass `decorative` when the name is already visible beside it; `size="small" | "medium" | "large"` (28/32/40px), `tone="accent" | "neutral" | "muted"`, and optional presence `status="positive" | "neutral"`. The name is the accessible label.
+- `SegmentedControl`: controlled mutually exclusive filter buttons (`options`, `value`, `onValueChange`, required group `label`). Use it for local presentation filters, not navigation.
+- `Callout`: quiet tinted note with an optional decorative icon, for guidance or state explanations inside a card.
+
 All primitives accept className for composition. Use semantic utilities for customization; do not introduce raw palette values or replace the focus treatment. Components remain server-compatible except FormField. Interactive Button handlers must be passed from a client component.
 
 ## Semantic token usage

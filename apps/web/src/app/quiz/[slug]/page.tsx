@@ -5,7 +5,11 @@ import { currentUser } from '@/lib/auth/session';
 import { loadApi, serverApi } from '@/lib/api/server';
 import { getAppOrigin } from '@/lib/app-origin';
 import { API_ROUTES } from '@/lib/api/routes';
-import type { PublicQuizDto, RegistrationDto } from '@quizmb/contracts';
+import {
+  type PublicQuizDto,
+  QUIZ_STATUS,
+  type RegistrationDto,
+} from '@quizmb/contracts';
 
 export default async function PublicQuizPage({
   params,
@@ -21,24 +25,32 @@ export default async function PublicQuizPage({
   const registration = user
     ? await (
         await serverApi()
-      ).get<RegistrationDto>(`/api/quizzes/${quiz.id}/registration`)
+      ).get<RegistrationDto>(API_ROUTES.QUIZZES.REGISTRATION(quiz.id))
     : null;
   const isHost = user?.id === quiz.host.id;
+  // Registration stays open while the lobby is open; registered
+  // participants keep their panel (with the live-room link) once live.
   const initialState: PublicQuizState =
-    quiz.status !== 'PUBLISHED'
-      ? 'closed'
-      : !isHost && registration?.registered
-        ? 'registered'
-        : quiz.isFull
-          ? 'full'
-          : user
-            ? 'open'
-            : 'logged-out';
+    !isHost && registration?.registered
+      ? 'registered'
+      : quiz.status === QUIZ_STATUS.COMPLETED
+        ? 'completed'
+        : quiz.status !== QUIZ_STATUS.PUBLISHED &&
+            quiz.status !== QUIZ_STATUS.LOBBY
+          ? 'closed'
+          : quiz.isFull
+            ? 'full'
+            : user
+              ? 'open'
+              : 'logged-out';
 
   return (
     <PublicQuizView
       quiz={toPublishedQuizViewModel(quiz, appOrigin)}
       initialState={initialState}
+      resultSessionId={
+        isHost ? null : (registration?.completedLiveSessionId ?? null)
+      }
       user={user}
       isHost={isHost}
     />

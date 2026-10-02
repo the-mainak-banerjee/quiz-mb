@@ -5,17 +5,20 @@ import { Bold, Italic, Code, List } from 'lucide-react';
 import { Button, Text } from '@/components/ui';
 import { Textarea } from '@/components/ui/textarea';
 import { VisuallyHidden } from '@/components/visually-hidden';
-const Preview = dynamic(() => import('./markdown-preview'), {
+const Preview = dynamic(() => import('@/components/markdown-preview'), {
   loading: () => <Text tone="secondary">Loading preview…</Text>,
 });
 export function MarkdownEditor({
   value,
   onChange,
   error,
+  readOnly = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   error?: string | undefined;
+  /** Show the rendered prompt only, with no editing toolbar. */
+  readOnly?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [preview, setPreview] = useState(false);
@@ -33,6 +36,15 @@ export function MarkdownEditor({
     );
     el.focus();
   }
+  if (readOnly)
+    return (
+      <div className="space-y-space-xs">
+        <Text variant="label">Question prompt</Text>
+        <div className="rounded-control border border-border-control bg-surface p-space-md">
+          <Preview text={value} />
+        </div>
+      </div>
+    );
   return (
     <div className="space-y-space-xs">
       <label htmlFor="question-prompt" className="text-label">

@@ -1,13 +1,11 @@
 import { parseCookie } from 'cookie';
+import { HTTP_HEADER, authCookieNames } from '@quizmb/contracts';
 import type { Request, Response } from 'express';
 import type { AuthService } from './service.js';
 export function authCookies(production: boolean, accessDomain?: string) {
   if (production && !accessDomain)
     throw new Error('AUTH_COOKIE_DOMAIN is required in production');
-  const names = {
-    access: (production ? '__Secure-' : '') + 'quizmb-access',
-    refresh: (production ? '__Host-' : '') + 'quizmb-refresh',
-  };
+  const names = authCookieNames(production);
   const options = {
     httpOnly: true,
     secure: production,
@@ -20,7 +18,7 @@ export function authCookies(production: boolean, accessDomain?: string) {
   };
   return {
     read(req: Request) {
-      const values = parseCookie(req.headers.cookie ?? '');
+      const values = parseCookie(req.get(HTTP_HEADER.COOKIE) ?? '');
       return { access: values[names.access], refresh: values[names.refresh] };
     },
     set(res: Response, credentials: Awaited<ReturnType<AuthService['login']>>) {

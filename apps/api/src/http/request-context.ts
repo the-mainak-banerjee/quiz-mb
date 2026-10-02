@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { RequestHandler } from 'express';
 import type { Logger } from 'pino';
+import { HTTP_HEADER } from '@quizmb/contracts';
 
 export function requestContext(logger: Logger): RequestHandler {
   return (req, res, next) => {
     const requestId = randomUUID();
     const start = performance.now();
     res.locals.requestId = requestId;
-    res.setHeader('X-Request-ID', requestId);
+    res.setHeader(HTTP_HEADER.REQUEST_ID, requestId);
     res.on('finish', () => {
       // Do not log headers, bodies, query strings, or arbitrary URL paths.
       logger.info(

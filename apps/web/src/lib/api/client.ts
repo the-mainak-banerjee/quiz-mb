@@ -1,3 +1,5 @@
+import { CONTENT_TYPE, HTTP_HEADER, HTTP_METHOD } from '@quizmb/contracts';
+import { CLIENT_ERROR_CODE } from './error-codes.ts';
 import { API_PREFIX } from './routes.ts';
 
 export class ApiError extends Error {
@@ -8,7 +10,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     status = 0,
-    code = 'NETWORK_ERROR',
+    code: string = CLIENT_ERROR_CODE.NETWORK_ERROR,
     details: Record<string, string> = {},
     requestId?: string,
   ) {
@@ -26,6 +28,8 @@ export function apiError(error: unknown): ApiError {
     ? error
     : new ApiError('Unable to connect. Please try again.');
 }
+
+const BODYLESS_METHODS: readonly string[] = [HTTP_METHOD.GET, HTTP_METHOD.HEAD];
 
 type Options = {
   headers?: HeadersInit;
@@ -68,14 +72,18 @@ export function createApiClient(config: Config) {
       url.origin !== base.origin ||
       !url.pathname.startsWith(`${API_PREFIX}/`)
     )
-      throw new ApiError('Invalid API path.', 0, 'INVALID_REQUEST');
+      throw new ApiError(
+        'Invalid API path.',
+        0,
+        CLIENT_ERROR_CODE.INVALID_REQUEST,
+      );
     const headers = new Headers(config.headers);
     new Headers(options.headers).forEach((value, name) =>
       headers.set(name, value),
     );
-    headers.set('Accept', 'application/json');
-    if (body !== undefined || !['GET', 'HEAD'].includes(method))
-      headers.set('Content-Type', 'application/json');
+    headers.set(HTTP_HEADER.ACCEPT, CONTENT_TYPE.JSON);
+    if (body !== undefined || !BODYLESS_METHODS.includes(method))
+      headers.set(HTTP_HEADER.CONTENT_TYPE, CONTENT_TYPE.JSON);
     const encoded = body === undefined ? undefined : JSON.stringify(body);
     const startedGeneration = generation;
     async function send(): Promise<T> {
@@ -102,7 +110,7 @@ export function createApiClient(config: Config) {
           throw new ApiError(
             'The server returned an invalid response.',
             response.status,
-            'INVALID_RESPONSE',
+            CLIENT_ERROR_CODE.INVALID_RESPONSE,
           );
         }
         if (!response.ok || (record(payload) && payload.success === false)) {
@@ -123,11 +131,13 @@ export function createApiClient(config: Config) {
                 ? error.message
                 : 'Request failed. Please try again.',
             response.status,
-            typeof error.code === 'string' ? error.code : 'REQUEST_FAILED',
+            typeof error.code === 'string'
+              ? error.code
+              : CLIENT_ERROR_CODE.REQUEST_FAILED,
             details,
             typeof error.requestId === 'string'
               ? error.requestId
-              : (response.headers.get('X-Request-ID') ?? undefined),
+              : (response.headers.get(HTTP_HEADER.REQUEST_ID) ?? undefined),
           );
         }
         if (record(payload) && payload.success === true && 'data' in payload)
@@ -136,19 +146,23 @@ export function createApiClient(config: Config) {
           throw new ApiError(
             'The server returned an invalid response.',
             response.status,
-            'INVALID_RESPONSE',
+            CLIENT_ERROR_CODE.INVALID_RESPONSE,
           );
         // Health and other explicitly unenveloped JSON endpoints are supported.
         return payload as T;
       } catch (error) {
         if (error instanceof ApiError) throw error;
         if (options.signal?.aborted)
-          throw new ApiError('Request cancelled.', 0, 'ABORTED');
+          throw new ApiError(
+            'Request cancelled.',
+            0,
+            CLIENT_ERROR_CODE.ABORTED,
+          );
         if (timeout.aborted)
           throw new ApiError(
             'Request timed out. Please try again.',
             0,
-            'TIMEOUT',
+            CLIENT_ERROR_CODE.TIMEOUT,
           );
         throw apiError(error);
       }
@@ -182,14 +196,14 @@ export function createApiClient(config: Config) {
   }
   return {
     get: <T>(path: string, options?: Options) =>
-      request<T>('GET', path, undefined, options),
+      request<T>(HTTP_METHOD.GET, path, undefined, options),
     post: <T>(path: string, body: unknown = {}, options?: Options) =>
-      request<T>('POST', path, body, options),
+      request<T>(HTTP_METHOD.POST, path, body, options),
     put: <T>(path: string, body: unknown, options?: Options) =>
-      request<T>('PUT', path, body, options),
+      request<T>(HTTP_METHOD.PUT, path, body, options),
     patch: <T>(path: string, body: unknown, options?: Options) =>
-      request<T>('PATCH', path, body, options),
+      request<T>(HTTP_METHOD.PATCH, path, body, options),
     delete: <T = void>(path: string, options?: Options) =>
-      request<T>('DELETE', path, undefined, options),
+      request<T>(HTTP_METHOD.DELETE, path, undefined, options),
   };
 }

@@ -1,4 +1,4 @@
-import type { ProjectInput } from '@quizmb/contracts';
+import { ERROR_CODE, type ProjectInput } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
 import type { ProjectsRepository } from './repository.js';
 type Row = NonNullable<Awaited<ReturnType<ProjectsRepository['get']>>>;
@@ -23,7 +23,8 @@ export class ProjectsService {
   }
   async get(id: string, userId: string) {
     const row = await this.repository.get(id, userId);
-    if (!row) throw new ApiError(404, 'NOT_FOUND', 'Project not found.');
+    if (!row)
+      throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Project not found.');
     return dto(row);
   }
   async create(userId: string, input: ProjectInput) {

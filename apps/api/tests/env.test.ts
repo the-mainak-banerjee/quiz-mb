@@ -23,7 +23,23 @@ test('production requires explicit origins', () => {
     parseEnv({
       NODE_ENV: 'production',
       ALLOWED_ORIGINS: 'https://app.quizmb.com',
+      REDIS_URL: 'rediss://default:secret@example.upstash.io:6379',
     }).ALLOWED_ORIGINS,
     ['https://app.quizmb.com'],
+  );
+});
+
+test('production requires a Redis URL for live sessions', () => {
+  assert.throws(
+    () =>
+      parseEnv({
+        NODE_ENV: 'production',
+        ALLOWED_ORIGINS: 'https://app.quizmb.com',
+      }),
+    /REDIS_URL/,
+  );
+  assert.throws(
+    () => parseEnv({ REDIS_URL: 'https://example.upstash.io' }),
+    /REDIS_URL/,
   );
 });

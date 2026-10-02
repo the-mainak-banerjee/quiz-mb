@@ -9,7 +9,12 @@ import {
   Pencil,
   Plus,
 } from 'lucide-react';
-import type { ProjectDto, QuizSummaryDto } from '@quizmb/contracts';
+import {
+  ACTIVE_QUIZ_STATUSES,
+  QUIZ_STATUS,
+  type ProjectDto,
+  type QuizSummaryDto,
+} from '@quizmb/contracts';
 import { loadApi } from '@/lib/api/server';
 import { API_ROUTES } from '@/lib/api/routes';
 import { Text } from '@/components/ui';
@@ -28,11 +33,12 @@ export default async function ProjectPage({
     loadApi<QuizSummaryDto[]>(API_ROUTES.PROJECTS.QUIZZES(projectId)),
   ]);
   const statusCounts = {
-    draft: quizzes.filter((quiz) => quiz.status === 'DRAFT').length,
+    draft: quizzes.filter((quiz) => quiz.status === QUIZ_STATUS.DRAFT).length,
     scheduled: quizzes.filter((quiz) =>
-      ['PUBLISHED', 'SCHEDULED', 'LOBBY', 'LIVE'].includes(quiz.status),
+      ACTIVE_QUIZ_STATUSES.includes(quiz.status),
     ).length,
-    completed: quizzes.filter((quiz) => quiz.status === 'COMPLETED').length,
+    completed: quizzes.filter((quiz) => quiz.status === QUIZ_STATUS.COMPLETED)
+      .length,
   };
   return (
     <main className="mx-auto w-full max-w-content flex-1 space-y-space-xl px-margin-sm py-space-lg md:px-margin lg:px-space-xl">

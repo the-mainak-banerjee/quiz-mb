@@ -2,7 +2,11 @@
 import Image from 'next/image';
 import { useState } from 'react';
 import { Upload } from 'lucide-react';
-import type { MediaDto } from '@quizmb/contracts';
+import {
+  MEDIA_PURPOSE,
+  type MediaDto,
+  type MediaPurpose,
+} from '@quizmb/contracts';
 import { Button, Input, Text } from '@/components/ui';
 import { uploadImage } from '@/lib/api/authoring';
 import { apiError } from '@/lib/api/client';
@@ -12,12 +16,15 @@ export function ImageUpload({
   value,
   onChange,
   onBusy,
+  readOnly = false,
 }: {
   quizId?: string | undefined;
-  purpose: 'QUIZ_COVER' | 'QUESTION_IMAGE';
+  purpose: MediaPurpose;
   value: MediaDto | null;
   onChange: (media: MediaDto | null) => void;
   onBusy: (busy: boolean) => void;
+  /** Show the saved image only, with no upload or remove controls. */
+  readOnly?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -38,7 +45,9 @@ export function ImageUpload({
   return (
     <div className="space-y-space-sm">
       <Text variant="label">
-        {purpose === 'QUIZ_COVER' ? 'Cover artwork' : 'Question image'}{' '}
+        {purpose === MEDIA_PURPOSE.QUIZ_COVER
+          ? 'Cover artwork'
+          : 'Question image'}{' '}
         (optional)
       </Text>
       <div
@@ -65,37 +74,48 @@ export function ImageUpload({
             <Text variant="caption" className="break-all">
               {value.fileName}
             </Text>
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={() => onChange(null)}
-            >
-              Remove image
-            </Button>
           </>
         )}
-        <label
-          className="flex items-center gap-space-xs text-label"
-          htmlFor={`upload-${purpose}`}
-        >
-          <Upload size={18} />
-          {busy ? 'Uploading…' : 'Drop an image here or browse files'}
-        </label>
-        <Input
-          id={`upload-${purpose}`}
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          disabled={!quizId || busy}
-          className="h-auto py-space-xs"
-          onChange={(e) => {
-            void upload(e.target.files?.[0]);
-            e.target.value = '';
-          }}
-        />
-        <Text variant="caption" tone="secondary">
-          PNG, JPEG or WebP · Up to 10 MB
-          {!quizId ? ' · Save the quiz basics once to enable uploads.' : ''}
-        </Text>
+        {readOnly && !value && (
+          <Text variant="body-secondary" tone="secondary">
+            No image added.
+          </Text>
+        )}
+        {value && !readOnly && (
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={() => onChange(null)}
+          >
+            Remove image
+          </Button>
+        )}
+        {!readOnly && (
+          <>
+            <label
+              className="flex items-center gap-space-xs text-label"
+              htmlFor={`upload-${purpose}`}
+            >
+              <Upload size={18} />
+              {busy ? 'Uploading…' : 'Drop an image here or browse files'}
+            </label>
+            <Input
+              id={`upload-${purpose}`}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={!quizId || busy}
+              className="h-auto py-space-xs"
+              onChange={(e) => {
+                void upload(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+            <Text variant="caption" tone="secondary">
+              PNG, JPEG or WebP · Up to 10 MB
+              {!quizId ? ' · Save the quiz basics once to enable uploads.' : ''}
+            </Text>
+          </>
+        )}
       </div>
       {error && (
         <Text role="alert" className="text-danger">

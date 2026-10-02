@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { NODE_ENV } from '../../config/constants.js';
 export function parseAuthEnv(input: NodeJS.ProcessEnv) {
   const result = z
     .object({
@@ -31,7 +32,7 @@ export function parseAuthEnv(input: NodeJS.ProcessEnv) {
       'Invalid auth environment: ' +
         [...new Set(result.error.issues.map((i) => i.path[0]))].join(', '),
     );
-  if (input.NODE_ENV === 'production' && !result.data.AUTH_COOKIE_DOMAIN)
+  if (input.NODE_ENV === NODE_ENV.PRODUCTION && !result.data.AUTH_COOKIE_DOMAIN)
     throw new Error('AUTH_COOKIE_DOMAIN is required in production');
   return result.data;
 }

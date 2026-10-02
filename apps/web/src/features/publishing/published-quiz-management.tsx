@@ -1,18 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   ArrowUpRight,
   CalendarDays,
-  Check,
-  Copy,
   Download,
+  Eye,
   FileDown,
   Info,
   Link2,
   Pencil,
-  Play,
 } from 'lucide-react';
 import { Badge, Button, Surface, Text } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
@@ -22,8 +20,9 @@ import type { PublishedQuizViewModel } from './types';
 import { downloadQuizPoster, QuizQrCode } from './quiz-qr-code';
 import { QuizCover } from './quiz-cover';
 import { pluralize } from '@/lib/utils';
-
-const START_WINDOW_MS = 15 * 60 * 1000;
+import { CopyLinkButton } from '@/components/copy-link-button';
+import { HostLiveEntry } from './host-live-entry';
+import { QUIZ_STATUS } from '@quizmb/contracts';
 
 type Participant = {
   id: string;
@@ -106,35 +105,16 @@ export function PublishedQuizManagement({
   quiz: PublishedQuizViewModel;
   participants: readonly Participant[];
 }) {
-  const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
-  const [now, setNow] = useState<number | null>(null);
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const participantPreview = participants.slice(0, 5);
+  const completed = quiz.status === QUIZ_STATUS.COMPLETED;
   const remaining = Math.max(quiz.registrationLimit - quiz.registeredCount, 0);
   const percent = Math.min(
     (quiz.registeredCount / quiz.registrationLimit) * 100,
     100,
   );
-  const planned = new Date(quiz.plannedStartAt);
-  const canStart =
-    now !== null &&
-    Number.isFinite(planned.getTime()) &&
-    planned.getTime() - now <= START_WINDOW_MS;
-
-  useEffect(() => {
-    const updateNow = () => setNow(Date.now());
-    updateNow();
-    const timer = window.setInterval(updateNow, 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  async function copyPublicUrl() {
-    await navigator.clipboard?.writeText(quiz.publicUrl);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
-  }
 
   async function downloadPoster() {
     setDownloading(true);
@@ -179,32 +159,27 @@ export function PublishedQuizManagement({
       </nav>
 
       <Surface className="flex flex-col items-start justify-between gap-space-md bg-surface-low sm:flex-row sm:items-center">
-        <div className="flex items-start gap-space-sm">
+        <div className="flex min-w-0 items-start gap-space-sm">
           <div className="flex shrink-0 size-control items-center justify-center rounded-control bg-surface-high text-accent">
             <Info size={20} aria-hidden="true" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-space-xs">
-              <Text variant="label">Manual start required</Text>
-              <Badge variant="draft" label="Host control" />
+              <Text variant="label">
+                {completed ? 'Quiz completed' : 'Manual start required'}
+              </Text>
+              {!completed && <Badge variant="draft" label="Host control" />}
             </div>
             <Text variant="body-secondary" tone="secondary">
-              The planned time never starts the quiz automatically. The start
-              control becomes available 15 minutes before the event.
+              {completed
+                ? 'This quiz has ended. Final scores and ranks are saved in its results.'
+                : 'The planned time never starts the quiz automatically. Open the lobby whenever you are ready, then start from the host console.'}
             </Text>
           </div>
         </div>
-        <Button
-          icon={<Play size={18} aria-hidden="true" />}
-          disabled={!canStart}
-          title={
-            canStart
-              ? 'Start the session'
-              : 'Available 15 minutes before the scheduled time'
-          }
-        >
-          Start the session
-        </Button>
+        <div className="w-full shrink-0 sm:w-auto">
+          <HostLiveEntry quizId={quiz.id} status={quiz.status} />
+        </div>
       </Surface>
 
       <section className="w-full">
@@ -212,7 +187,11 @@ export function PublishedQuizManagement({
           <div className="flex flex-col gap-space-sm lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0 flex-1 space-y-space-xs">
               <div className="flex flex-wrap items-center gap-space-xs">
-                <Badge variant="scheduled" label="Published" />
+                {completed ? (
+                  <Badge variant="draft" label="Completed" />
+                ) : (
+                  <Badge variant="scheduled" label="Published" />
+                )}
                 <Text variant="caption" tone="secondary">
                   Interactive live session
                 </Text>
@@ -224,11 +203,21 @@ export function PublishedQuizManagement({
             </div>
             <div className="flex shrink-0 flex-wrap items-start gap-space-xs lg:self-start">
               <NavigationItem
-                href={APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)}
-                icon={<Pencil size={18} aria-hidden="true" />}
+                href={
+                  completed
+                    ? APP_LINKS.WORKSPACE.VIEW_QUIZ(quiz.id)
+                    : APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)
+                }
+                icon={
+                  completed ? (
+                    <Eye size={18} aria-hidden="true" />
+                  ) : (
+                    <Pencil size={18} aria-hidden="true" />
+                  )
+                }
                 className="h-control min-h-0 shrink-0 border border-border-surface bg-surface text-text-primary hover:border-accent hover:bg-canvas"
               >
-                Edit details
+                {completed ? 'View quiz' : 'Edit details'}
               </NavigationItem>
               <Link
                 href={APP_LINKS.PUBLIC_QUIZ(quiz.slug)}
@@ -283,19 +272,7 @@ export function PublishedQuizManagement({
               >
                 {quiz.publicUrl}
               </Text>
-              <Button
-                variant="secondary"
-                icon={
-                  copied ? (
-                    <Check size={18} aria-hidden="true" />
-                  ) : (
-                    <Copy size={18} aria-hidden="true" />
-                  )
-                }
-                onClick={() => void copyPublicUrl()}
-              >
-                {copied ? 'Copied' : 'Copy link'}
-              </Button>
+              <CopyLinkButton url={quiz.publicUrl} />
             </div>
           </Surface>
 

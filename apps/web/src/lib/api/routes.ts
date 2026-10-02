@@ -21,6 +21,21 @@ export const API_ROUTES = {
       `${API_PREFIX}/quizzes/${quizId}/registrations`,
     ALL_REGISTRATIONS: (quizId: string) =>
       `${API_PREFIX}/quizzes/${quizId}/registrations/all`,
+    REGISTRATION: (quizId: string) =>
+      `${API_PREFIX}/quizzes/${quizId}/registration`,
+    LIVE_SESSION: (quizId: string) =>
+      `${API_PREFIX}/quizzes/${quizId}/live-session`,
+    WATCH_TICKET: (quizId: string) =>
+      `${API_PREFIX}/quizzes/${quizId}/watch-ticket`,
+    RESULTS: (quizId: string, offset = 0) =>
+      `${API_PREFIX}/quizzes/${quizId}/results?offset=${offset}`,
+  },
+  LIVE_SESSIONS: {
+    ACTIVE: `${API_PREFIX}/live-sessions/active`,
+    SOCKET_TICKET: (liveSessionId: string) =>
+      `${API_PREFIX}/live-sessions/${liveSessionId}/socket-ticket`,
+    MY_RESULT: (liveSessionId: string) =>
+      `${API_PREFIX}/live-sessions/${liveSessionId}/my-result`,
   },
   PUBLIC_QUIZ: (publicId: string) =>
     `${API_PREFIX}/public/quizzes/${encodeURIComponent(publicId)}`,

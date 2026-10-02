@@ -922,6 +922,17 @@ socket.data.userId
 
 Never trust a client-supplied userId in an event payload.
 
+### Cross-domain handshake (decided 2026-09-29)
+
+The web app and API are deployed on different sites (see PROGRESS, approved architecture clarifications), so the socket handshake must not depend on cookies:
+
+1. The signed-in client requests a ticket over REST: `POST /api/live-sessions/:liveSessionId/socket-ticket`.
+2. The server checks the user may access that session and returns a short-lived signed ticket (about 60 seconds, single purpose, bound to the user and live session).
+3. The client connects with `io(API_ORIGIN + "/quiz", { auth: { ticket } })`. The server verifies the ticket before the connection is accepted and sets `socket.data.userId` from it.
+4. Every reconnect requests a fresh ticket first.
+
+Socket.IO CORS allows the same configured web origins as REST. Tickets are never logged or stored in the browser beyond the connection attempt.
+
 ---
 
 # 18. Socket Acknowledgement Format
@@ -1920,26 +1931,3 @@ The API implementation is complete when:
 ---
 
 **End of API Design Document**
-
-## Authoring implementation notes — 2026-09-28
-
-The current authoring slice implements the project list/create/read/update, project quiz list/create, host quiz read/update, question create/update/delete/reorder, and media upload-request/complete/delete routes above. Project/quiz deletion, public quiz views, and publishing remain deferred.
-
-- Explicit-save clients submit complete editable field sets on PATCH. Strict validation rejects lifecycle writes, quiz project reassignment, and unknown fields.
-- Quiz draft create/update includes nullable `plannedStartAt` as planned-date metadata only. It does not transition status. New quizzes always remain `DRAFT`; publishing must reject a missing `plannedStartAt`.
-- Host quiz responses and question mutation responses return the current owned quiz with ordered questions and answer keys. They must never be reused as participant DTOs.
-- Media completion returns `{ id, fileName, url }`, where `url` is a one-hour private read URL. Media deletion returns 204 and is rejected while any quiz/question references the asset.
-- PNG/JPEG/WebP uploads up to 10 MiB are supported. Uploads require an existing owned, editable quiz; project covers are not part of this slice.
-- List responses include `meta.nextCursor` with a page size of 25. Cursors are UUIDs interpreted as stable ascending keyset positions.
-- Runtime schemas and DTOs live in `packages/contracts/src/index.ts`; centralized protective input limits are documented in PROGRESS.MD.
-
-## Publishing and registration implementation notes — 2026-09-29
-
-The publishing slice implements `POST /api/quizzes/:quizId/publish`, `GET /api/public/quizzes/:publicId`, the registration routes in section 10 (including the `/registrations/all` roster in 10.5), and both dashboard routes in section 11. This supersedes the "publishing remain deferred" statement in the authoring notes above.
-
-- Publishing requires `DRAFT` status, `plannedStartAt`, and at least one question that passes the shared question schema. A missing `plannedStartAt` returns `422 VALIDATION_ERROR` with `details.plannedStartAt`; the check is repeated inside the locked publish transaction. Publishing an already published quiz returns it unchanged.
-- Quiz create/update payloads now require `plannedStartAt`, so it cannot be cleared through the API; drafts saved before it became required can still hold `null` and cannot be published until it is set.
-- Registration locks the quiz row (`SELECT … FOR UPDATE`) before counting `REGISTERED` rows, so concurrent requests are serialized and capacity cannot be exceeded. Waiting requests queue for up to 15 seconds instead of failing.
-- Additional error codes beyond section 5: `HOST_CANNOT_REGISTER` (403, host registering for their own quiz), `REGISTRATION_CLOSED` (409, quiz not `PUBLISHED`), `UNREGISTRATION_CLOSED` (409, quiz `LIVE` or `COMPLETED`), `NOT_REGISTERED` (404 on unregister), and `QUIZ_LOCKED` (409, publishing a non-draft quiz).
-- `GET /api/public/quizzes/:publicId` returns `PublicQuizDto` for `PUBLISHED`, `LOBBY`, `LIVE`, and `COMPLETED` quizzes only; drafts return 404. It never includes options or answer keys.
-- `GET /api/dashboard/host` currently returns `{ projects, quizzes }` (quizzes of every status, grouped by the web client) rather than the per-status lists sketched in 11.2. `GET /api/dashboard/participant` returns `upcoming`; `live` and `history` are empty until later phases.

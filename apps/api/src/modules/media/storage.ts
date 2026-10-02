@@ -1,5 +1,5 @@
 import { StorageClient } from '@supabase/storage-js';
-import { MEDIA_LIMITS } from '@quizmb/contracts';
+import { MEDIA_LIMITS, ERROR_CODE } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
 export function createStorage(env: NodeJS.ProcessEnv) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return undefined;
@@ -43,7 +43,7 @@ export class SupabaseStorage {
     )
       throw new ApiError(
         503,
-        'STORAGE_UNAVAILABLE',
+        ERROR_CODE.STORAGE_UNAVAILABLE,
         'Image storage needs configuration.',
       );
     const { data, error } = await this.client
@@ -52,7 +52,7 @@ export class SupabaseStorage {
     if (error)
       throw new ApiError(
         503,
-        'STORAGE_UNAVAILABLE',
+        ERROR_CODE.STORAGE_UNAVAILABLE,
         'Could not authorize image upload.',
       );
     return { url: data.signedUrl, token: data.token, path: data.path };
@@ -62,7 +62,7 @@ export class SupabaseStorage {
     if (error)
       throw new ApiError(
         422,
-        'UPLOAD_INCOMPLETE',
+        ERROR_CODE.UPLOAD_INCOMPLETE,
         'Upload the image before confirming it.',
       );
     if (
@@ -73,7 +73,7 @@ export class SupabaseStorage {
     )
       throw new ApiError(
         422,
-        'INVALID_MEDIA',
+        ERROR_CODE.INVALID_MEDIA,
         'The uploaded file does not match the declared image type or size.',
       );
   }
@@ -82,12 +82,20 @@ export class SupabaseStorage {
       .from(this.bucket)
       .createSignedUrl(path, 3600);
     if (error)
-      throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'Could not load image.');
+      throw new ApiError(
+        503,
+        ERROR_CODE.STORAGE_UNAVAILABLE,
+        'Could not load image.',
+      );
     return data.signedUrl;
   }
   async remove(path: string) {
     const { error } = await this.client.from(this.bucket).remove([path]);
     if (error)
-      throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'Could not remove image.');
+      throw new ApiError(
+        503,
+        ERROR_CODE.STORAGE_UNAVAILABLE,
+        'Could not remove image.',
+      );
   }
 }

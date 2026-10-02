@@ -2,9 +2,112 @@
 
 ## Current status
 
-Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Lobby, realtime, and Redis/Socket.IO (Phase 5 onward) are not started. No deployment has been performed.
+Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Phase 5 (lobby and live-session foundation), Phases 6–8 (live questions, submission, scoring, personal rank and live distribution) and Phase 9 (host presentation controls and leaderboard) and Phase 10 (end quiz, final results and history) are implemented end to end. No deployment has been performed.
 
 This document records implementation progress, verification results, limitations, and approved scope adjustments. Project setup and usage instructions belong in the root README.
+
+## Phase 10 — End quiz, final results and history — October 2, 2026
+
+Branch `phase-10-results`.
+
+- Ending the quiz saves each participant's final score, rank and correct / incorrect / not-attempted counts in `quiz_results` (migration `20261002000000_quiz_results`), in the same transaction that completes the session. Only questions the host asked count; descriptive questions are not scored.
+- Participants immediately see their own final result; the host sees totals and a private final Top 10, and can reveal it to every connected participant (`host:final-leaderboard-show`). There is no rejoining after the end.
+- History page lists completed quizzes the participant registered for (including ones they missed) and opens a per-quiz summary with start and end times. The host results page shows totals and every participant ranked, 100 per page with Load more.
+- Completed quizzes are read only at `/quizzes/:id/view` (the edit address redirects there); the editor shows the real status and links back to the manage page. The public quiz page shows a completed state, with View results for the host and View your result (that quiz's summary) for registered participants.
+- Starting a question is now one database statement without a Redis lock (participant delivery about 1.8 s → 0.56 s at high database latency).
+- Checks: format, lint, typecheck, unit tests, build, and the live questions, live sessions and publishing integration tests passed.
+
+## Phase 9 — Host presentation controls and leaderboard — October 1, 2026
+
+Branch `phase-9-leaderboard`. QA approved.
+
+- Host can view the Top 10 privately (replaces the console's main area and scrolls into view), show it on every participant screen, and hide it again; participants then return to the latest question result. Asking the next question from the leaderboard hides it. Nothing advances automatically.
+- Participants see the Top 10 in the same live page, with their own row highlighted and their rank and score always available (with the gap to the top 10 when outside it).
+- Top 10 includes everyone ranked 10th or better, so ties at the boundary add rows; ties share a rank. Uses the existing `LEADERBOARD` session state; no migration.
+- Performance: leaderboard and final question results are cached per session until the next question ends; show/hide is one conditional update; the session row loads in one query (show/hide about 2.2 s → 0.85 s at high database latency).
+- Checks: format, lint, typecheck, unit tests, build, and both live integration tests (now covering the leaderboard) passed.
+
+## Phases 6–8 — Live questions, scoring and distribution — October 1, 2026
+
+Branch `phase-6-questions`. QA approved.
+
+- Host asks any unused question in any order; it starts immediately with a server-owned timer. One explicit, locked submission per participant before `endsAt`; not attempted is derived. Questions close exactly once (in-process timer re-armed at boot, plus a recovery check on every interaction); ending the quiz mid-question closes it.
+- Participants stay on one question card from answering through the reveal (correct answer, own answer, final distribution), then see their score and rank load in place. Late joiners get only the remaining time.
+- Scoring: 1000 × (1 − 0.6 × response time ÷ duration) for correct answers, 0 otherwise; multiple answer is all-or-nothing; descriptive is not scored. Standings are computed in PostgreSQL per question (shared ranks on ties; count includes everyone who entered) instead of a Redis leaderboard, to save Upstash commands.
+- Host sees live submission counts, percentages and anonymous descriptive responses, and keeps the finished question with its final results on screen until choosing the next one (Phase 9's "keep question visible", delivered early).
+- Database: `AskedQuestion`, `AnswerSubmission`, `AnswerSubmissionOption` (migration `20261001000000_live_questions`). Answers cost one database statement; quiz content, answer keys and confirmed registrations are cached in memory per session.
+- QA fixes: number fields ignore the scroll wheel, saving an unchanged question skips the API, question-form errors appear only after a save attempt, the Open live lobby button no longer wraps, and asking a question is faster.
+- Checks: format, lint, typecheck, unit tests (26 API, 9 web), build, and both live integration tests passed against development PostgreSQL and Upstash Redis.
+- Known limitations: single API instance (timers, caches and throttling are in memory); joins and reveals take a few seconds at high database latency; question Markdown needs work (docs/TODO.md).
+
+## Phase 5 — Lobby and live-session backend — September 29, 2026
+
+Branch `phase-5-live`. Built on the approved frontend screens, assuming the web (Vercel) and API (Render) are on different sites.
+
+### Implemented
+
+- Database: `LiveSessionState`, `LiveQuizSession`, `ParticipantSession`; migration `20260929000000_live_sessions` applied to development PostgreSQL with RLS. Partial unique indexes guarantee one unfinished session per host and per quiz.
+- API `live-sessions` module (transport → service → repository/Redis): open lobby, current session, host's active session, 60-second socket tickets, and the `/quiz` Socket.IO namespace with join/sync/leave, start, late-join toggle and minimal end. Details in API_DESIGN "Live session implementation notes".
+- Server-side rules: host-only commands; registration required to join; late join applies to first-time entrants only; returning attendees always reconnect; registration open in the lobby and closed at start; quiz content locked once live; one live quiz per host (checked in the service, the transaction and the database); the newest participant device replaces the older one; completed sessions refuse joins.
+- Redis (Upstash free tier): one TLS connection with no ready check, no offline queue and bounded retries; a presence hash per session (the newest socket id per user doubles as the one-device record) and owner-checked locks. Writes happen only on join/leave and lifecycle changes; no polling, heartbeats, KEYS/SCAN or pub/sub. PostgreSQL remains the source of truth for lifecycle state.
+- Web: host console `/quizzes/[quizId]/live` (lobby → live idle → ended), participant room `/quiz/[slug]/live` (lobby, live idle, reconnecting, replaced, refused, ended), conflict screen `/quizzes/[quizId]/live-conflict`, **Open live lobby / Open host console** on the manage page (the 15-minute start rule is removed), **Enter live room** on the public quiz page, and live links from dashboard and project cards. A `useLiveSession` hook fetches a fresh ticket for every (re)connect and renders only server snapshots. Live dates are formatted in the viewer's browser.
+- `REDIS_URL` added to the API configuration (required in production). New dependencies: `socket.io`, `ioredis`, and `socket.io-client` (web, plus API tests).
+
+### Checks
+
+- `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (9 web + 17 API unit/foundation) and `pnpm build` passed.
+- `pnpm --filter @quizmb/api test:integration` passed all 7 tests against development PostgreSQL, Upstash Redis and Storage. The new live test covers: non-owner and draft lobby refusal; concurrent lobby opens across two quizzes (exactly one wins); idempotent reopen; lobby registration; ticket refusal for unregistered users; unauthenticated and foreign-origin sockets refused; role-safe host/participant snapshots; host presence updates; host commands from participants refused; cross-session commands refused; newest-device replacement without losing presence; start broadcast; repeat start rejected; registration closed and content locked after start; late join off/on for first-time entrants versus returning attendees; reconnect restoring state; idempotent end; joins refused after end; and a new lobby allowed after ending. Test data and Redis keys are removed afterwards.
+- No manual browser testing was done in this session, as agreed.
+
+### QA fixes
+
+- Concurrent lobby opens returned intermittent `500 INTERNAL_ERROR` (reproduced with 8 simultaneous requests across two quizzes): Prisma `P2028` ("Unable to start a transaction in the given time"), because requests queued on row locks behind the 3-connection pool beyond Prisma's 2-second default wait. Lobby opens now lock the host's user row before the quiz row, so one host's opens run one at a time and later ones see the committed session (409 `ACTIVE_SESSION_EXISTS`, or the idempotent 201 for the same quiz). All live-session and registration transactions share one `lockedTransaction` option (15-second wait) in `apps/api/src/infrastructure/transactions.ts`. The integration test now fires the 8-request race and asserts only 201/409 responses.
+- The reconnect counter exceeded its maximum ("7 / 5"): Socket.IO retried indefinitely while the screen showed a fixed 5, and the manual retry continued the old run of attempts. One `MAX_RECONNECT_ATTEMPTS` (10) now drives Socket.IO, refused-handshake retries and the display. After the last attempt, participants see "We couldn't reconnect you" and the host sees a "Connection lost" banner, each with a manual retry that starts a fresh connection counting from 1.
+
+### Known limitations
+
+- End quiz is minimal: it completes the session and quiz without results; Phase 10 replaces it. A host cannot end a quiz from the lobby without starting it first.
+- Presence has no heartbeat TTL (to save Upstash commands); if the API process crashes, stale presence can remain until the 24-hour key expiry. Presence is best effort; attendance is durable in `ParticipantSession`.
+- Single API instance only: device replacement, broadcasts and registration-change events (in-process `DomainEvents`) rely on one Socket.IO server. Horizontal scaling needs the Redis adapter (and its pub/sub command cost).
+- Participant lobby connected counts refresh on join and on each state change rather than continuously.
+- Cross-domain REST auth is still pending (docs/TODO.md), so a deployed web app cannot yet sign in against a Render-hosted API. Socket authentication already works cross-domain.
+- Rate limiting (auth, registration, uploads, live sockets) is not implemented; tracked in docs/TODO.md.
+- Pre-existing schema drift: the `quizzes_status_plannedStartAt_idx` index exists in migrations but not in `schema.prisma`.
+
+## Phase 5 — Live screens, frontend only — September 29, 2026
+
+Branch `phase-5-live`. UI built from the eight approved Stitch screens (project "QuizMB Core UI System", Host Lobby — Live Session through Host — Active Scored Question) with dummy data. No backend, API, socket, or product route was added.
+
+### Implemented
+
+- Development-only previews at `/dev/live` (index) and `/dev/live/[screen]`: `host-lobby`, `participant-lobby`, `participant-reconnecting`, `participant-live-idle`, `host-conflict`, `host-live-idle`, `host-descriptive`, `host-scored`. They return not-found outside development and use fixtures from `features/live-session/mock-data.ts`.
+- `features/live-session/`: view-model types shaped like the API_DESIGN §22–23 host/participant snapshots; a focused live shell (brand, live badge, Exit); host lobby; three participant screens; host conflict screen inside the existing workspace shell; and one shared host console (header, three-column layout, question queue, participants/leaderboard/progress rail) reused by the idle, scored, and descriptive states.
+- New shared primitives, approved for this task: `Switch`, `ProgressBar`, `Avatar`, `SegmentedControl`, `Callout`; `Badge` gained a `danger` variant and an optional `dot`. Extracted `CopyLinkButton` and switched the published-quiz management page to it. Documented in `components/ui/README.md`.
+- Local-only interactions: question selection and deselection in the idle console, late-join switch, roster filter, and copy link. Unwired actions (Start quiz, Ask question, End quiz, leaderboard buttons, Try reconnecting) use the existing preview-notice pattern.
+
+### Deliberate differences from the Stitch designs
+
+- Content that is not in the PRD was removed or replaced, as approved: host "Lobby Ambiance" audio/photo, host checklist, seat numbers, room codes, telemetry/latency readouts, sound chimes, "SYNC v2.4", estimated run time, auto-archive, "Live Audio Backup Stream", "Encrypted WebRTC Channel", and the "Standard Accuracy (No Speed Decay)" scoring line. The lobby side card now shows real quiz settings.
+- Removed "Close Early" (the PRD forbids stopping a question early), the conflict screen's "End Previous Session & Open This Lobby" and "Cancel & Keep in Draft", the host header's Console/Scores tabs, fullscreen, avatar and duplicate End button, and the duplicate "QuizMB" wordmark. True/False questions were replaced with the three supported types.
+- Participant "Thinking/Writing" states (amber, not in the tokens and requiring pre-submit tracking) became Submitted vs Waiting.
+- Cards use the existing `Surface` (16px radius, stone border) instead of Stitch's 12px borderless cards, for consistency with the rest of the app. Icons use lucide equivalents of the Material Symbols glyphs. Photo avatars became initials avatars. The conflict screen uses the existing workspace header/footer.
+- The three host console designs differed in queue and panel styling; one shared version is used for all three states. Copy was adjusted to match PRD rules (speed-based scoring, no autoplay, answer lock, late join with remaining time).
+
+### Responsive behaviour
+
+- Participant screens are single-column and centred at every width. The host lobby stacks on phones and uses two columns on tablets. The host console uses three columns from 1024px, main column plus two side-by-side columns on tablets, and one column on phones in the same order on all three host consoles: live question, question list, quiz progress, leaderboard, participants. The right rail uses that same progress → leaderboard → participants order on desktop. Selecting a question on stacked layouts scrolls back to its preview and Ask button.
+- Checked at 1280px (compared against the Stitch screenshots), 768px, 390px, and 320px with no horizontal page overflow on any screen; the live header was tightened to fit 320px.
+
+### Checks
+
+- `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (9 web + 14 API), and `pnpm build` passed.
+- Browser checks: all eight previews rendered; question selection, switch state/name, roster filtering, and preview notices verified.
+
+### Known limitations
+
+- Visual only: no timers count down, no data is live, and no action is connected. Product routes, authorization, and socket wiring are left for the Phase 5 backend work.
+- Stitch's own screenshot of "LIVE_IDLE — Host" is blank; that screen was built from its HTML.
+- The `/dev/design-system` showcase does not yet include examples of the new primitives.
 
 ## Phase 4 — Publishing, registration, link and QR — September 29, 2026
 
@@ -209,7 +312,7 @@ Phase 1 and later work requires separate authorization. The following remain uni
 
 These decisions were approved before implementation and remain guidance for later phases:
 
-- Web and API remain separate Vercel applications, with planned production domains `app.quizmb.com` and `api.quizmb.com`.
+- Web and API remain separate applications. Updated September 29, 2026: the web app deploys to Vercel and the API (REST + Socket.IO, a long-running Node process) to Render, both on their free platform domains with no custom domain. Socket.IO cannot run on Vercel functions. **All new work must assume the web and API are on different sites:** never rely on cookies being shared between them, and authenticate Socket.IO with a short-lived ticket rather than cookies (API_DESIGN §17). Making the existing cookie-based REST auth work across the two domains is tracked in `docs/TODO.md`.
 - Use separate development Supabase/Upstash resources; no dedicated staging/preview infrastructure is required initially.
 - Redis coordination belongs in the realtime architecture from its first implementation phase.
 - Live-session states include `LOBBY`, `LIVE_IDLE`, `QUESTION_ACTIVE`, `QUESTION_RESULT`, `LEADERBOARD`, and `COMPLETED`, with explicit lobby creation.
@@ -274,3 +377,94 @@ These decisions were approved before implementation and remain guidance for late
 - Browser checks exercise project creation, keep-editing warning, quiz draft save, question save without timer override, all three question type controls, Markdown preview, review, and navigation warnings. Desktop, tablet and narrow mobile layouts inspected; fixed step wrapping and smallest-screen header overflow.
 - Final checks passed: pnpm format:check, pnpm lint, pnpm typecheck, pnpm test (9 web + 14 API unit/foundation tests), and pnpm build. Database integration tests run separately passed for authentication and authoring including real Storage. No lint warnings in changed packages. A pg driver deprecation warning appeared during concurrent integration operations; it did not affect results.
 - Browser logout cancellation retained the unsaved form. Discarded route edits were verified absent in PostgreSQL. Browser QA project/quiz and integration fixtures were removed. Publishing, production deployment, and realtime behavior were not exercised.
+
+## Authoring implementation notes — 2026-09-28
+
+The current authoring slice implements the project list/create/read/update, project quiz list/create, host quiz read/update, question create/update/delete/reorder, and media upload-request/complete/delete routes above. Project/quiz deletion, public quiz views, and publishing remain deferred.
+
+- Explicit-save clients submit complete editable field sets on PATCH. Strict validation rejects lifecycle writes, quiz project reassignment, and unknown fields.
+- Quiz draft create/update includes nullable `plannedStartAt` as planned-date metadata only. It does not transition status. New quizzes always remain `DRAFT`; publishing must reject a missing `plannedStartAt`.
+- Host quiz responses and question mutation responses return the current owned quiz with ordered questions and answer keys. They must never be reused as participant DTOs.
+- Media completion returns `{ id, fileName, url }`, where `url` is a one-hour private read URL. Media deletion returns 204 and is rejected while any quiz/question references the asset.
+- PNG/JPEG/WebP uploads up to 10 MiB are supported. Uploads require an existing owned, editable quiz; project covers are not part of this slice.
+- List responses include `meta.nextCursor` with a page size of 25. Cursors are UUIDs interpreted as stable ascending keyset positions.
+- Runtime schemas and DTOs live in `packages/contracts/src/index.ts`; centralized protective input limits are documented in PROGRESS.MD.
+
+## Publishing and registration implementation notes — 2026-09-29
+
+The publishing slice implements `POST /api/quizzes/:quizId/publish`, `GET /api/public/quizzes/:publicId`, the registration routes in section 10 (including the `/registrations/all` roster in 10.5), and both dashboard routes in section 11. This supersedes the "publishing remain deferred" statement in the authoring notes above.
+
+- Publishing requires `DRAFT` status, `plannedStartAt`, and at least one question that passes the shared question schema. A missing `plannedStartAt` returns `422 VALIDATION_ERROR` with `details.plannedStartAt`; the check is repeated inside the locked publish transaction. Publishing an already published quiz returns it unchanged.
+- Quiz create/update payloads now require `plannedStartAt`, so it cannot be cleared through the API; drafts saved before it became required can still hold `null` and cannot be published until it is set.
+- Registration locks the quiz row (`SELECT … FOR UPDATE`) before counting `REGISTERED` rows, so concurrent requests are serialized and capacity cannot be exceeded. Waiting requests queue for up to 15 seconds instead of failing.
+- Additional error codes beyond section 5: `HOST_CANNOT_REGISTER` (403, host registering for their own quiz), `REGISTRATION_CLOSED` (409, quiz not `PUBLISHED`), `UNREGISTRATION_CLOSED` (409, quiz `LIVE` or `COMPLETED`), `NOT_REGISTERED` (404 on unregister), and `QUIZ_LOCKED` (409, publishing a non-draft quiz).
+- `GET /api/public/quizzes/:publicId` returns `PublicQuizDto` for `PUBLISHED`, `LOBBY`, `LIVE`, and `COMPLETED` quizzes only; drafts return 404. It never includes options or answer keys.
+- `GET /api/dashboard/host` currently returns `{ projects, quizzes }` (quizzes of every status, grouped by the web client) rather than the per-status lists sketched in 11.2. `GET /api/dashboard/participant` returns `upcoming`; `live` and `history` are empty until later phases.
+
+
+## Live session implementation notes — Phase 5 — 2026-09-29
+
+Implemented REST routes (authenticated, Origin-checked, owner/registration checks on the server):
+
+- `POST /api/quizzes/:quizId/live-session` — host opens the lobby for a `PUBLISHED` quiz (quiz → `LOBBY`, session `LOBBY`, `allowLateJoin` copied from the quiz). Idempotent for the same quiz (returns the existing session). `409 ACTIVE_SESSION_EXISTS` with `details.liveSessionId`/`details.quizId` when the host has another unfinished session; `409 QUIZ_NOT_OPEN` for drafts; `409 QUIZ_COMPLETED`; `404` for non-owners.
+- `GET /api/quizzes/:quizId/live-session` — the quiz's unfinished session as `LiveSessionRefDto { id, quizId, state, role }` for its host or a registered participant; `403 REGISTRATION_REQUIRED` otherwise; `404 SESSION_NOT_FOUND` when none is open.
+- `GET /api/live-sessions/active` — the host's unfinished session (`ActiveHostSessionDto`) or `null`; drives the conflict screen.
+- `POST /api/live-sessions/:liveSessionId/socket-ticket` — `{ ticket, expiresAt }` (60 seconds) for the host or a registered participant (see §17 cross-domain handshake).
+
+Socket.IO (`/quiz` namespace) as implemented:
+
+- Handshake: `auth.ticket` is verified before the connection is accepted; `allowRequest` also rejects WebSocket upgrades from origins outside `ALLOWED_ORIGINS` (requests without an Origin still need a ticket). Command payloads must target the ticket's live session.
+- `session:join` → role-safe snapshot (`HostLiveSnapshotDto` with roster ≤ 100 and host questions including answer keys; `ParticipantLiveSnapshotDto` with neither). Participants must be registered; after the quiz starts, first-time entrants need late join enabled (`403 LATE_JOIN_DISABLED`) while returning attendees always reconnect; completed sessions return `QUIZ_COMPLETED`. The newest participant socket replaces the previous one (`session:replaced`, then a forced disconnect). The host may keep several tabs connected.
+- `session:sync` (participants must still be the active device, else `SESSION_REPLACED`) and `session:leave`.
+- Host-only commands with server-side host checks and a short Redis lock: `host:quiz-start` (`LOBBY → LIVE_IDLE`, quiz → `LIVE`, closes registration and locks content), `host:late-join-set`, and a minimal `host:quiz-end` (session and quiz → `COMPLETED`, idempotent; results and leaderboard arrive in Phase 10). Invalid transitions return `INVALID_STATE_TRANSITION`; concurrent transitions `OPERATION_IN_PROGRESS`.
+- Server → client: after every lifecycle change the server broadcasts a full role-safe `session:snapshot` to the host and participant rooms (instead of separate `quiz:started`/`quiz:ended` events in Phase 5). `host:presence-updated { userId, connected, connectedCount }` goes to the host room only. Participants receive `session:connected-count { connectedCount }`, throttled to at most one update per 2 seconds per session (sent in memory, no Redis commands).
+- Acknowledgements use `{ ok: true, data } | { ok: false, error: { code, message } }`.
+- Additional codes: `REGISTRATION_CLOSED` also applies once the quiz is `LIVE` (registration stays open in `LOBBY`), `LIVE_UNAVAILABLE` (503, Redis unreachable), `NOT_JOINED`, `OPERATION_IN_PROGRESS`.
+- `GET /api/dashboard/participant` now fills `live` with registered quizzes in `LOBBY` or `LIVE`.
+- `host:lobby-close` (host only, `LOBBY` state only, else `INVALID_STATE_TRANSITION`): cancels an unstarted lobby. The session and its lobby attendance are deleted, presence is cleared and the quiz returns to `PUBLISHED` with registrations kept. Other sockets in the room receive `session:removed { code: 'LOBBY_CLOSED' }` and are disconnected; the ack carries no snapshot.
+- Registration changes while a session is open (registration stays open in `LOBBY`): every register/unregister pushes a fresh host `session:snapshot` (roster and counts). An unregistering participant's presence and lobby attendance are removed, and their socket receives `session:removed { code: 'REGISTRATION_REQUIRED', message }` before being disconnected. `session:sync` re-checks registration.
+
+## Quiz status socket — 2026-09-29
+
+Read-only lifecycle updates for the public quiz page, so registered participants see **Enter live room** (and lobby closed, started, ended) without reloading.
+
+- `POST /api/quizzes/:quizId/watch-ticket` → `{ ticket, expiresAt }` (60 seconds) for any signed-in user and any non-draft quiz (`404` for drafts). Lifecycle status is already public, so registration is not required. Watch tickets use their own audience: they cannot join `/quiz`, and live tickets cannot watch.
+- Namespace `/quiz-status`: the handshake verifies `auth.ticket`; the socket watches only the ticket's quiz, receives `quiz:status { quizId, status }` on connect and after every change. There are no client commands.
+- Status changes are published in-process when a lobby opens (`LOBBY`), closes (`PUBLISHED`), the quiz starts (`LIVE`) or ends (`COMPLETED`). No Redis commands are used; like other in-process events this assumes a single API instance.
+
+
+## Live questions — Phase 6 — 2026-10-01
+
+Question delivery and submission on the `/quiz` namespace. Answer reveal (correct answer and final distribution) and the host's live answer breakdown are included now; points, score and rank remain Phase 7.
+
+- `host:question-start { liveSessionId, questionId }` (host only, from `LIVE_IDLE` or `QUESTION_RESULT`): any unused question, in any order, starts immediately; session → `QUESTION_ACTIVE`. Creates an `AskedQuestion` (live `sequenceNumber`, `durationSeconds`, `startedAt`, `endsAt`). `QUESTION_ALREADY_ASKED` for a reused question, `INVALID_STATE_TRANSITION` while another question is active, `404` for a question from another quiz.
+- `answer:submit { liveSessionId, askedQuestionId, selectedOptionIds? | answerText? }` (participants only): accepted only from the participant's active device (`SESSION_REPLACED`), while server time is before `endsAt` (`SUBMISSION_CLOSED`), once per participant (`ALREADY_SUBMITTED`) and with a valid shape (`INVALID_ANSWER`: exactly one option for single choice, one or more distinct options for multiple answer, text up to `ANSWER_LIMITS.text` for descriptive; options must belong to the question). The ack is `ParticipantAnswerDto` with `isCorrect: null` and `pointsAwarded: 0` while the question is active. Correctness is decided on the server at submission; multiple answer is all-or-nothing.
+- Expiry: the server closes the question at `endsAt` (in-process timer, re-armed at boot), and any join, sync, submission or question start also closes an overdue question first. Clients sync when their countdown reaches zero. Closing is exactly-once (row lock + status check); the session → `QUESTION_RESULT`. `host:quiz-end` during a question closes it at the current server time.
+- Snapshots carry `serverTime` for clock offset. Participant snapshots include `question` (participant-safe, `reveal: null` while active; `reveal { correctOptionIds, distribution, submittedCount }` after it ends). Personal fields `myAnswer` and `joinedDuringQuestion` appear only in snapshots addressed to one participant (join, sync, and the per-participant snapshot sent when a question ends); broadcasts omit them. Not attempted is derived (no row stored), shown as `myAnswer.status: 'NOT_ATTEMPTED'` after the end.
+- Host snapshots include `askedQuestions` and `currentQuestion` (active or just ended, with `submittedCount`, per-option `distribution` and the newest 50 descriptive `responses` without participant identity). `host:submissions-updated` (host room only) sends the same progress at most once per second per session.
+- Hot path: an answer costs one database statement (single atomic insert guarded by a shared row lock on the asked question) plus one Redis `HGET` for the active device; answer keys and confirmed registrations are cached in memory per session (single API instance).
+
+## Scoring and personal rank — Phase 7 — 2026-10-01
+
+- Points are decided on the server when an answer is accepted and revealed only after the question ends: a correct answer earns `1000 × (1 − 0.6 × responseTime / duration)`, rounded (about 1000 instant, 700 at half time, 400 at the deadline); incorrect, not attempted and descriptive answers earn 0; multiple answer is all-or-nothing. Constants live in `SCORING` (API live-sessions constants); not configurable in the UI.
+- Standings are computed in PostgreSQL in one query when a question ends: each participant's total over completed asked questions only (an active question never changes standings), ranked with shared ranks on exact ties (1, 1, 3). `participantCount` is everyone who entered the live session, including zero scores. This replaces the Redis sorted-set leaderboard from the database design to keep Upstash command usage low; the database remains the source of truth.
+- Delivery: the per-participant reveal snapshot is sent first, then `participant:standing { askedQuestionId, totalScore, rank, participantCount }` to each connected participant, so clients show the reveal while the standing loads. Personal snapshots (join, sync) include `myStanding` once the current question has ended.
+
+## Live distribution and result screen — Phase 8 — 2026-10-01
+
+Delivered with Phase 6: host-only live counts, percentages and descriptive responses (`host:submissions-updated`), automatic reveal at expiry with the correct answer and final distribution for participants, correct/incorrect states and the post-question waiting state. Participants receive neither the answer key, the distribution nor host progress before expiry (covered by the live questions integration test).
+
+## Host presentation controls and leaderboard — Phase 9 — 2026-10-01
+
+- `host:leaderboard-get` (host only): returns `LeaderboardDto { entries: [{ rank, userId, name, score }], participantCount, afterQuestionNumber }` without changing participant screens (host private view).
+- `host:leaderboard-show` (host only, from `QUESTION_RESULT`): session → `LEADERBOARD`; host and participant snapshots carry `leaderboard`, and participants see the Top 10 instead of the question result, with their own rank (`myStanding`) still available. `host:leaderboard-hide` returns to `QUESTION_RESULT` with the latest result. Asking the next question from `LEADERBOARD` hides it implicitly. Showing during a question returns `INVALID_STATE_TRANSITION`.
+- Top 10 lists at most `LEADERBOARD_SIZE` participants who have scored (zero-point participants are never listed, so a field of zero ties cannot turn it into the whole roster); ties share a rank and are ordered by name, and `rank` is the overall rank. `participantCount` still counts everyone who entered. Computed in PostgreSQL from the same ranking query as personal standings, so both always agree.
+- Timer expiry never advances: the host keeps the finished question (or the leaderboard) on screen until choosing the next question.
+- Performance: the leaderboard and the ended question's final results are cached per session until the next question ends (or someone enters for the first time; reconnects keep the cache), and concurrent host and participant snapshots share one query. Showing or hiding is a single conditional update (`state` must match), and the live session row loads in one SQL query.
+
+## Live review fixes — 2026-10-01
+
+- Question close timers are tracked per asked question: a late close of an earlier question never cancels the active question's timer. Failed timer closes are logged and retried; after the last retry the next interaction still closes the question.
+- `answer:submit` for a question outside the caller's session returns `QUESTION_NOT_ACTIVE` before any status check, so other sessions' questions reveal nothing.
+- Participant clients take the server clock offset only from `session:join` and `session:sync` replies, corrected by half the round trip; broadcasts no longer move it. `joinedDuringQuestion` and `myStanding` are applied only to the asked question they describe.
+- In-process live caches are per session and dropped when the session ends, closes, or sits unused for two hours.

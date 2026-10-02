@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Flag,
   FolderOpen,
   Info,
   LockKeyhole,
@@ -24,10 +25,12 @@ import type { CurrentUser } from '@/lib/auth/session';
 import { apiError } from '@/lib/api/client';
 import { publishingApi } from '@/lib/api/publishing';
 import { authLink } from '@/lib/auth/return-to';
-import { getInitials, pluralize } from '@/lib/utils';
+import { cn, getInitials, pluralize } from '@/lib/utils';
 import type { PublicQuizState, PublishedQuizViewModel } from './types';
+import { useQuizStatus } from './use-quiz-status';
 import { PublicQuizHeader } from './public-quiz-header';
 import { QuizCover } from './quiz-cover';
+import { QUIZ_STATUS } from '@quizmb/contracts';
 
 function SessionFacts({ quiz }: { quiz: PublishedQuizViewModel }) {
   const facts = [
@@ -95,18 +98,77 @@ function Availability({
   );
 }
 
+function CompletedPanel({
+  quiz,
+  registered,
+  resultSessionId,
+  isHost,
+}: {
+  quiz: PublishedQuizViewModel;
+  /** The signed-in visitor held a seat. */
+  registered: boolean;
+  /** Their completed session, which opens their result summary. */
+  resultSessionId: string | null;
+  isHost: boolean;
+}) {
+  const link = isHost
+    ? {
+        href: APP_LINKS.WORKSPACE.QUIZ_RESULTS(quiz.id),
+        label: 'View results',
+      }
+    : registered && resultSessionId
+      ? {
+          href: APP_LINKS.WORKSPACE.HISTORY_RESULT(resultSessionId),
+          label: 'View your result',
+        }
+      : null;
+  return (
+    <Surface className="space-y-space-md">
+      <div className="flex items-start gap-space-sm">
+        <Flag className="shrink-0 text-accent" aria-hidden="true" />
+        <div>
+          <Text as="h2" variant="section-heading">
+            Quiz completed
+          </Text>
+          <Text variant="body-secondary" tone="secondary">
+            {isHost
+              ? 'You ended this quiz. Final scores and ranks are saved.'
+              : registered
+                ? 'This quiz has ended. Your final score and rank are saved in your history.'
+                : 'This quiz has ended and is no longer accepting registrations.'}
+          </Text>
+        </div>
+      </div>
+      {link && (
+        <Link
+          href={link.href}
+          className="ds-focus ds-control-motion ds-primary-motion inline-flex h-control w-full items-center justify-center gap-space-xs rounded-control bg-action-primary px-control-x text-label text-action-on-primary hover:bg-action-primary-hover"
+        >
+          {link.label}
+          <ArrowRight size={18} aria-hidden="true" />
+        </Link>
+      )}
+    </Surface>
+  );
+}
+
 function RegistrationPanel({
   quiz,
   state,
   onRegister,
   onUnregister,
+  registering,
 }: {
   quiz: PublishedQuizViewModel;
-  state: PublicQuizState;
+  state: Exclude<PublicQuizState, 'completed'>;
   onRegister: () => void;
   onUnregister: () => void;
+  /** A registration request is in flight; blocks repeat clicks. */
+  registering: boolean;
 }) {
   if (state === 'registered') {
+    const liveOpen =
+      quiz.status === QUIZ_STATUS.LOBBY || quiz.status === QUIZ_STATUS.LIVE;
     return (
       <Surface className="space-y-space-md bg-action-secondary">
         <div className="flex items-start gap-space-sm">
@@ -120,11 +182,24 @@ function RegistrationPanel({
             </Text>
           </div>
         </div>
-        <div className="rounded-control bg-surface p-space-sm">
-          <Text variant="label">Live quiz room admission</Text>
-          <Text variant="body-secondary" tone="secondary">
-            Access appears here when the host manually starts the room.
-          </Text>
+        <div className="space-y-space-sm rounded-control bg-surface p-space-sm">
+          <div>
+            <Text variant="label">Live quiz room admission</Text>
+            <Text variant="body-secondary" tone="secondary">
+              {liveOpen
+                ? 'The host has opened the live room. Join now.'
+                : 'Access appears here when the host opens the live room.'}
+            </Text>
+          </div>
+          {liveOpen && (
+            <Link
+              href={APP_LINKS.PUBLIC_QUIZ_LIVE(quiz.slug)}
+              className="ds-focus ds-control-motion ds-primary-motion inline-flex h-control w-full items-center justify-center gap-space-xs rounded-control bg-action-primary px-control-x text-label text-action-on-primary hover:bg-action-primary-hover"
+            >
+              Enter live room
+              <ArrowRight size={18} aria-hidden="true" />
+            </Link>
+          )}
         </div>
         <div className="flex flex-wrap gap-space-xs">
           <Button
@@ -133,13 +208,15 @@ function RegistrationPanel({
           >
             Add to calendar
           </Button>
-          <Button
-            variant="ghost"
-            icon={<UserMinus size={18} aria-hidden="true" />}
-            onClick={onUnregister}
-          >
-            Unregister
-          </Button>
+          {quiz.status !== QUIZ_STATUS.LIVE && (
+            <Button
+              variant="ghost"
+              icon={<UserMinus size={18} aria-hidden="true" />}
+              onClick={onUnregister}
+            >
+              Unregister
+            </Button>
+          )}
         </div>
         <Text variant="caption" tone="secondary">
           Unregistration is available until the quiz starts.
@@ -220,7 +297,6 @@ function RegistrationPanel({
         >
           <LogIn size={18} aria-hidden="true" />
           Sign in to register
-          <ArrowRight size={18} aria-hidden="true" />
         </Link>
       </Surface>
     );
@@ -241,8 +317,10 @@ function RegistrationPanel({
         className="w-full"
         icon={<TicketCheck size={18} aria-hidden="true" />}
         onClick={onRegister}
+        disabled={registering}
+        aria-busy={registering}
       >
-        Register for quiz
+        {registering ? 'Registering…' : 'Register for quiz'}
       </Button>
       <Text
         variant="caption"
@@ -259,11 +337,14 @@ function RegistrationPanel({
 export function PublicQuizView({
   quiz,
   initialState,
+  resultSessionId: initialResultSessionId,
   user,
   isHost,
 }: {
   quiz: PublishedQuizViewModel;
   initialState: PublicQuizState;
+  /** A registered participant's completed session, once the quiz has ended. */
+  resultSessionId: string | null;
   user: CurrentUser | null;
   isHost: boolean;
 }) {
@@ -272,20 +353,60 @@ export function PublicQuizView({
     quiz.registeredCount,
   );
   const [unregisterOpen, setUnregisterOpen] = useState(false);
+  const [pending, setPending] = useState<'register' | 'unregister' | null>(
+    null,
+  );
   const [hostNoticeOpen, setHostNoticeOpen] = useState(false);
   const [error, setError] = useState('');
   const signedIn = !!user;
-  const visibleState =
-    !signedIn && (state === 'open' || state === 'registered')
-      ? 'logged-out'
+  // Live lifecycle updates (lobby opened/closed, started, ended) for
+  // signed-in visitors; completed quizzes cannot change any more.
+  const status = useQuizStatus(
+    quiz.id,
+    quiz.status,
+    signedIn && quiz.status !== QUIZ_STATUS.COMPLETED,
+  );
+  // Registration closes once the quiz is live; registered participants keep
+  // their panel (with the live-room link) until the quiz completes.
+  const completed = status === QUIZ_STATUS.COMPLETED;
+  const lifecycleState: PublicQuizState = completed
+    ? 'completed'
+    : status === QUIZ_STATUS.LIVE && state !== 'registered'
+      ? 'closed'
       : state;
-  const currentQuiz = { ...quiz, registeredCount: registrationCount };
+  const visibleState =
+    !signedIn && (lifecycleState === 'open' || lifecycleState === 'registered')
+      ? 'logged-out'
+      : lifecycleState;
+  const currentQuiz = { ...quiz, status, registeredCount: registrationCount };
+  const [resultSessionId, setResultSessionId] = useState(
+    initialResultSessionId,
+  );
+  const needsResultLink =
+    completed && signedIn && !isHost && state === 'registered';
+  // The quiz ended while the page was open: look up the session that now
+  // holds this participant's result.
+  useEffect(() => {
+    if (!needsResultLink || resultSessionId) return;
+    let cancelled = false;
+    publishingApi.registration(quiz.id).then(
+      (registration) => {
+        if (!cancelled) setResultSessionId(registration.completedLiveSessionId);
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [needsResultLink, resultSessionId, quiz.id]);
 
   async function register() {
     if (isHost) {
       setHostNoticeOpen(true);
       return;
     }
+    if (pending) return;
+    setPending('register');
     setError('');
     try {
       const registration = await publishingApi.register(quiz.id);
@@ -293,10 +414,14 @@ export function PublicQuizView({
       setState('registered');
     } catch (cause) {
       setError(apiError(cause).message);
+    } finally {
+      setPending(null);
     }
   }
 
   async function unregister() {
+    if (pending) return;
+    setPending('unregister');
     setError('');
     try {
       const registration = await publishingApi.unregister(quiz.id);
@@ -305,6 +430,8 @@ export function PublicQuizView({
       setUnregisterOpen(false);
     } catch (cause) {
       setError(apiError(cause).message);
+    } finally {
+      setPending(null);
     }
   }
 
@@ -324,18 +451,27 @@ export function PublicQuizView({
             <div className="space-y-space-lg lg:col-span-8">
               <section className="space-y-space-md">
                 <div className="flex flex-wrap items-center gap-space-xs">
-                  <span className="inline-flex items-center gap-space-xs rounded-pill bg-status-scheduled-surface px-badge-x py-badge-y text-badge text-status-scheduled-text">
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-space-xs rounded-pill px-badge-x py-badge-y text-badge',
+                      completed
+                        ? 'bg-status-neutral-surface text-status-neutral-text'
+                        : 'bg-status-scheduled-surface text-status-scheduled-text',
+                    )}
+                  >
                     <span
                       className="size-status-dot rounded-pill bg-current"
                       aria-hidden="true"
                     />
-                    {visibleState === 'closed'
-                      ? 'Registration closed'
-                      : visibleState === 'full'
-                        ? 'Registration full'
-                        : visibleState === 'registered'
-                          ? 'Registered'
-                          : 'Registration open'}
+                    {completed
+                      ? 'Quiz completed'
+                      : visibleState === 'closed'
+                        ? 'Registration closed'
+                        : visibleState === 'full'
+                          ? 'Registration full'
+                          : visibleState === 'registered'
+                            ? 'Registered'
+                            : 'Registration open'}
                   </span>
                   <Text
                     variant="caption"
@@ -383,12 +519,22 @@ export function PublicQuizView({
               </Surface>
             </div>
             <aside className="space-y-space-md lg:sticky lg:top-space-xl lg:col-span-4">
-              <RegistrationPanel
-                quiz={currentQuiz}
-                state={visibleState}
-                onRegister={() => void register()}
-                onUnregister={() => setUnregisterOpen(true)}
-              />
+              {visibleState === 'completed' ? (
+                <CompletedPanel
+                  quiz={currentQuiz}
+                  registered={signedIn && state === 'registered'}
+                  resultSessionId={resultSessionId}
+                  isHost={isHost}
+                />
+              ) : (
+                <RegistrationPanel
+                  quiz={currentQuiz}
+                  state={visibleState}
+                  onRegister={() => void register()}
+                  onUnregister={() => setUnregisterOpen(true)}
+                  registering={pending === 'register'}
+                />
+              )}
               {error && (
                 <Text
                   role="alert"
@@ -427,8 +573,10 @@ export function PublicQuizView({
               variant="danger"
               icon={<UserMinus size={18} aria-hidden="true" />}
               onClick={() => void unregister()}
+              disabled={pending === 'unregister'}
+              aria-busy={pending === 'unregister'}
             >
-              Unregister
+              {pending === 'unregister' ? 'Unregistering…' : 'Unregister'}
             </Button>
           </div>
         </div>

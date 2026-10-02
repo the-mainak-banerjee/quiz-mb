@@ -13,6 +13,10 @@ import { authoringRoutes, publicAuthoringRoutes } from './modules/authoring.js';
 import { authenticate } from './http/authenticate.js';
 import { csrf } from './http/csrf.js';
 import type { SupabaseStorage } from './modules/media/storage.js';
+import type { LiveSessionsService } from './modules/live-sessions/service.js';
+import { liveSessionRoutes } from './modules/live-sessions/routes.js';
+import type { DomainEvents } from './infrastructure/domain-events.js';
+import { HTTP_HEADER, HTTP_METHOD } from '@quizmb/contracts';
 
 export function createApp({
   allowedOrigins,
@@ -22,6 +26,8 @@ export function createApp({
   production = false,
   database,
   storage,
+  live,
+  events,
 }: {
   allowedOrigins: readonly string[];
   logger: Logger;
@@ -30,6 +36,8 @@ export function createApp({
   production?: boolean;
   database?: PrismaClient;
   storage?: SupabaseStorage | undefined;
+  live?: LiveSessionsService | undefined;
+  events?: DomainEvents | undefined;
 }) {
   const app = express();
   app.disable('x-powered-by');
@@ -38,9 +46,9 @@ export function createApp({
     cors({
       origin: (origin, callback) =>
         callback(null, origin !== undefined && allowedOrigins.includes(origin)),
-      methods: ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'],
+      methods: Object.values(HTTP_METHOD),
       credentials: true,
-      exposedHeaders: ['X-Request-ID'],
+      exposedHeaders: [HTTP_HEADER.REQUEST_ID],
     }),
   );
   app.get('/api/health', health);
@@ -53,7 +61,8 @@ export function createApp({
       '/api',
       authenticate(auth, production),
       csrf(allowedOrigins),
-      authoringRoutes(database, storage),
+      authoringRoutes(database, storage, events),
+      ...(live ? [liveSessionRoutes(live)] : []),
     );
   app.use(notFound);
   app.use(errorHandler(logger));

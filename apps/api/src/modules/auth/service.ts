@@ -5,6 +5,7 @@ import type { AuthConfig } from './config.js';
 import { AuthRepository } from './repository.js';
 import { hashPassword, verifyPassword } from './password.js';
 import { Tokens, hashRefresh, newRefresh } from './tokens.js';
+import { ERROR_CODE } from '@quizmb/contracts';
 export const publicUser = (user: Pick<User, 'id' | 'name' | 'email'>) => ({
   id: user.id,
   name: user.name,
@@ -60,7 +61,7 @@ export class AuthService {
     if (!user)
       throw new ApiError(
         409,
-        'CONFLICT',
+        ERROR_CODE.CONFLICT,
         'An account could not be created with these details.',
       );
     return this.credentials(user, session.id, refresh, session.expiresAt);
@@ -70,7 +71,7 @@ export class AuthService {
     if (!(await verifyPassword(input.password, user?.passwordHash)) || !user)
       throw new ApiError(
         401,
-        'UNAUTHENTICATED',
+        ERROR_CODE.UNAUTHENTICATED,
         'Email or password is incorrect.',
       );
     const refresh = newRefresh();
@@ -82,7 +83,11 @@ export class AuthService {
   }
   async refresh(token?: string) {
     if (!token || !/^[\w-]{43}$/.test(token))
-      throw new ApiError(401, 'INVALID_REFRESH_TOKEN', 'Please sign in again.');
+      throw new ApiError(
+        401,
+        ERROR_CODE.INVALID_REFRESH_TOKEN,
+        'Please sign in again.',
+      );
     const next = newRefresh();
     const session = await this.repository.rotate(
       hashRefresh(token),
@@ -90,16 +95,28 @@ export class AuthService {
       new Date(),
     );
     if (!session)
-      throw new ApiError(401, 'INVALID_REFRESH_TOKEN', 'Please sign in again.');
+      throw new ApiError(
+        401,
+        ERROR_CODE.INVALID_REFRESH_TOKEN,
+        'Please sign in again.',
+      );
     return this.credentials(session.user, session.id, next, session.expiresAt);
   }
   async authenticate(access?: string) {
     if (!access)
-      throw new ApiError(401, 'UNAUTHENTICATED', 'Please sign in to continue.');
+      throw new ApiError(
+        401,
+        ERROR_CODE.UNAUTHENTICATED,
+        'Please sign in to continue.',
+      );
     const { userId, sessionId } = await this.tokens.verify(access);
     const session = await this.repository.activeSession(sessionId, userId);
     if (!session)
-      throw new ApiError(401, 'UNAUTHENTICATED', 'Please sign in to continue.');
+      throw new ApiError(
+        401,
+        ERROR_CODE.UNAUTHENTICATED,
+        'Please sign in to continue.',
+      );
     return publicUser(session.user);
   }
   async logout(refresh?: string) {

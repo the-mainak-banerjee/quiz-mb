@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { NODE_ENV } from './constants.js';
 
 const origin = z.url().refine((value) => {
   if (!URL.canParse(value)) return false;
@@ -7,9 +8,7 @@ const origin = z.url().refine((value) => {
 }, 'Expected an HTTP(S) origin without a path or trailing slash');
 
 const schema = z.object({
-  NODE_ENV: z
-    .enum(['development', 'test', 'production'])
-    .default('development'),
+  NODE_ENV: z.enum(NODE_ENV).default(NODE_ENV.DEVELOPMENT),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   HOST: z.string().min(1).default('localhost'),
   ALLOWED_ORIGINS: z
@@ -20,6 +19,11 @@ const schema = z.object({
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
+  // Live sessions (Redis-backed presence and locks). Upstash: rediss:// URL.
+  REDIS_URL: z
+    .url()
+    .refine((value) => ['redis:', 'rediss:'].includes(new URL(value).protocol))
+    .optional(),
 });
 
 export function parseEnv(input: Record<string, string | undefined>) {
@@ -30,10 +34,13 @@ export function parseEnv(input: Record<string, string | undefined>) {
     ];
     throw new Error(`Invalid API environment: ${fields.join(', ')}`);
   }
-  if (result.data.NODE_ENV === 'production' && !input.ALLOWED_ORIGINS) {
+  if (result.data.NODE_ENV === NODE_ENV.PRODUCTION && !input.ALLOWED_ORIGINS) {
     throw new Error(
       'ALLOWED_ORIGINS must be explicitly configured in production',
     );
+  }
+  if (result.data.NODE_ENV === NODE_ENV.PRODUCTION && !result.data.REDIS_URL) {
+    throw new Error('REDIS_URL must be configured in production');
   }
   return result.data;
 }
