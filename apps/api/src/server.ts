@@ -1,8 +1,7 @@
 import { createServer } from 'node:http';
 import type { Server } from 'socket.io';
-import app, { database, events, live, redis } from './index.js';
+import app, { database, events, live, logger, redis } from './index.js';
 import { parseEnv } from './config/env.js';
-import { createLogger } from './infrastructure/logger.js';
 import {
   attachLiveRealtime,
   createSocketServer,
@@ -12,7 +11,6 @@ import { attachQuizStatusRealtime } from './modules/live-sessions/status-realtim
 // Long-running entry point (local development and Render). Socket.IO needs a
 // persistent process, so it is attached here rather than in the app factory.
 const env = parseEnv(process.env);
-const logger = createLogger(env.LOG_LEVEL);
 const server = createServer(app);
 let io: Server | undefined;
 

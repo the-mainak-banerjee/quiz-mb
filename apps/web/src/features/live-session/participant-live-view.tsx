@@ -73,7 +73,7 @@ export function ParticipantLiveView({
     reconnect,
     myAnswer,
     myStanding,
-    joinedDuringQuestion,
+    lateJoinQuestionId,
     clockOffsetMs,
     submitAnswer,
     resync,
@@ -155,7 +155,12 @@ export function ParticipantLiveView({
     return (
       <ParticipantLeaderboard
         board={snapshot.leaderboard}
-        standing={myStanding}
+        // A standing from an earlier question is still being recalculated.
+        standing={
+          myStanding?.askedQuestionId === snapshot.question?.askedQuestionId
+            ? myStanding
+            : null
+        }
         participantId={participantId}
       />
     );
@@ -167,7 +172,9 @@ export function ParticipantLiveView({
         question={snapshot.question}
         myAnswer={myAnswer}
         myStanding={myStanding}
-        joinedDuringQuestion={joinedDuringQuestion}
+        joinedDuringQuestion={
+          lateJoinQuestionId === snapshot.question.askedQuestionId
+        }
         clockOffsetMs={clockOffsetMs}
         submitAnswer={submitAnswer}
         resync={resync}

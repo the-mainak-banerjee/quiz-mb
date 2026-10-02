@@ -73,7 +73,7 @@ function failure(error: unknown, logger: Logger, event: string) {
   if (error instanceof ApiError)
     return { ok: false, error: { code: error.code, message: error.message } };
   logger.error(
-    { event, code: ERROR_CODE.INTERNAL_ERROR },
+    { event, code: ERROR_CODE.INTERNAL_ERROR, err: error },
     'Live socket command failed',
   );
   return {
@@ -180,7 +180,7 @@ export function attachLiveRealtime(
     PROGRESS_INTERVAL_MS,
     (liveSessionId, askedQuestionId) => {
       service
-        .progressFor(askedQuestionId)
+        .progressFor(liveSessionId, askedQuestionId)
         .then((progress) => {
           if (!progress) return;
           nsp

@@ -507,12 +507,8 @@ test(
     assert.equal(privateBoard.afterQuestionNumber, 1);
     assert.deepEqual(
       privateBoard.entries.map((entry) => [entry.rank, entry.score]),
-      [
-        [1, firstPoints],
-        [2, 0],
-        [2, 0],
-      ],
-      'tied participants share a rank and are all listed',
+      [[1, firstPoints]],
+      'only participants who scored are listed (no field of zero ties)',
     );
     assert.equal(privateBoard.entries[0]?.name, 'Questions a');
     const boardOnA = waitFor<ParticipantLiveSnapshotDto>(
@@ -528,7 +524,8 @@ test(
       ),
     );
     assert.equal(shownHost.state, LIVE_SESSION_STATE.LEADERBOARD);
-    assert.equal(shownHost.leaderboard?.entries.length, 3);
+    assert.equal(shownHost.leaderboard?.entries.length, 1);
+    assert.equal(shownHost.leaderboard?.participantCount, 3);
     const aBoard = await boardOnA;
     assert.equal(aBoard.leaderboard?.entries[0]?.name, 'Questions a');
     assert.equal(
@@ -569,6 +566,17 @@ test(
       ),
       ERROR_CODE.SUBMISSION_CLOSED,
     );
+    // Another session's question reveals nothing about its existence or
+    // status: it is simply not active there.
+    await assert.rejects(
+      live.submit(randomUUID(), 'no-socket', {
+        liveSessionId: randomUUID(),
+        askedQuestionId: askedFirst,
+        selectedOptionIds: correct,
+      }),
+      (error: { code?: string }) =>
+        error.code === ERROR_CODE.QUESTION_NOT_ACTIVE,
+    );
     assert.equal(
       errorCode(
         await emit(host.socket, LIVE_EVENTS.questionStart, {
@@ -592,9 +600,18 @@ test(
       ERROR_CODE.INVALID_STATE_TRANSITION,
       'never during a question',
     );
-    (live as unknown as { clearTimer(id: string): void }).clearTimer(
-      liveSessionId,
+    const timing = live as unknown as {
+      clearTimer(id: string, askedQuestionId?: string): void;
+      timers: Map<string, { askedQuestionId: string }>;
+    };
+    // A late close of the previous question must not disarm this one.
+    timing.clearTimer(liveSessionId, askedFirst);
+    assert.equal(
+      timing.timers.get(liveSessionId)?.askedQuestionId,
+      askedSecond,
+      'the active question keeps its close timer',
     );
+    timing.clearTimer(liveSessionId);
     const responses = waitFor<HostQuestionProgressDto>(
       host.socket,
       LIVE_EVENTS.submissions,

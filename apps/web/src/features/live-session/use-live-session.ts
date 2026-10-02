@@ -108,12 +108,19 @@ export function useLiveSession(liveSessionId: string) {
   const [attempt, setAttempt] = useState(0);
   /** This participant's own answer; only ever sent to them. */
   const [myAnswer, setMyAnswer] = useState<ParticipantAnswerDto | null>(null);
-  const [joinedDuringQuestion, setJoinedDuringQuestion] = useState(false);
+  /** The asked question this participant entered while it was running. */
+  const [lateJoinQuestionId, setLateJoinQuestionId] = useState<string | null>(
+    null,
+  );
   /** Score and rank after the latest ended question (personal). */
   const [myStanding, setMyStanding] = useState<ParticipantStandingDto | null>(
     null,
   );
-  /** Server clock minus browser clock, from the latest snapshot. */
+  /**
+   * Server clock minus browser clock, measured from join and sync replies
+   * (half the round trip corrects for latency). Broadcasts and host command
+   * replies do not move it: their delivery or processing delay is unknown.
+   */
   const [clockOffsetMs, setClockOffsetMs] = useState(0);
   const socketRef = useRef<Socket | null>(null);
   // True only after the server accepted session:join on the current socket.
@@ -124,14 +131,21 @@ export function useLiveSession(liveSessionId: string) {
   /**
    * Applies a snapshot. Personal fields arrive only in snapshots addressed
    * to this participant; broadcasts omit them, so they are kept as they are.
+   * `sentAt` is when the request this snapshot acknowledges was sent.
    */
-  const receive = useCallback((next: LiveSnapshotDto) => {
+  const receive = useCallback((next: LiveSnapshotDto, sentAt?: number) => {
     setSnapshot(next);
-    setClockOffsetMs(Date.parse(next.serverTime) - Date.now());
+    if (sentAt !== undefined)
+      setClockOffsetMs(Date.parse(next.serverTime) - (sentAt + Date.now()) / 2);
     if (next.role !== LIVE_ROLE.PARTICIPANT) return;
     if ('myAnswer' in next) setMyAnswer(next.myAnswer ?? null);
+    // Tied to the question it describes, so it never carries over.
     if (next.joinedDuringQuestion !== undefined)
-      setJoinedDuringQuestion(next.joinedDuringQuestion);
+      setLateJoinQuestionId(
+        next.joinedDuringQuestion
+          ? (next.question?.askedQuestionId ?? null)
+          : null,
+      );
     if ('myStanding' in next) setMyStanding(next.myStanding ?? null);
   }, []);
 
@@ -174,6 +188,7 @@ export function useLiveSession(liveSessionId: string) {
     }
 
     async function join() {
+      const sentAt = Date.now();
       const ack = (await socket
         .timeout(10_000)
         .emitWithAck(LIVE_EVENTS.join, { liveSessionId })
@@ -186,7 +201,7 @@ export function useLiveSession(liveSessionId: string) {
         joinedRef.current = true;
         setAttempt(0);
         setFailure(null);
-        receive(ack.data);
+        receive(ack.data, sentAt);
         setConnection('connected');
         return;
       }
@@ -219,7 +234,7 @@ export function useLiveSession(liveSessionId: string) {
       void join();
     });
     socket.on(LIVE_EVENTS.removed, (removed: LiveRemovedDto) => fail(removed));
-    socket.on(LIVE_EVENTS.snapshot, receive);
+    socket.on(LIVE_EVENTS.snapshot, (next: LiveSnapshotDto) => receive(next));
     socket.on(LIVE_EVENTS.standing, setMyStanding);
     socket.on(LIVE_EVENTS.submissions, (progress: HostQuestionProgressDto) =>
       setSnapshot((current) => applyProgress(current, progress)),
@@ -347,11 +362,12 @@ export function useLiveSession(liveSessionId: string) {
   const resync = useCallback(async () => {
     const socket = socketRef.current;
     if (!socket?.connected || !joinedRef.current) return;
+    const sentAt = Date.now();
     const ack = (await socket
       .timeout(10_000)
       .emitWithAck(LIVE_EVENTS.sync, { liveSessionId })
       .catch(() => null)) as SocketAck<LiveSnapshotDto> | null;
-    if (ack?.ok) receive(ack.data);
+    if (ack?.ok) receive(ack.data, sentAt);
   }, [liveSessionId, receive]);
 
   /**
@@ -376,7 +392,7 @@ export function useLiveSession(liveSessionId: string) {
     reconnect,
     myAnswer,
     myStanding,
-    joinedDuringQuestion,
+    lateJoinQuestionId,
     clockOffsetMs,
     submitAnswer,
     resync,

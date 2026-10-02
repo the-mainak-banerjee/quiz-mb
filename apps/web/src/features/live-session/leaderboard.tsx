@@ -10,7 +10,11 @@ import {
   Star,
   Trophy,
 } from 'lucide-react';
-import type { LeaderboardDto, ParticipantStandingDto } from '@quizmb/contracts';
+import {
+  LEADERBOARD_SIZE,
+  type LeaderboardDto,
+  type ParticipantStandingDto,
+} from '@quizmb/contracts';
 import { Avatar, Badge, Callout, Surface, Text } from '@/components/ui';
 import { VisuallyHidden } from '@/components/visually-hidden';
 import { cn, pluralize } from '@/lib/utils';
@@ -47,8 +51,8 @@ function RankMark({ rank }: { rank: number }) {
 }
 
 /**
- * Top standings shared by the host and participant views. Ties share a
- * rank and are all listed, so there can be more than ten rows.
+ * Top standings shared by the host and participant views: at most ten
+ * participants who have scored. Ties share a rank.
  */
 export function LeaderboardTable({
   board,
@@ -62,9 +66,9 @@ export function LeaderboardTable({
     return (
       <Surface className="flex flex-col items-center gap-space-xs py-space-xl text-center">
         <Trophy size={24} aria-hidden="true" className="text-accent" />
-        <Text variant="card-title">No standings yet</Text>
+        <Text variant="card-title">No one has scored yet</Text>
         <Text variant="body-secondary" tone="secondary">
-          Scores appear here after the first question ends.
+          Participants appear here once they earn points.
         </Text>
       </Surface>
     );
@@ -274,11 +278,19 @@ export function ParticipantLeaderboard({
   standing: ParticipantStandingDto | null;
   participantId: string;
 }) {
-  const tenth = board.entries.at(-1)?.score;
-  const inTop = board.entries.some((entry) => entry.userId === participantId);
+  const last = board.entries.at(-1)?.score;
+  // Ties at the last rank can be cut from the list; the rank still counts.
+  const inTop =
+    board.entries.some((entry) => entry.userId === participantId) ||
+    (!!standing &&
+      standing.totalScore > 0 &&
+      standing.rank <= LEADERBOARD_SIZE);
   const gap =
-    standing && !inTop && tenth !== undefined
-      ? Math.max(tenth - standing.totalScore, 0)
+    standing &&
+    !inTop &&
+    last !== undefined &&
+    board.entries.length >= LEADERBOARD_SIZE
+      ? Math.max(last - standing.totalScore, 0)
       : null;
   return (
     <ParticipantStage className="justify-start md:py-space-2xl">
@@ -329,7 +341,7 @@ export function ParticipantLeaderboard({
             </div>
           ) : (
             <Text variant="body-secondary" tone="secondary">
-              Your rank appears after you take part in a question.
+              Updating your rank…
             </Text>
           )}
         </Surface>

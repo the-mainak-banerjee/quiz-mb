@@ -12,24 +12,9 @@ import {
   REGISTRATION_STATUS,
 } from '@quizmb/contracts';
 
-export const liveSessionInclude = {
-  quiz: {
-    include: {
-      project: { select: { name: true } },
-      creator: { select: { name: true } },
-      _count: {
-        select: {
-          questions: true,
-          registrations: { where: { status: REGISTRATION_STATUS.REGISTERED } },
-        },
-      },
-    },
-  },
-} satisfies Prisma.LiveQuizSessionInclude;
-
 /**
- * What the live module needs about a session and its quiz. The Prisma
- * include above returns a superset; `findById` builds it in one query.
+ * What the live module needs about a session and its quiz. Built only by
+ * `selectSessions`, the single query every session lookup goes through.
  */
 export type LiveSessionRow = {
   id: string;
@@ -54,6 +39,32 @@ export type LiveSessionRow = {
 };
 
 const active = { state: { not: LIVE_SESSION_STATE.COMPLETED } } as const;
+/** The same filter as `active`, for raw session queries (alias `s`). */
+const unfinished = Prisma.sql`s.state <> ${LIVE_SESSION_STATE.COMPLETED}::"LiveSessionState"`;
+
+/**
+ * Score and rank of everyone who entered the session, over completed
+ * questions only (an active question never changes standings). Ties share a
+ * rank (1, 1, 3); missed questions simply add nothing. The one ranking both
+ * personal standings and the leaderboard read, so they always agree.
+ */
+function rankedStandings(liveSessionId: string) {
+  return Prisma.sql`
+    SELECT ps."userId"::text AS "userId",
+      COALESCE(SUM(s."pointsAwarded"), 0)::int AS "totalScore",
+      RANK() OVER (
+        ORDER BY COALESCE(SUM(s."pointsAwarded"), 0) DESC
+      )::int AS rank,
+      COUNT(*) OVER ()::int AS "participantCount"
+    FROM participant_sessions ps
+    LEFT JOIN asked_questions aq
+      ON aq."liveSessionId" = ps."liveSessionId"
+      AND aq.status = ${ASKED_QUESTION_STATUS.COMPLETED}::"AskedQuestionStatus"
+    LEFT JOIN answer_submissions s
+      ON s."askedQuestionId" = aq.id AND s."userId" = ps."userId"
+    WHERE ps."liveSessionId" = ${liveSessionId}::uuid
+    GROUP BY ps."userId"`;
+}
 
 const askedInclude = {
   question: {
@@ -133,11 +144,12 @@ export class LiveSessionsRepository {
   constructor(readonly db: PrismaClient) {}
 
   /**
-   * One round trip instead of Prisma's per-relation queries: this runs on
-   * every join, sync and host command.
+   * Sessions matching `where`, with their quiz details, in one round trip
+   * instead of Prisma's per-relation queries (this runs on every join, sync
+   * and host command). The only place a `LiveSessionRow` is built.
    */
-  async findById(id: string): Promise<LiveSessionRow | null> {
-    const [row] = await this.db.$queryRaw<
+  private async selectSessions(where: Prisma.Sql): Promise<LiveSessionRow[]> {
+    const rows = await this.db.$queryRaw<
       Array<{
         id: string;
         quizId: string;
@@ -173,9 +185,9 @@ export class LiveSessionsRepository {
       JOIN quizzes q ON q.id = s."quizId"
       JOIN projects p ON p.id = q."projectId"
       JOIN users u ON u.id = q."creatorUserId"
-      WHERE s.id = ${id}::uuid`;
-    if (!row) return null;
-    return {
+      WHERE ${where}
+      LIMIT 1`;
+    return rows.map((row) => ({
       id: row.id,
       quizId: row.quizId,
       hostUserId: row.hostUserId,
@@ -198,21 +210,28 @@ export class LiveSessionsRepository {
           registrations: row.registrationCount,
         },
       },
-    };
+    }));
   }
 
-  findActiveForQuiz(quizId: string) {
-    return this.db.liveQuizSession.findFirst({
-      where: { quizId, ...active },
-      include: liveSessionInclude,
-    });
+  async findById(id: string) {
+    const [session] = await this.selectSessions(Prisma.sql`s.id = ${id}::uuid`);
+    return session ?? null;
   }
 
-  findActiveForHost(hostUserId: string) {
-    return this.db.liveQuizSession.findFirst({
-      where: { hostUserId, ...active },
-      include: liveSessionInclude,
-    });
+  /** The quiz's unfinished session (at most one, by a partial unique index). */
+  async findActiveForQuiz(quizId: string) {
+    const [session] = await this.selectSessions(
+      Prisma.sql`s."quizId" = ${quizId}::uuid AND ${unfinished}`,
+    );
+    return session ?? null;
+  }
+
+  /** The host's unfinished session (at most one, by a partial unique index). */
+  async findActiveForHost(hostUserId: string) {
+    const [session] = await this.selectSessions(
+      Prisma.sql`s."hostUserId" = ${hostUserId}::uuid AND ${unfinished}`,
+    );
+    return session ?? null;
   }
 
   /**
@@ -303,6 +322,10 @@ export class LiveSessionsRepository {
     });
   }
 
+  /**
+   * Records an entry. A first entry has equal first and last join times;
+   * a return visit only moves `lastJoinedAt`.
+   */
   recordJoin(liveSessionId: string, userId: string) {
     const now = new Date();
     return this.db.participantSession.upsert({
@@ -574,10 +597,8 @@ export class LiveSessionsRepository {
   }
 
   /**
-   * Score and rank of everyone who entered the session, over completed
-   * questions only (an active question never changes standings). Ties share
-   * a rank (1, 1, 3); missed questions simply add nothing. Pass `userId` to
-   * read one participant's row from the same ranking.
+   * Rows of the shared ranking (`rankedStandings`). Pass `userId` to read one
+   * participant's row from the same ranking.
    */
   async standings(liveSessionId: string, userId?: string) {
     const rows = await this.db.$queryRaw<
@@ -588,67 +609,50 @@ export class LiveSessionsRepository {
         participantCount: number;
       }>
     >`
-      SELECT * FROM (
-        SELECT ps."userId"::text AS "userId",
-          COALESCE(SUM(s."pointsAwarded"), 0)::int AS "totalScore",
-          RANK() OVER (
-            ORDER BY COALESCE(SUM(s."pointsAwarded"), 0) DESC
-          )::int AS rank,
-          COUNT(*) OVER ()::int AS "participantCount"
-        FROM participant_sessions ps
-        LEFT JOIN asked_questions aq
-          ON aq."liveSessionId" = ps."liveSessionId"
-          AND aq.status = ${ASKED_QUESTION_STATUS.COMPLETED}::"AskedQuestionStatus"
-        LEFT JOIN answer_submissions s
-          ON s."askedQuestionId" = aq.id AND s."userId" = ps."userId"
-        WHERE ps."liveSessionId" = ${liveSessionId}::uuid
-        GROUP BY ps."userId"
-      ) ranked
+      SELECT * FROM (${rankedStandings(liveSessionId)}) ranked
       WHERE ${userId ?? null}::uuid IS NULL OR ranked."userId" = ${userId ?? null}::text`;
     return rows;
   }
 
   /**
-   * Top standings with names, from the same ranking as `standings`. Every
-   * participant ranked within `maxRank` is included, so ties at the last
-   * rank can return more than `maxRank` rows.
+   * Top of the shared ranking with names: at most `size` rows, only
+   * participants who have scored (a field of zero-point ties is not a
+   * leaderboard), ties ordered by name. The participant count and the
+   * latest completed question come from the same round trip.
    */
-  async leaderboard(liveSessionId: string, maxRank: number) {
-    const rows = await this.db.$queryRaw<
+  async leaderboard(liveSessionId: string, size: number) {
+    const [row] = await this.db.$queryRaw<
       Array<{
-        userId: string;
-        name: string;
-        score: number;
-        rank: number;
         participantCount: number;
         lastQuestion: number | null;
+        entries: Array<{
+          userId: string;
+          name: string;
+          totalScore: number;
+          rank: number;
+        }>;
       }>
     >`
-      SELECT ranked.*, u.name,
+      WITH ranked AS (${rankedStandings(liveSessionId)}),
+      top AS (
+        SELECT ranked."userId", u.name, ranked."totalScore", ranked.rank
+        FROM ranked
+        JOIN users u ON u.id = ranked."userId"::uuid
+        WHERE ranked."totalScore" > 0
+        ORDER BY ranked.rank ASC, u.name ASC
+        LIMIT ${size}
+      )
+      SELECT
+        (SELECT COUNT(*) FROM ranked)::int AS "participantCount",
         (SELECT MAX("sequenceNumber") FROM asked_questions
           WHERE "liveSessionId" = ${liveSessionId}::uuid
             AND status = ${ASKED_QUESTION_STATUS.COMPLETED}::"AskedQuestionStatus"
-        )::int AS "lastQuestion"
-      FROM (
-        SELECT ps."userId",
-          COALESCE(SUM(s."pointsAwarded"), 0)::int AS score,
-          RANK() OVER (
-            ORDER BY COALESCE(SUM(s."pointsAwarded"), 0) DESC
-          )::int AS rank,
-          COUNT(*) OVER ()::int AS "participantCount"
-        FROM participant_sessions ps
-        LEFT JOIN asked_questions aq
-          ON aq."liveSessionId" = ps."liveSessionId"
-          AND aq.status = ${ASKED_QUESTION_STATUS.COMPLETED}::"AskedQuestionStatus"
-        LEFT JOIN answer_submissions s
-          ON s."askedQuestionId" = aq.id AND s."userId" = ps."userId"
-        WHERE ps."liveSessionId" = ${liveSessionId}::uuid
-        GROUP BY ps."userId"
-      ) ranked
-      JOIN users u ON u.id = ranked."userId"
-      WHERE ranked.rank <= ${maxRank}
-      ORDER BY ranked.rank ASC, u.name ASC`;
-    return rows;
+        )::int AS "lastQuestion",
+        COALESCE(
+          (SELECT json_agg(top ORDER BY top.rank ASC, top.name ASC) FROM top),
+          '[]'::json
+        ) AS entries`;
+    return row ?? { participantCount: 0, lastQuestion: null, entries: [] };
   }
 
   /**

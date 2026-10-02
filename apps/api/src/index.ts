@@ -23,6 +23,7 @@ export const database = createDatabase(
   authConfig.DATABASE_SSL_CA_BASE64,
 );
 export const events = new DomainEvents();
+export const logger = createLogger(env.LOG_LEVEL);
 const storage = createStorage(process.env);
 // Live sessions need Redis; without REDIS_URL the REST-only API still runs.
 export const redis = env.REDIS_URL ? createRedis(env.REDIS_URL) : undefined;
@@ -33,11 +34,12 @@ export const live = redis
       new SocketTickets(authConfig.AUTH_ACCESS_SECRET),
       events,
       new MediaService(database, storage),
+      logger,
     )
   : undefined;
 export default createApp({
   allowedOrigins: env.ALLOWED_ORIGINS,
-  logger: createLogger(env.LOG_LEVEL),
+  logger,
   auth: new AuthService(new AuthRepository(database), authConfig),
   users: new UsersService(database),
   production: env.NODE_ENV === NODE_ENV.PRODUCTION,

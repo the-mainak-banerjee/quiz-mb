@@ -366,3 +366,94 @@ These decisions were approved before implementation and remain guidance for late
 - Browser checks exercise project creation, keep-editing warning, quiz draft save, question save without timer override, all three question type controls, Markdown preview, review, and navigation warnings. Desktop, tablet and narrow mobile layouts inspected; fixed step wrapping and smallest-screen header overflow.
 - Final checks passed: pnpm format:check, pnpm lint, pnpm typecheck, pnpm test (9 web + 14 API unit/foundation tests), and pnpm build. Database integration tests run separately passed for authentication and authoring including real Storage. No lint warnings in changed packages. A pg driver deprecation warning appeared during concurrent integration operations; it did not affect results.
 - Browser logout cancellation retained the unsaved form. Discarded route edits were verified absent in PostgreSQL. Browser QA project/quiz and integration fixtures were removed. Publishing, production deployment, and realtime behavior were not exercised.
+
+## Authoring implementation notes — 2026-09-28
+
+The current authoring slice implements the project list/create/read/update, project quiz list/create, host quiz read/update, question create/update/delete/reorder, and media upload-request/complete/delete routes above. Project/quiz deletion, public quiz views, and publishing remain deferred.
+
+- Explicit-save clients submit complete editable field sets on PATCH. Strict validation rejects lifecycle writes, quiz project reassignment, and unknown fields.
+- Quiz draft create/update includes nullable `plannedStartAt` as planned-date metadata only. It does not transition status. New quizzes always remain `DRAFT`; publishing must reject a missing `plannedStartAt`.
+- Host quiz responses and question mutation responses return the current owned quiz with ordered questions and answer keys. They must never be reused as participant DTOs.
+- Media completion returns `{ id, fileName, url }`, where `url` is a one-hour private read URL. Media deletion returns 204 and is rejected while any quiz/question references the asset.
+- PNG/JPEG/WebP uploads up to 10 MiB are supported. Uploads require an existing owned, editable quiz; project covers are not part of this slice.
+- List responses include `meta.nextCursor` with a page size of 25. Cursors are UUIDs interpreted as stable ascending keyset positions.
+- Runtime schemas and DTOs live in `packages/contracts/src/index.ts`; centralized protective input limits are documented in PROGRESS.MD.
+
+## Publishing and registration implementation notes — 2026-09-29
+
+The publishing slice implements `POST /api/quizzes/:quizId/publish`, `GET /api/public/quizzes/:publicId`, the registration routes in section 10 (including the `/registrations/all` roster in 10.5), and both dashboard routes in section 11. This supersedes the "publishing remain deferred" statement in the authoring notes above.
+
+- Publishing requires `DRAFT` status, `plannedStartAt`, and at least one question that passes the shared question schema. A missing `plannedStartAt` returns `422 VALIDATION_ERROR` with `details.plannedStartAt`; the check is repeated inside the locked publish transaction. Publishing an already published quiz returns it unchanged.
+- Quiz create/update payloads now require `plannedStartAt`, so it cannot be cleared through the API; drafts saved before it became required can still hold `null` and cannot be published until it is set.
+- Registration locks the quiz row (`SELECT … FOR UPDATE`) before counting `REGISTERED` rows, so concurrent requests are serialized and capacity cannot be exceeded. Waiting requests queue for up to 15 seconds instead of failing.
+- Additional error codes beyond section 5: `HOST_CANNOT_REGISTER` (403, host registering for their own quiz), `REGISTRATION_CLOSED` (409, quiz not `PUBLISHED`), `UNREGISTRATION_CLOSED` (409, quiz `LIVE` or `COMPLETED`), `NOT_REGISTERED` (404 on unregister), and `QUIZ_LOCKED` (409, publishing a non-draft quiz).
+- `GET /api/public/quizzes/:publicId` returns `PublicQuizDto` for `PUBLISHED`, `LOBBY`, `LIVE`, and `COMPLETED` quizzes only; drafts return 404. It never includes options or answer keys.
+- `GET /api/dashboard/host` currently returns `{ projects, quizzes }` (quizzes of every status, grouped by the web client) rather than the per-status lists sketched in 11.2. `GET /api/dashboard/participant` returns `upcoming`; `live` and `history` are empty until later phases.
+
+
+## Live session implementation notes — Phase 5 — 2026-09-29
+
+Implemented REST routes (authenticated, Origin-checked, owner/registration checks on the server):
+
+- `POST /api/quizzes/:quizId/live-session` — host opens the lobby for a `PUBLISHED` quiz (quiz → `LOBBY`, session `LOBBY`, `allowLateJoin` copied from the quiz). Idempotent for the same quiz (returns the existing session). `409 ACTIVE_SESSION_EXISTS` with `details.liveSessionId`/`details.quizId` when the host has another unfinished session; `409 QUIZ_NOT_OPEN` for drafts; `409 QUIZ_COMPLETED`; `404` for non-owners.
+- `GET /api/quizzes/:quizId/live-session` — the quiz's unfinished session as `LiveSessionRefDto { id, quizId, state, role }` for its host or a registered participant; `403 REGISTRATION_REQUIRED` otherwise; `404 SESSION_NOT_FOUND` when none is open.
+- `GET /api/live-sessions/active` — the host's unfinished session (`ActiveHostSessionDto`) or `null`; drives the conflict screen.
+- `POST /api/live-sessions/:liveSessionId/socket-ticket` — `{ ticket, expiresAt }` (60 seconds) for the host or a registered participant (see §17 cross-domain handshake).
+
+Socket.IO (`/quiz` namespace) as implemented:
+
+- Handshake: `auth.ticket` is verified before the connection is accepted; `allowRequest` also rejects WebSocket upgrades from origins outside `ALLOWED_ORIGINS` (requests without an Origin still need a ticket). Command payloads must target the ticket's live session.
+- `session:join` → role-safe snapshot (`HostLiveSnapshotDto` with roster ≤ 100 and host questions including answer keys; `ParticipantLiveSnapshotDto` with neither). Participants must be registered; after the quiz starts, first-time entrants need late join enabled (`403 LATE_JOIN_DISABLED`) while returning attendees always reconnect; completed sessions return `QUIZ_COMPLETED`. The newest participant socket replaces the previous one (`session:replaced`, then a forced disconnect). The host may keep several tabs connected.
+- `session:sync` (participants must still be the active device, else `SESSION_REPLACED`) and `session:leave`.
+- Host-only commands with server-side host checks and a short Redis lock: `host:quiz-start` (`LOBBY → LIVE_IDLE`, quiz → `LIVE`, closes registration and locks content), `host:late-join-set`, and a minimal `host:quiz-end` (session and quiz → `COMPLETED`, idempotent; results and leaderboard arrive in Phase 10). Invalid transitions return `INVALID_STATE_TRANSITION`; concurrent transitions `OPERATION_IN_PROGRESS`.
+- Server → client: after every lifecycle change the server broadcasts a full role-safe `session:snapshot` to the host and participant rooms (instead of separate `quiz:started`/`quiz:ended` events in Phase 5). `host:presence-updated { userId, connected, connectedCount }` goes to the host room only. Participants receive `session:connected-count { connectedCount }`, throttled to at most one update per 2 seconds per session (sent in memory, no Redis commands).
+- Acknowledgements use `{ ok: true, data } | { ok: false, error: { code, message } }`.
+- Additional codes: `REGISTRATION_CLOSED` also applies once the quiz is `LIVE` (registration stays open in `LOBBY`), `LIVE_UNAVAILABLE` (503, Redis unreachable), `NOT_JOINED`, `OPERATION_IN_PROGRESS`.
+- `GET /api/dashboard/participant` now fills `live` with registered quizzes in `LOBBY` or `LIVE`.
+- `host:lobby-close` (host only, `LOBBY` state only, else `INVALID_STATE_TRANSITION`): cancels an unstarted lobby. The session and its lobby attendance are deleted, presence is cleared and the quiz returns to `PUBLISHED` with registrations kept. Other sockets in the room receive `session:removed { code: 'LOBBY_CLOSED' }` and are disconnected; the ack carries no snapshot.
+- Registration changes while a session is open (registration stays open in `LOBBY`): every register/unregister pushes a fresh host `session:snapshot` (roster and counts). An unregistering participant's presence and lobby attendance are removed, and their socket receives `session:removed { code: 'REGISTRATION_REQUIRED', message }` before being disconnected. `session:sync` re-checks registration.
+
+## Quiz status socket — 2026-09-29
+
+Read-only lifecycle updates for the public quiz page, so registered participants see **Enter live room** (and lobby closed, started, ended) without reloading.
+
+- `POST /api/quizzes/:quizId/watch-ticket` → `{ ticket, expiresAt }` (60 seconds) for any signed-in user and any non-draft quiz (`404` for drafts). Lifecycle status is already public, so registration is not required. Watch tickets use their own audience: they cannot join `/quiz`, and live tickets cannot watch.
+- Namespace `/quiz-status`: the handshake verifies `auth.ticket`; the socket watches only the ticket's quiz, receives `quiz:status { quizId, status }` on connect and after every change. There are no client commands.
+- Status changes are published in-process when a lobby opens (`LOBBY`), closes (`PUBLISHED`), the quiz starts (`LIVE`) or ends (`COMPLETED`). No Redis commands are used; like other in-process events this assumes a single API instance.
+
+
+## Live questions — Phase 6 — 2026-10-01
+
+Question delivery and submission on the `/quiz` namespace. Answer reveal (correct answer and final distribution) and the host's live answer breakdown are included now; points, score and rank remain Phase 7.
+
+- `host:question-start { liveSessionId, questionId }` (host only, from `LIVE_IDLE` or `QUESTION_RESULT`): any unused question, in any order, starts immediately; session → `QUESTION_ACTIVE`. Creates an `AskedQuestion` (live `sequenceNumber`, `durationSeconds`, `startedAt`, `endsAt`). `QUESTION_ALREADY_ASKED` for a reused question, `INVALID_STATE_TRANSITION` while another question is active, `404` for a question from another quiz.
+- `answer:submit { liveSessionId, askedQuestionId, selectedOptionIds? | answerText? }` (participants only): accepted only from the participant's active device (`SESSION_REPLACED`), while server time is before `endsAt` (`SUBMISSION_CLOSED`), once per participant (`ALREADY_SUBMITTED`) and with a valid shape (`INVALID_ANSWER`: exactly one option for single choice, one or more distinct options for multiple answer, text up to `ANSWER_LIMITS.text` for descriptive; options must belong to the question). The ack is `ParticipantAnswerDto` with `isCorrect: null` and `pointsAwarded: 0` while the question is active. Correctness is decided on the server at submission; multiple answer is all-or-nothing.
+- Expiry: the server closes the question at `endsAt` (in-process timer, re-armed at boot), and any join, sync, submission or question start also closes an overdue question first. Clients sync when their countdown reaches zero. Closing is exactly-once (row lock + status check); the session → `QUESTION_RESULT`. `host:quiz-end` during a question closes it at the current server time.
+- Snapshots carry `serverTime` for clock offset. Participant snapshots include `question` (participant-safe, `reveal: null` while active; `reveal { correctOptionIds, distribution, submittedCount }` after it ends). Personal fields `myAnswer` and `joinedDuringQuestion` appear only in snapshots addressed to one participant (join, sync, and the per-participant snapshot sent when a question ends); broadcasts omit them. Not attempted is derived (no row stored), shown as `myAnswer.status: 'NOT_ATTEMPTED'` after the end.
+- Host snapshots include `askedQuestions` and `currentQuestion` (active or just ended, with `submittedCount`, per-option `distribution` and the newest 50 descriptive `responses` without participant identity). `host:submissions-updated` (host room only) sends the same progress at most once per second per session.
+- Hot path: an answer costs one database statement (single atomic insert guarded by a shared row lock on the asked question) plus one Redis `HGET` for the active device; answer keys and confirmed registrations are cached in memory per session (single API instance).
+
+## Scoring and personal rank — Phase 7 — 2026-10-01
+
+- Points are decided on the server when an answer is accepted and revealed only after the question ends: a correct answer earns `1000 × (1 − 0.6 × responseTime / duration)`, rounded (about 1000 instant, 700 at half time, 400 at the deadline); incorrect, not attempted and descriptive answers earn 0; multiple answer is all-or-nothing. Constants live in `SCORING` (API live-sessions constants); not configurable in the UI.
+- Standings are computed in PostgreSQL in one query when a question ends: each participant's total over completed asked questions only (an active question never changes standings), ranked with shared ranks on exact ties (1, 1, 3). `participantCount` is everyone who entered the live session, including zero scores. This replaces the Redis sorted-set leaderboard from the database design to keep Upstash command usage low; the database remains the source of truth.
+- Delivery: the per-participant reveal snapshot is sent first, then `participant:standing { askedQuestionId, totalScore, rank, participantCount }` to each connected participant, so clients show the reveal while the standing loads. Personal snapshots (join, sync) include `myStanding` once the current question has ended.
+
+## Live distribution and result screen — Phase 8 — 2026-10-01
+
+Delivered with Phase 6: host-only live counts, percentages and descriptive responses (`host:submissions-updated`), automatic reveal at expiry with the correct answer and final distribution for participants, correct/incorrect states and the post-question waiting state. Participants receive neither the answer key, the distribution nor host progress before expiry (covered by the live questions integration test).
+
+## Host presentation controls and leaderboard — Phase 9 — 2026-10-01
+
+- `host:leaderboard-get` (host only): returns `LeaderboardDto { entries: [{ rank, userId, name, score }], participantCount, afterQuestionNumber }` without changing participant screens (host private view).
+- `host:leaderboard-show` (host only, from `QUESTION_RESULT`): session → `LEADERBOARD`; host and participant snapshots carry `leaderboard`, and participants see the Top 10 instead of the question result, with their own rank (`myStanding`) still available. `host:leaderboard-hide` returns to `QUESTION_RESULT` with the latest result. Asking the next question from `LEADERBOARD` hides it implicitly. Showing during a question returns `INVALID_STATE_TRANSITION`.
+- Top 10 lists at most `LEADERBOARD_SIZE` participants who have scored (zero-point participants are never listed, so a field of zero ties cannot turn it into the whole roster); ties share a rank and are ordered by name, and `rank` is the overall rank. `participantCount` still counts everyone who entered. Computed in PostgreSQL from the same ranking query as personal standings, so both always agree.
+- Timer expiry never advances: the host keeps the finished question (or the leaderboard) on screen until choosing the next question.
+- Performance: the leaderboard and the ended question's final results are cached per session until the next question ends (or someone enters for the first time; reconnects keep the cache), and concurrent host and participant snapshots share one query. Showing or hiding is a single conditional update (`state` must match), and the live session row loads in one SQL query.
+
+## Live review fixes — 2026-10-01
+
+- Question close timers are tracked per asked question: a late close of an earlier question never cancels the active question's timer. Failed timer closes are logged and retried; after the last retry the next interaction still closes the question.
+- `answer:submit` for a question outside the caller's session returns `QUESTION_NOT_ACTIVE` before any status check, so other sessions' questions reveal nothing.
+- Participant clients take the server clock offset only from `session:join` and `session:sync` replies, corrected by half the round trip; broadcasts no longer move it. `joinedDuringQuestion` and `myStanding` are applied only to the asked question they describe.
+- In-process live caches are per session and dropped when the session ends, closes, or sits unused for two hours.
