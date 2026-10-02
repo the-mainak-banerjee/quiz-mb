@@ -85,9 +85,18 @@ export type SubmissionRow = Prisma.AnswerSubmissionGetPayload<{
 /** Newest descriptive responses included in host progress. */
 const HOST_RESPONSE_LIMIT = 50;
 
-const isUniqueViolation = (error: unknown) =>
-  error instanceof Prisma.PrismaClientKnownRequestError &&
-  error.code === 'P2002';
+/** Unique-key violation from a Prisma call (P2002) or raw SQL (P2010). */
+const isUniqueViolation = (error: unknown) => {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (error.code === 'P2002') return true;
+  const cause = (
+    error.meta as
+      { driverAdapterError?: { cause?: { originalCode?: string } } } | undefined
+  )?.driverAdapterError?.cause;
+  return error.code === 'P2010' && cause?.originalCode === '23505';
+};
+
+type AskedQuestion = Prisma.AskedQuestionGetPayload<object>;
 
 const alreadyAsked = () =>
   new ApiError(
@@ -474,39 +483,47 @@ export class LiveSessionsRepository {
    * unique keys reject a reused question or a second active one.
    */
   async startQuestion(id: string, questionId: string, durationSeconds: number) {
+    const startedAt = new Date();
+    const endsAt = new Date(startedAt.getTime() + durationSeconds * 1000);
+    // One atomic statement (one round trip). The conditional UPDATE takes the
+    // session row lock and only matches an idle session, so concurrent starts
+    // serialize and the loser matches nothing. Asking from the leaderboard
+    // hides it implicitly. A reused question violates the unique key and the
+    // whole statement, including the state change, rolls back.
+    let rows: AskedQuestion[];
     try {
-      return await this.db.$transaction(async (tx) => {
-        const session = await lockSession(tx, id);
-        // Asking from the leaderboard hides it implicitly.
-        if (
-          session.state !== LIVE_SESSION_STATE.LIVE_IDLE &&
-          session.state !== LIVE_SESSION_STATE.QUESTION_RESULT &&
-          session.state !== LIVE_SESSION_STATE.LEADERBOARD
+      rows = await this.db.$queryRaw<AskedQuestion[]>`
+        WITH session AS (
+          UPDATE live_quiz_sessions
+          SET state = ${LIVE_SESSION_STATE.QUESTION_ACTIVE}::"LiveSessionState",
+            "updatedAt" = now()
+          WHERE id = ${id}::uuid
+            AND state IN (
+              ${LIVE_SESSION_STATE.LIVE_IDLE}::"LiveSessionState",
+              ${LIVE_SESSION_STATE.QUESTION_RESULT}::"LiveSessionState",
+              ${LIVE_SESSION_STATE.LEADERBOARD}::"LiveSessionState"
+            )
+          RETURNING id
         )
-          invalidTransition();
-        const startedAt = new Date();
-        const sequenceNumber =
-          (await tx.askedQuestion.count({ where: { liveSessionId: id } })) + 1;
-        const asked = await tx.askedQuestion.create({
-          data: {
-            liveSessionId: id,
-            questionId,
-            sequenceNumber,
-            durationSeconds,
-            startedAt,
-            endsAt: new Date(startedAt.getTime() + durationSeconds * 1000),
-          },
-        });
-        await tx.liveQuizSession.update({
-          where: { id },
-          data: { state: LIVE_SESSION_STATE.QUESTION_ACTIVE },
-        });
-        return asked;
-      }, lockedTransaction);
+        INSERT INTO asked_questions
+          (id, "liveSessionId", "questionId", "sequenceNumber", status,
+           "durationSeconds", "startedAt", "endsAt")
+        SELECT gen_random_uuid(), session.id, ${questionId}::uuid,
+          (SELECT COUNT(*) FROM asked_questions
+            WHERE "liveSessionId" = ${id}::uuid) + 1,
+          ${ASKED_QUESTION_STATUS.ACTIVE}::"AskedQuestionStatus",
+          ${durationSeconds}::int, ${startedAt}, ${endsAt}
+        FROM session
+        RETURNING id::text, "liveSessionId"::text, "questionId"::text,
+          "sequenceNumber", status::text, "durationSeconds", "startedAt",
+          "endsAt", "completedAt", "createdAt"`;
     } catch (error) {
       if (isUniqueViolation(error)) throw alreadyAsked();
       throw error;
     }
+    const [asked] = rows;
+    if (!asked) invalidTransition();
+    return asked;
   }
 
   /**

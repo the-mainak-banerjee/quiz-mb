@@ -923,16 +923,13 @@ export class LiveSessionsService {
     );
     if (!question)
       throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Question not found.');
-    const asked = await this.store.withLock(
-      LOCK_OPERATION.SESSION_TRANSITION,
+    // No Redis lock: the single conditional statement already serializes
+    // concurrent starts on the session row.
+    const asked = await this.repository.startQuestion(
       liveSessionId,
-      () =>
-        this.repository.startQuestion(
-          liveSessionId,
-          questionId,
-          question.durationOverrideSeconds ??
-            session.quiz.defaultQuestionDurationSeconds,
-        ),
+      questionId,
+      question.durationOverrideSeconds ??
+        session.quiz.defaultQuestionDurationSeconds,
     );
     this.cacheFor(liveSessionId).answerKeys.set(asked.id, {
       liveSessionId,
