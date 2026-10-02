@@ -25,7 +25,7 @@ export default async function PublicQuizPage({
   const registration = user
     ? await (
         await serverApi()
-      ).get<RegistrationDto>(`/api/quizzes/${quiz.id}/registration`)
+      ).get<RegistrationDto>(API_ROUTES.QUIZZES.REGISTRATION(quiz.id))
     : null;
   const isHost = user?.id === quiz.host.id;
   // Registration stays open while the lobby is open; registered
@@ -48,6 +48,9 @@ export default async function PublicQuizPage({
     <PublicQuizView
       quiz={toPublishedQuizViewModel(quiz, appOrigin)}
       initialState={initialState}
+      resultSessionId={
+        isHost ? null : (registration?.completedLiveSessionId ?? null)
+      }
       user={user}
       isHost={isHost}
     />

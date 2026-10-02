@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -101,11 +101,14 @@ function Availability({
 function CompletedPanel({
   quiz,
   registered,
+  resultSessionId,
   isHost,
 }: {
   quiz: PublishedQuizViewModel;
-  /** The signed-in visitor held a seat; their result is in their history. */
+  /** The signed-in visitor held a seat. */
   registered: boolean;
+  /** Their completed session, which opens their result summary. */
+  resultSessionId: string | null;
   isHost: boolean;
 }) {
   const link = isHost
@@ -113,8 +116,11 @@ function CompletedPanel({
         href: APP_LINKS.WORKSPACE.QUIZ_RESULTS(quiz.id),
         label: 'View results',
       }
-    : registered
-      ? { href: APP_LINKS.WORKSPACE.HISTORY, label: 'View your result' }
+    : registered && resultSessionId
+      ? {
+          href: APP_LINKS.WORKSPACE.HISTORY_RESULT(resultSessionId),
+          label: 'View your result',
+        }
       : null;
   return (
     <Surface className="space-y-space-md">
@@ -331,11 +337,14 @@ function RegistrationPanel({
 export function PublicQuizView({
   quiz,
   initialState,
+  resultSessionId: initialResultSessionId,
   user,
   isHost,
 }: {
   quiz: PublishedQuizViewModel;
   initialState: PublicQuizState;
+  /** A registered participant's completed session, once the quiz has ended. */
+  resultSessionId: string | null;
   user: CurrentUser | null;
   isHost: boolean;
 }) {
@@ -370,6 +379,26 @@ export function PublicQuizView({
       ? 'logged-out'
       : lifecycleState;
   const currentQuiz = { ...quiz, status, registeredCount: registrationCount };
+  const [resultSessionId, setResultSessionId] = useState(
+    initialResultSessionId,
+  );
+  const needsResultLink =
+    completed && signedIn && !isHost && state === 'registered';
+  // The quiz ended while the page was open: look up the session that now
+  // holds this participant's result.
+  useEffect(() => {
+    if (!needsResultLink || resultSessionId) return;
+    let cancelled = false;
+    publishingApi.registration(quiz.id).then(
+      (registration) => {
+        if (!cancelled) setResultSessionId(registration.completedLiveSessionId);
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [needsResultLink, resultSessionId, quiz.id]);
 
   async function register() {
     if (isHost) {
@@ -494,6 +523,7 @@ export function PublicQuizView({
                 <CompletedPanel
                   quiz={currentQuiz}
                   registered={signedIn && state === 'registered'}
+                  resultSessionId={resultSessionId}
                   isHost={isHost}
                 />
               ) : (

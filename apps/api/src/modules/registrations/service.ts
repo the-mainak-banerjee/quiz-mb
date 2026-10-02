@@ -33,6 +33,7 @@ export class RegistrationsService {
       registered: true,
       registeredAt: result.registration.registeredAt.toISOString(),
       registrationCount: result.registrationCount,
+      completedLiveSessionId: null,
     };
   }
 
@@ -47,6 +48,7 @@ export class RegistrationsService {
       registered: false,
       registeredAt: null,
       registrationCount: result.registrationCount,
+      completedLiveSessionId: null,
     };
   }
 
@@ -60,6 +62,7 @@ export class RegistrationsService {
         ? result.registration!.registeredAt.toISOString()
         : null,
       registrationCount: result.registrationCount,
+      completedLiveSessionId: active ? result.completedLiveSessionId : null,
     };
   }
 

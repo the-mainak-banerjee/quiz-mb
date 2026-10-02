@@ -202,6 +202,8 @@ export type RegistrationDto = {
   registered: boolean;
   registeredAt: string | null;
   registrationCount: number;
+  /** The ended live session of a quiz the user registered for (their result). */
+  completedLiveSessionId: string | null;
 };
 
 export type HostRegistrationDto = {

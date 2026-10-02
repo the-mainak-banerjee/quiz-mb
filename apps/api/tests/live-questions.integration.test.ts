@@ -17,6 +17,7 @@ import {
   type HostQuestionProgressDto,
   type HostQuizResultsDto,
   type ParticipantDashboardDto,
+  type RegistrationDto,
   type ParticipantFinalResultDto,
   type ParticipantQuizResultDto,
   type LeaderboardDto,
@@ -822,6 +823,19 @@ test(
         )
       ).status,
       404,
+    );
+    const registration = await data<RegistrationDto>(
+      await request(
+        `/quizzes/${quiz.id}/registration`,
+        'GET',
+        undefined,
+        cookies.a,
+      ),
+    );
+    assert.equal(
+      registration.completedLiveSessionId,
+      liveSessionId,
+      'a registered participant can open their result from the quiz page',
     );
     const dashboard = await data<ParticipantDashboardDto>(
       await request('/dashboard/participant', 'GET', undefined, cookies.a),

@@ -4,6 +4,7 @@ import { publicQuizInclude } from '../quizzes/repository.js';
 import { lockedTransaction } from '../../infrastructure/transactions.js';
 import {
   ERROR_CODE,
+  LIVE_SESSION_STATE,
   QUIZ_STATUS,
   REGISTRATION_STATUS,
 } from '@quizmb/contracts';
@@ -136,7 +137,18 @@ export class RegistrationsRepository {
 
   async own(quizId: string, userId: string) {
     const [quiz, registration, registrationCount] = await Promise.all([
-      this.db.quiz.findUnique({ where: { id: quizId }, select: { id: true } }),
+      this.db.quiz.findUnique({
+        where: { id: quizId },
+        select: {
+          id: true,
+          liveSessions: {
+            where: { state: LIVE_SESSION_STATE.COMPLETED },
+            orderBy: { endedAt: 'desc' },
+            take: 1,
+            select: { id: true },
+          },
+        },
+      }),
       this.db.quizRegistration.findUnique({
         where: { quizId_userId: { quizId, userId } },
       }),
@@ -145,7 +157,11 @@ export class RegistrationsRepository {
       }),
     ]);
     if (!quiz) throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');
-    return { registration, registrationCount };
+    return {
+      registration,
+      registrationCount,
+      completedLiveSessionId: quiz.liveSessions[0]?.id ?? null,
+    };
   }
 
   async hostList(
