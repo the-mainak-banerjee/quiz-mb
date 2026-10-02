@@ -706,6 +706,12 @@ test(
     assert.equal(endedHost.final?.summary.participantCount, 3);
     assert.equal(endedHost.final?.summary.askedQuestionCount, 3);
     assert.equal(endedHost.final?.summary.scoredQuestionCount, 2);
+    assert.equal(endedHost.final?.summary.quizQuestionCount, 3);
+    assert.equal(
+      endedHost.final?.summary.averageScore,
+      Math.round(firstPoints / 3),
+    );
+    assert.equal(endedHost.final?.leaderboard.entries[0]?.correctCount, 1);
     assert.equal(endedHost.final?.leaderboardShown, false);
     assert.deepEqual(
       endedHost.final?.leaderboard.entries.map((entry) => entry.name),
@@ -822,8 +828,8 @@ test(
       (entry) => entry.liveSessionId === liveSessionId,
     );
     assert.equal(item?.quiz.id, quiz.id);
-    assert.equal(item?.result.totalScore, firstPoints);
-    assert.equal(item?.result.rank, 1);
+    assert.equal(item?.result?.totalScore, firstPoints);
+    assert.equal(item?.result?.rank, 1);
 
     // ---- Only presented questions exist, in live order.
     const asked = await db.askedQuestion.findMany({

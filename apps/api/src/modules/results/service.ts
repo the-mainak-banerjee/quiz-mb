@@ -52,11 +52,12 @@ export class ResultsService {
       LEADERBOARD_SIZE,
     );
     return {
-      entries: top.map(({ rank, userId, name, totalScore }) => ({
+      entries: top.map(({ rank, userId, name, totalScore, correctCount }) => ({
         rank,
         userId,
         name,
         score: totalScore,
+        correctCount,
       })),
       participantCount: summary.participantCount,
       afterQuestionNumber: summary.askedQuestionCount || null,
@@ -138,14 +139,21 @@ export class ResultsService {
     };
   }
 
-  /** Completed quizzes the user took part in, with quiz rows for cards. */
+  /** Completed quizzes the user registered for, with quiz rows for cards. */
   async history(userId: string) {
     const rows = await this.repository.history(userId);
-    return rows.map((row) => ({
-      liveSessionId: row.liveSessionId,
-      quiz: row.liveSession.quiz,
-      completedAt: row.liveSession.endedAt?.toISOString() ?? null,
-      result: toResult(row, row.liveSession._count.results),
-    }));
+    return rows.flatMap(({ quiz }) => {
+      const [session] = quiz.liveSessions;
+      if (!session) return [];
+      const [result] = session.results;
+      return [
+        {
+          liveSessionId: session.id,
+          quiz,
+          completedAt: session.endedAt?.toISOString() ?? null,
+          result: result ? toResult(result, session._count.results) : null,
+        },
+      ];
+    });
   }
 }

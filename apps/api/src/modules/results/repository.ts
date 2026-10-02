@@ -28,7 +28,9 @@ export class ResultsRepository {
     const [row] = await this.db.$queryRaw<
       Array<{
         participantCount: number;
+        averageScore: number;
         askedQuestionCount: number;
+        quizQuestionCount: number;
         scoredQuestionCount: number;
       }>
     >`
@@ -36,6 +38,12 @@ export class ResultsRepository {
         (SELECT COUNT(*) FROM quiz_results
           WHERE "liveSessionId" = ${liveSessionId}::uuid)::int
           AS "participantCount",
+        (SELECT COALESCE(ROUND(AVG("totalScore")), 0) FROM quiz_results
+          WHERE "liveSessionId" = ${liveSessionId}::uuid)::int
+          AS "averageScore",
+        (SELECT COUNT(*) FROM questions
+          WHERE "quizId" = (SELECT "quizId" FROM live_quiz_sessions
+            WHERE id = ${liveSessionId}::uuid))::int AS "quizQuestionCount",
         COUNT(aq.id)::int AS "askedQuestionCount",
         COUNT(aq.id) FILTER (
           WHERE q.type <> ${QUESTION_TYPE.DESCRIPTIVE}::"QuestionType"
@@ -46,7 +54,9 @@ export class ResultsRepository {
     return (
       row ?? {
         participantCount: 0,
+        averageScore: 0,
         askedQuestionCount: 0,
+        quizQuestionCount: 0,
         scoredQuestionCount: 0,
       }
     );
@@ -66,9 +76,15 @@ export class ResultsRepository {
    */
   leaderboard(liveSessionId: string, size: number) {
     return this.db.$queryRaw<
-      Array<{ userId: string; name: string; totalScore: number; rank: number }>
+      Array<{
+        userId: string;
+        name: string;
+        totalScore: number;
+        rank: number;
+        correctCount: number;
+      }>
     >`
-      SELECT r."userId"::text, u.name, r."totalScore", r.rank
+      SELECT r."userId"::text, u.name, r."totalScore", r.rank, r."correctCount"
       FROM quiz_results r
       JOIN users u ON u.id = r."userId"
       WHERE r."liveSessionId" = ${liveSessionId}::uuid AND r."totalScore" > 0
@@ -146,21 +162,39 @@ export class ResultsRepository {
     return { session, result: result ?? null, participantCount };
   }
 
-  /** The user's completed quizzes with results and quiz cards, newest first. */
-  async history(userId: string) {
-    const rows = await this.db.quizResult.findMany({
-      where: { userId },
-      orderBy: { finalizedAt: 'desc' },
-      include: {
-        liveSession: {
-          select: {
-            endedAt: true,
-            quiz: { include: publicQuizInclude },
-            _count: { select: { results: true } },
+  /**
+   * Completed quizzes the user was registered for, newest first, with their
+   * result when they took part (registration is required to join, so this
+   * covers everyone who played and everyone who did not show up).
+   */
+  history(userId: string) {
+    return this.db.quizRegistration.findMany({
+      where: {
+        userId,
+        status: REGISTRATION_STATUS.REGISTERED,
+        quiz: {
+          liveSessions: { some: { state: LIVE_SESSION_STATE.COMPLETED } },
+        },
+      },
+      orderBy: { quiz: { updatedAt: 'desc' } },
+      select: {
+        quiz: {
+          include: {
+            ...publicQuizInclude,
+            liveSessions: {
+              where: { state: LIVE_SESSION_STATE.COMPLETED },
+              orderBy: { endedAt: 'desc' },
+              take: 1,
+              select: {
+                id: true,
+                endedAt: true,
+                results: { where: { userId } },
+                _count: { select: { results: true } },
+              },
+            },
           },
         },
       },
     });
-    return rows;
   }
 }

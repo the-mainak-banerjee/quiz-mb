@@ -227,11 +227,15 @@ export type ParticipantFinalResultDto = {
 };
 
 /** One completed quiz the participant took part in. */
+/**
+ * One completed quiz the participant was registered for. `result` is null
+ * when they never entered the live room.
+ */
 export type ParticipantHistoryDto = {
   liveSessionId: string;
   quiz: PublicQuizDto;
   completedAt: string | null;
-  result: ParticipantFinalResultDto;
+  result: ParticipantFinalResultDto | null;
 };
 
 export type ParticipantDashboardDto = {
@@ -245,8 +249,12 @@ export type ParticipantDashboardDto = {
 export type FinalSummaryDto = {
   participantCount: number;
   askedQuestionCount: number;
+  /** Every question in the quiz, asked or not. */
+  quizQuestionCount: number;
   /** Asked single-choice and multiple-answer questions. */
   scoredQuestionCount: number;
+  /** Mean final score across participants (rounded). */
+  averageScore: number;
   completedAt: string | null;
 };
 
@@ -484,6 +492,8 @@ export type LeaderboardEntryDto = {
   userId: string;
   name: string;
   score: number;
+  /** Final leaderboard only: correct scored answers. */
+  correctCount?: number;
 };
 
 /**
