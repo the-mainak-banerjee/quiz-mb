@@ -15,6 +15,10 @@ import {
   QUESTION_TYPE,
   type HostLiveSnapshotDto,
   type HostQuestionProgressDto,
+  type HostQuizResultsDto,
+  type ParticipantDashboardDto,
+  type ParticipantFinalResultDto,
+  type ParticipantQuizResultDto,
   type LeaderboardDto,
   type LiveSessionRefDto,
   type LiveSnapshotDto,
@@ -81,7 +85,7 @@ const questions = [
 }));
 
 test(
-  'live questions: order, submission lock, expiry, reveal, scoring and rank',
+  'live quiz: questions, scoring, leaderboard, end and final results',
   { skip: !process.env.DATABASE_URL || !process.env.REDIS_URL },
   async (t) => {
     if (process.env.NODE_ENV === 'production')
@@ -652,7 +656,14 @@ test(
     );
     const askedThird = lastAsk.currentQuestion!.askedQuestionId;
     assert.equal(lastAsk.currentQuestion?.number, 3);
-    ok(await emit(host.socket, LIVE_EVENTS.quizEnd, {}));
+    const finalFor = (socket: ClientSocket) =>
+      nextEvent<ParticipantFinalResultDto>(socket, LIVE_EVENTS.quizEnded);
+    const finals = Promise.all(
+      [a, b, late].map(({ socket }) => finalFor(socket)),
+    );
+    const endedHost = ok(
+      await emit<HostLiveSnapshotDto>(host.socket, LIVE_EVENTS.quizEnd, {}),
+    );
     assert.equal(
       errorCode(
         await submit(b.socket, {
@@ -662,6 +673,157 @@ test(
       ),
       ERROR_CODE.SUBMISSION_CLOSED,
     );
+
+    // ---- Final results: asked questions only; descriptive not counted.
+    // Scored questions asked: the multiple-answer one and the single choice
+    // that was ended early (nobody answered it).
+    const [aFinal, bFinal, lateFinal] = await finals;
+    assert.deepEqual(aFinal, {
+      totalScore: firstPoints,
+      rank: 1,
+      participantCount: 3,
+      correctCount: 1,
+      incorrectCount: 0,
+      notAttemptedCount: 1,
+    });
+    assert.deepEqual(bFinal, {
+      totalScore: 0,
+      rank: 2,
+      participantCount: 3,
+      correctCount: 0,
+      incorrectCount: 1,
+      notAttemptedCount: 1,
+    });
+    assert.deepEqual(lateFinal, {
+      totalScore: 0,
+      rank: 2,
+      participantCount: 3,
+      correctCount: 0,
+      incorrectCount: 0,
+      notAttemptedCount: 2,
+    });
+    assert.equal(endedHost.state, LIVE_SESSION_STATE.COMPLETED);
+    assert.equal(endedHost.final?.summary.participantCount, 3);
+    assert.equal(endedHost.final?.summary.askedQuestionCount, 3);
+    assert.equal(endedHost.final?.summary.scoredQuestionCount, 2);
+    assert.equal(endedHost.final?.leaderboardShown, false);
+    assert.deepEqual(
+      endedHost.final?.leaderboard.entries.map((entry) => entry.name),
+      ['Questions a'],
+      'only scorers are listed',
+    );
+    ok(await emit(host.socket, LIVE_EVENTS.quizEnd, {}));
+    assert.equal(
+      await db.quizResult.count({ where: { liveSessionId } }),
+      3,
+      'ending again writes no new results',
+    );
+
+    // ---- The final leaderboard is host-controlled.
+    assert.equal(
+      errorCode(await emit(a.socket, LIVE_EVENTS.finalLeaderboardShow, {})),
+      ERROR_CODE.FORBIDDEN,
+    );
+    const finalOnA = waitFor<ParticipantLiveSnapshotDto>(
+      a.socket,
+      LIVE_EVENTS.snapshot,
+      (snapshot) =>
+        snapshot.state === LIVE_SESSION_STATE.COMPLETED &&
+        snapshot.leaderboard !== null,
+    );
+    const revealed = ok(
+      await emit<HostLiveSnapshotDto>(
+        host.socket,
+        LIVE_EVENTS.finalLeaderboardShow,
+        {},
+      ),
+    );
+    assert.equal(revealed.final?.leaderboardShown, true);
+    assert.equal((await finalOnA).leaderboard?.entries[0]?.name, 'Questions a');
+
+    // ---- No rejoining once the quiz has ended.
+    const { ticket: afterTicket } = await data<SocketTicketDto>(
+      await request(
+        `/live-sessions/${liveSessionId}/socket-ticket`,
+        'POST',
+        {},
+        cookies.b,
+      ),
+    );
+    const afterSocket = connect(base + LIVE_SOCKET_NAMESPACE, {
+      auth: { ticket: afterTicket },
+      transports: ['websocket'],
+      reconnection: false,
+      forceNew: true,
+    });
+    sockets.push(afterSocket);
+    await nextEvent(afterSocket, 'connect');
+    assert.equal(
+      errorCode(await emit(afterSocket, LIVE_EVENTS.join, {})),
+      ERROR_CODE.QUIZ_COMPLETED,
+    );
+
+    // ---- Results pages and history.
+    const results = await data<HostQuizResultsDto>(
+      await request(
+        `/quizzes/${quiz.id}/results`,
+        'GET',
+        undefined,
+        cookies.host,
+      ),
+    );
+    assert.deepEqual(
+      results.entries.map((entry) => [entry.rank, entry.name]),
+      [
+        [1, 'Questions a'],
+        [2, 'Questions b'],
+        [2, 'Questions late'],
+      ],
+    );
+    assert.equal(results.nextOffset, null);
+    assert.equal(results.summary.scoredQuestionCount, 2);
+    assert.equal(
+      (
+        await request(
+          `/quizzes/${quiz.id}/results`,
+          'GET',
+          undefined,
+          cookies.a,
+        )
+      ).status,
+      404,
+      'only the host sees full results',
+    );
+    const mine = await data<ParticipantQuizResultDto>(
+      await request(
+        `/live-sessions/${liveSessionId}/my-result`,
+        'GET',
+        undefined,
+        cookies.late,
+      ),
+    );
+    assert.equal(mine.quiz.id, quiz.id);
+    assert.equal(mine.result?.notAttemptedCount, 2);
+    assert.equal(
+      (
+        await request(
+          `/live-sessions/${liveSessionId}/my-result`,
+          'GET',
+          undefined,
+          cookies.host,
+        )
+      ).status,
+      404,
+    );
+    const dashboard = await data<ParticipantDashboardDto>(
+      await request('/dashboard/participant', 'GET', undefined, cookies.a),
+    );
+    const item = dashboard.history.find(
+      (entry) => entry.liveSessionId === liveSessionId,
+    );
+    assert.equal(item?.quiz.id, quiz.id);
+    assert.equal(item?.result.totalScore, firstPoints);
+    assert.equal(item?.result.rank, 1);
 
     // ---- Only presented questions exist, in live order.
     const asked = await db.askedQuestion.findMany({

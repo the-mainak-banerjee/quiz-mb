@@ -16,6 +16,9 @@ import { RegistrationsRepository } from './registrations/repository.js';
 import { RegistrationsService } from './registrations/service.js';
 import { registrationRoutes } from './registrations/routes.js';
 import type { DomainEvents } from '../infrastructure/domain-events.js';
+import { ResultsRepository } from './results/repository.js';
+import { ResultsService } from './results/service.js';
+import { resultRoutes } from './results/routes.js';
 export function authoringRoutes(
   db: PrismaClient,
   storage?: SupabaseStorage,
@@ -29,16 +32,19 @@ export function authoringRoutes(
     projects,
   );
   const questions = new QuestionsService(new QuestionsRepository(db), quizzes);
+  const results = new ResultsService(new ResultsRepository(db));
   const registrations = new RegistrationsService(
     new RegistrationsRepository(db),
     quizzes,
     events,
+    results,
   );
   return Router().use(
     projectRoutes(projects),
     quizRoutes(quizzes),
     questionRoutes(questions),
     registrationRoutes(registrations),
+    resultRoutes(results),
     mediaRoutes(media),
   );
 }

@@ -96,7 +96,7 @@ export async function loadUserQuizData() {
   const participantQuizzes = [
     ...participant.upcoming,
     ...participant.live,
-    ...participant.history,
+    ...participant.history.map((item) => item.quiz),
   ].map(participantQuiz);
 
   const quizzes = [...host.quizzes.map(hostQuiz), ...participantQuizzes];

@@ -7,6 +7,7 @@ import {
   PUBLIC_QUIZ_STATUSES,
   ERROR_CODE,
   LIVE_SESSION_STATE,
+  QUESTION_TYPE,
   type LiveSessionState,
   QUIZ_STATUS,
   REGISTRATION_STATUS,
@@ -25,6 +26,8 @@ export type LiveSessionRow = {
   startedAt: Date | null;
   endedAt: Date | null;
   createdAt: Date;
+  /** Set once the host reveals the final leaderboard. */
+  finalLeaderboardShownAt: Date | null;
   quiz: {
     id: string;
     publicId: string;
@@ -60,6 +63,40 @@ function rankedStandings(liveSessionId: string) {
     LEFT JOIN asked_questions aq
       ON aq."liveSessionId" = ps."liveSessionId"
       AND aq.status = ${ASKED_QUESTION_STATUS.COMPLETED}::"AskedQuestionStatus"
+    LEFT JOIN answer_submissions s
+      ON s."askedQuestionId" = aq.id AND s."userId" = ps."userId"
+    WHERE ps."liveSessionId" = ${liveSessionId}::uuid
+    GROUP BY ps."userId"`;
+}
+
+/**
+ * Final results for everyone who entered the session: total points over all
+ * asked questions (the shared RANK() semantics), and correct / incorrect /
+ * not-attempted counts over asked scored questions only. Descriptive
+ * questions never score and are not counted. Unasked questions have no
+ * AskedQuestion row, so they cannot affect anything.
+ */
+function finalResultRows(liveSessionId: string) {
+  return Prisma.sql`
+    SELECT ps."userId",
+      COALESCE(SUM(s."pointsAwarded"), 0)::int AS "totalScore",
+      RANK() OVER (
+        ORDER BY COALESCE(SUM(s."pointsAwarded"), 0) DESC
+      )::int AS rank,
+      COUNT(s.id) FILTER (
+        WHERE s."isCorrect" AND q.type <> ${QUESTION_TYPE.DESCRIPTIVE}::"QuestionType"
+      )::int AS "correctCount",
+      COUNT(s.id) FILTER (
+        WHERE NOT s."isCorrect" AND q.type <> ${QUESTION_TYPE.DESCRIPTIVE}::"QuestionType"
+      )::int AS "incorrectCount",
+      (COUNT(aq.id) FILTER (
+        WHERE q.type <> ${QUESTION_TYPE.DESCRIPTIVE}::"QuestionType"
+      ) - COUNT(s.id) FILTER (
+        WHERE q.type <> ${QUESTION_TYPE.DESCRIPTIVE}::"QuestionType"
+      ))::int AS "notAttemptedCount"
+    FROM participant_sessions ps
+    LEFT JOIN asked_questions aq ON aq."liveSessionId" = ps."liveSessionId"
+    LEFT JOIN questions q ON q.id = aq."questionId"
     LEFT JOIN answer_submissions s
       ON s."askedQuestionId" = aq.id AND s."userId" = ps."userId"
     WHERE ps."liveSessionId" = ${liveSessionId}::uuid
@@ -168,6 +205,7 @@ export class LiveSessionsRepository {
         startedAt: Date | null;
         endedAt: Date | null;
         createdAt: Date;
+        finalLeaderboardShownAt: Date | null;
         publicId: string;
         title: string;
         plannedStartAt: Date | null;
@@ -181,7 +219,8 @@ export class LiveSessionsRepository {
     >`
       SELECT s.id::text, s."quizId"::text, s."hostUserId"::text,
         s.state::text, s."allowLateJoin", s."startedAt", s."endedAt",
-        s."createdAt", q."publicId", q.title, q."plannedStartAt",
+        s."createdAt", s."finalLeaderboardShownAt", q."publicId", q.title,
+        q."plannedStartAt",
         q."registrationLimit", q."defaultQuestionDurationSeconds",
         p.name AS "projectName", u.name AS "creatorName",
         (SELECT COUNT(*) FROM questions WHERE "quizId" = q.id)::int
@@ -205,6 +244,7 @@ export class LiveSessionsRepository {
       startedAt: row.startedAt,
       endedAt: row.endedAt,
       createdAt: row.createdAt,
+      finalLeaderboardShownAt: row.finalLeaderboardShownAt,
       quiz: {
         id: row.quizId,
         publicId: row.publicId,
@@ -410,6 +450,16 @@ export class LiveSessionsRepository {
         where: { liveSessionId: id, status: ASKED_QUESTION_STATUS.ACTIVE },
         data: { status: ASKED_QUESTION_STATUS.COMPLETED, completedAt: endedAt },
       });
+      // Persist final results once, from asked questions only. All asked
+      // questions are closed above, so every answer is final.
+      await tx.$executeRaw`
+        INSERT INTO quiz_results
+          (id, "liveSessionId", "userId", "totalScore", rank,
+           "correctCount", "incorrectCount", "notAttemptedCount")
+        SELECT gen_random_uuid(), ${id}::uuid, r."userId", r."totalScore",
+          r.rank, r."correctCount", r."incorrectCount", r."notAttemptedCount"
+        FROM (${finalResultRows(id)}) r
+        ON CONFLICT ("liveSessionId", "userId") DO NOTHING`;
       await tx.liveQuizSession.update({
         where: { id },
         data: { state: LIVE_SESSION_STATE.COMPLETED, endedAt },
@@ -420,6 +470,17 @@ export class LiveSessionsRepository {
       });
       return true;
     }, lockedTransaction);
+  }
+
+  // ---- Final results ---------------------------------------------------------
+
+  /** Marks the final leaderboard as revealed (completed sessions only). */
+  async showFinalLeaderboard(id: string) {
+    const { count } = await this.db.liveQuizSession.updateMany({
+      where: { id, state: LIVE_SESSION_STATE.COMPLETED },
+      data: { finalLeaderboardShownAt: new Date() },
+    });
+    if (count === 0) invalidTransition();
   }
 
   roster(quizId: string, limit: number) {

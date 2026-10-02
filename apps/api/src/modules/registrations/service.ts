@@ -1,3 +1,4 @@
+import type { ResultsService } from '../results/service.js';
 import {
   type HostDashboardDto,
   type HostRegistrationDto,
@@ -18,6 +19,7 @@ export class RegistrationsService {
     private repository: RegistrationsRepository,
     private quizzes: QuizzesService,
     private events?: DomainEvents,
+    private results?: ResultsService,
   ) {}
 
   async register(quizId: string, userId: string): Promise<RegistrationDto> {
@@ -94,16 +96,22 @@ export class RegistrationsService {
   }
 
   async participantDashboard(userId: string): Promise<ParticipantDashboardDto> {
-    const [upcoming, live] = await Promise.all([
+    const [upcoming, live, history] = await Promise.all([
       this.repository.upcoming(userId, [QUIZ_STATUS.PUBLISHED]),
       this.repository.upcoming(userId, [QUIZ_STATUS.LOBBY, QUIZ_STATUS.LIVE]),
+      this.results?.history(userId) ?? Promise.resolve([]),
     ]);
     const toDto = (rows: typeof upcoming) =>
       Promise.all(rows.map((row) => this.quizzes.publicDto(row.quiz)));
     return {
       upcoming: await toDto(upcoming),
       live: await toDto(live),
-      history: [],
+      history: await Promise.all(
+        history.map(async (item) => ({
+          ...item,
+          quiz: await this.quizzes.publicDto(item.quiz),
+        })),
+      ),
     };
   }
 
