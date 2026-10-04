@@ -4,9 +4,12 @@ import {
   type QuestionInput,
   ERROR_CODE,
   MEDIA_PURPOSE,
+  QUIZ_STATUS,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
+import { lockedTransaction } from '../../infrastructure/transactions.js';
 import { lockEditableQuiz, validateMedia } from '../quizzes/repository.js';
+import { EDIT_SCOPE } from '../quizzes/constants.js';
 
 async function setPositions(
   tx: Prisma.TransactionClient,
@@ -37,7 +40,7 @@ export class QuestionsRepository {
     questionId?: string,
   ) {
     return this.db.$transaction(async (tx) => {
-      await lockEditableQuiz(tx, quizId, userId);
+      await lockEditableQuiz(tx, quizId, userId, EDIT_SCOPE.QUESTIONS);
       await validateMedia(
         tx,
         input.imageMediaId,
@@ -84,7 +87,7 @@ export class QuestionsRepository {
         where: { id: quizId },
         data: { updatedAt: new Date() },
       });
-    });
+    }, lockedTransaction);
   }
   async quizForQuestion(id: string, userId: string) {
     const q = await this.db.question.findFirst({
@@ -100,12 +103,24 @@ export class QuestionsRepository {
   }
   async remove(id: string, quizId: string, userId: string) {
     await this.db.$transaction(async (tx) => {
-      await lockEditableQuiz(tx, quizId, userId);
+      const quiz = await lockEditableQuiz(
+        tx,
+        quizId,
+        userId,
+        EDIT_SCOPE.QUESTIONS,
+      );
       await tx.question.deleteMany({ where: { id, quizId } });
       const remaining = await tx.question.findMany({
         where: { quizId },
         orderBy: { position: 'asc' },
       });
+      // A published quiz stays publishable: it keeps at least one question.
+      if (!remaining.length && quiz.status !== QUIZ_STATUS.DRAFT) {
+        const message = 'A published quiz needs at least one question.';
+        throw new ApiError(422, ERROR_CODE.VALIDATION_ERROR, message, {
+          questions: message,
+        });
+      }
       await setPositions(
         tx,
         quizId,
@@ -115,11 +130,11 @@ export class QuestionsRepository {
         where: { id: quizId },
         data: { updatedAt: new Date() },
       });
-    });
+    }, lockedTransaction);
   }
   async reorder(quizId: string, userId: string, ids: string[]) {
     await this.db.$transaction(async (tx) => {
-      await lockEditableQuiz(tx, quizId, userId);
+      await lockEditableQuiz(tx, quizId, userId, EDIT_SCOPE.QUESTIONS);
       const all = await tx.question.findMany({
         where: { quizId },
         select: { id: true },
@@ -139,6 +154,6 @@ export class QuestionsRepository {
         where: { id: quizId },
         data: { updatedAt: new Date() },
       });
-    });
+    }, lockedTransaction);
   }
 }

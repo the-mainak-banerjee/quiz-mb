@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@quizmb/database';
 import { ApiError } from '../../http/api-error.js';
+import { lockedTransaction } from '../../infrastructure/transactions.js';
 import {
   PUBLIC_QUIZ_STATUSES,
   type MediaPurpose,
@@ -11,6 +12,7 @@ import {
   QUIZ_STATUS,
   REGISTRATION_STATUS,
 } from '@quizmb/contracts';
+import { EDIT_SCOPE, LOCKED_STATUSES, type EditScope } from './constants.js';
 
 export const quizInclude = {
   project: true,
@@ -35,24 +37,38 @@ export const publicQuizInclude = {
 export type PublicQuizRow = Prisma.QuizGetPayload<{
   include: typeof publicQuizInclude;
 }>;
+/**
+ * Locks the quiz row (the same lock registration takes) and checks the
+ * owner may still change `scope`: questions are fixed once the lobby opens,
+ * details once the quiz goes live.
+ */
 export async function lockEditableQuiz(
   tx: Prisma.TransactionClient,
   id: string,
   userId: string,
+  scope: EditScope = EDIT_SCOPE.DETAILS,
 ) {
   await tx.$queryRaw`SELECT id FROM quizzes WHERE id = ${id}::uuid FOR UPDATE`;
   const quiz = await tx.quiz.findFirst({
     where: { id, creatorUserId: userId, project: { ownerUserId: userId } },
   });
   if (!quiz) throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');
-  if (quiz.status === QUIZ_STATUS.LIVE || quiz.status === QUIZ_STATUS.COMPLETED)
+  if (LOCKED_STATUSES[scope].includes(quiz.status))
     throw new ApiError(
       409,
       ERROR_CODE.QUIZ_LOCKED,
-      'This quiz can no longer be edited.',
+      scope === EDIT_SCOPE.QUESTIONS && quiz.status === QUIZ_STATUS.LOBBY
+        ? 'Questions cannot change once the lobby is open.'
+        : 'This quiz can no longer be edited.',
     );
   return quiz;
 }
+
+/** Media of this purpose belongs to the questions or to the quiz details. */
+export const mediaEditScope = (purpose: MediaPurpose) =>
+  purpose === MEDIA_PURPOSE.QUESTION_IMAGE
+    ? EDIT_SCOPE.QUESTIONS
+    : EDIT_SCOPE.DETAILS;
 export async function validateMedia(
   tx: Prisma.TransactionClient,
   id: string | null,
@@ -126,6 +142,16 @@ export class QuizzesRepository {
   update(id: string, userId: string, input: QuizInput) {
     return this.db.$transaction(async (tx) => {
       await lockEditableQuiz(tx, id, userId);
+      // Same row lock as registration, so the count cannot change meanwhile.
+      const registered = await tx.quizRegistration.count({
+        where: { quizId: id, status: REGISTRATION_STATUS.REGISTERED },
+      });
+      if (input.registrationLimit < registered) {
+        const message = `${registered} participants are already registered, so the limit cannot be lower than ${registered}.`;
+        throw new ApiError(422, ERROR_CODE.VALIDATION_ERROR, message, {
+          registrationLimit: message,
+        });
+      }
       await validateMedia(
         tx,
         input.coverMediaId,
@@ -138,7 +164,7 @@ export class QuizzesRepository {
         data: input,
         include: quizInclude,
       });
-    });
+    }, lockedTransaction);
   }
   publish(id: string, userId: string) {
     return this.db.$transaction(async (tx) => {
@@ -168,7 +194,7 @@ export class QuizzesRepository {
         data: { status: QUIZ_STATUS.PUBLISHED, publishedAt: new Date() },
         include: quizInclude,
       });
-    });
+    }, lockedTransaction);
   }
   publicById(publicId: string) {
     return this.db.quiz.findFirst({

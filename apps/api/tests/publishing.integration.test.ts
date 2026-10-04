@@ -501,3 +501,184 @@ test(
     assert.equal(await activeCount(), limit);
   },
 );
+
+test(
+  'published quizzes keep a question, never drop below their registrations, and fix questions once the lobby opens',
+  { skip: !process.env.DATABASE_URL },
+  async (t) => {
+    const { db, cookies, request, data } = await startPublishingHarness(t, 3);
+    const [host, participantA, participantB] = cookies as [
+      string,
+      string,
+      string,
+    ];
+    const refusal = async (response: Response, status: number) => {
+      const body = (await response.json()) as {
+        error: { code: string; details?: Record<string, string> };
+      };
+      assert.equal(response.status, status, JSON.stringify(body));
+      return body.error;
+    };
+
+    const project = await data<{ id: string }>(
+      await request(
+        '/projects',
+        'POST',
+        { name: 'Content rules project', description: 'Integration fixture' },
+        host,
+      ),
+      201,
+    );
+    const basics = { ...quizBasics, registrationLimit: 5 };
+    let quiz = await data<QuizDto>(
+      await request(`/projects/${project.id}/quizzes`, 'POST', basics, host),
+      201,
+    );
+    for (const text of ['First question?', 'Second question?'])
+      quiz = await data<QuizDto>(
+        await request(
+          `/quizzes/${quiz.id}/questions`,
+          'POST',
+          { ...validQuestion, text },
+          host,
+        ),
+        201,
+      );
+    const [first, second] = quiz.questions as [
+      QuizDto['questions'][number],
+      QuizDto['questions'][number],
+    ];
+    quiz = await data<QuizDto>(
+      await request(`/quizzes/${quiz.id}/publish`, 'POST', {}, host),
+    );
+    for (const participant of [participantA, participantB])
+      await data<RegistrationDto>(
+        await request(`/quizzes/${quiz.id}/register`, 'POST', {}, participant),
+        201,
+      );
+
+    // The registration limit cannot drop below the confirmed registrations.
+    const tooLow = await refusal(
+      await request(
+        `/quizzes/${quiz.id}`,
+        'PATCH',
+        { ...basics, registrationLimit: 1 },
+        host,
+      ),
+      422,
+    );
+    assert.equal(tooLow.code, 'VALIDATION_ERROR');
+    assert.ok(tooLow.details?.registrationLimit);
+    quiz = await data<QuizDto>(
+      await request(
+        `/quizzes/${quiz.id}`,
+        'PATCH',
+        { ...basics, registrationLimit: 2 },
+        host,
+      ),
+    );
+    assert.equal(quiz.registrationLimit, 2, 'equal to the count is allowed');
+
+    // A published quiz keeps at least one question.
+    await data(
+      await request(`/questions/${first.id}`, 'DELETE', undefined, host),
+    );
+    const lastQuestion = await refusal(
+      await request(`/questions/${second.id}`, 'DELETE', undefined, host),
+      422,
+    );
+    assert.equal(lastQuestion.code, 'VALIDATION_ERROR');
+    assert.ok(lastQuestion.details?.questions);
+    assert.equal(await db.question.count({ where: { quizId: quiz.id } }), 1);
+
+    // Once the lobby is open, questions and question images are fixed while
+    // quiz details stay editable until the quiz goes live.
+    await db.quiz.update({
+      where: { id: quiz.id },
+      data: { status: 'LOBBY' },
+    });
+    const locked = () => [
+      () =>
+        request(
+          `/quizzes/${quiz.id}/questions`,
+          'POST',
+          { ...validQuestion, text: 'Added in the lobby?' },
+          host,
+        ),
+      () =>
+        request(
+          `/questions/${second.id}`,
+          'PATCH',
+          { ...validQuestion, text: 'Changed in the lobby?' },
+          host,
+        ),
+      () => request(`/questions/${second.id}`, 'DELETE', undefined, host),
+      () =>
+        request(
+          `/quizzes/${quiz.id}/questions/reorder`,
+          'POST',
+          { questionIds: [second.id] },
+          host,
+        ),
+      () =>
+        request(
+          '/media/upload-request',
+          'POST',
+          {
+            purpose: 'QUESTION_IMAGE',
+            fileName: 'question.png',
+            mimeType: 'image/png',
+            sizeBytes: 100,
+            resource: { quizId: quiz.id },
+          },
+          host,
+        ),
+    ];
+    // Sent together: edits queue on the quiz row lock instead of timing out.
+    const responses = await Promise.all(locked().map((send) => send()));
+    for (const [index, response] of responses.entries())
+      assert.equal(
+        (await refusal(response, 409)).code,
+        'QUIZ_LOCKED',
+        `locked request ${index}`,
+      );
+    const renamed = await data<QuizDto>(
+      await request(
+        `/quizzes/${quiz.id}`,
+        'PATCH',
+        { ...basics, registrationLimit: 2, title: 'Renamed in the lobby' },
+        host,
+      ),
+    );
+    assert.equal(renamed.title, 'Renamed in the lobby');
+    assert.equal(renamed.questions[0]?.text, 'Second question?');
+
+    // Drafts may still remove their last question.
+    const draft = await data<QuizDto>(
+      await request(
+        `/projects/${project.id}/quizzes`,
+        'POST',
+        quizBasics,
+        host,
+      ),
+      201,
+    );
+    const withQuestion = await data<QuizDto>(
+      await request(
+        `/quizzes/${draft.id}/questions`,
+        'POST',
+        validQuestion,
+        host,
+      ),
+      201,
+    );
+    await data(
+      await request(
+        `/questions/${withQuestion.questions[0]!.id}`,
+        'DELETE',
+        undefined,
+        host,
+      ),
+    );
+  },
+);

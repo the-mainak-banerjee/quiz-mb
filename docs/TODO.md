@@ -64,3 +64,11 @@ Question prompts are written in Markdown, but its behaviour is not production re
 - 0 did not answer - If it is 0 we don't need to show this text
 - We need to add tabular nums in timing section
 - The completed view quiz page The input fields in question details don't look like they are disabled make them look like disabled same as Basic details input
+
+## Phase 11 — Segment 1: frontend for quiz content and capacity rules
+
+The API now fixes questions once the lobby opens (`409 QUIZ_LOCKED`), keeps at least one question on a published quiz (`422`, `questions` field) and refuses a registration limit below the current registrations (`422`, `registrationLimit` field). The web app does not reflect this yet:
+
+- A quiz with an open lobby (status `LOBBY`) still opens in the normal editor; saving a question only shows the error. Show its questions read only (like the completed `/view` page) while quiz details stay editable, and explain that questions are fixed once the lobby is open.
+- On a published quiz, disable or explain deleting the last question instead of relying on the error.
+- Optionally show the current registration count next to the limit field when editing a published quiz.
