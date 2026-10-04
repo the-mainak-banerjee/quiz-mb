@@ -29,8 +29,10 @@ import {
   HOST_AWAY_GRACE_MS,
   ROOM_AUDIENCE,
   SOCKET_EVENT,
+  SOCKET_RATE_BUCKET,
   liveRoom,
 } from './constants.js';
+import { socketRateLimiter } from './socket-rate.js';
 
 type SocketData = {
   userId: string;
@@ -291,6 +293,7 @@ export function attachLiveRealtime(
   nsp.on('connection', (raw) => {
     const socket = raw as unknown as LiveSocket;
     const { userId } = socket.data;
+    const withinBudget = socketRateLimiter();
 
     function on<Schema extends z.ZodType, Result>(
       event: string,
@@ -305,6 +308,13 @@ export function attachLiveRealtime(
         ) => {
           let response: SocketAck<Result>;
           try {
+            const bucket = SOCKET_RATE_BUCKET[event];
+            if (bucket && !withinBudget(bucket))
+              throw new ApiError(
+                429,
+                ERROR_CODE.RATE_LIMITED,
+                'Too many requests. Please wait a moment and try again.',
+              );
             const parsed = schema.safeParse(payload);
             if (!parsed.success)
               throw new ApiError(

@@ -118,6 +118,7 @@ Browser requests go directly to Express using the global [API client](apps/web/s
 - `SUPABASE_SERVICE_ROLE_KEY` — server-only Storage credential. Never expose it to the web application.
 - `SUPABASE_STORAGE_BUCKET` — private image bucket, default `quizmb-media`.
 - `REDIS_URL` — Upstash Redis TCP URL (`rediss://…`) for live-session presence, active-device tracking and locks. Required in production and for live sessions locally; without it the API serves REST only and logs that live sessions are disabled.
+- `TRUST_PROXY_HOPS` — proxies in front of the API whose `X-Forwarded-For` entry is trusted for the client IP used by rate limits: `0` locally, `1` on Render. Rate limits use Redis counters, so they are off when `REDIS_URL` is unset.
 
 For local image uploads, configure these Storage variables in `apps/api/.env`, then run `pnpm --filter @quizmb/api storage:setup`. The development-only command creates the bucket if absent, or checks an existing bucket without changing it. It requires private access, PNG/JPEG/WebP MIME types, and a 10 MiB limit. Browsers receive short-lived upload/read URLs, never a service-role key.
 
@@ -165,7 +166,7 @@ Use Node.js 24 and the repository's pnpm lockfile. Allow access to workspace fil
 - Root directory: repository root (workspace install), Node.js 24.
 - Build command: `pnpm install --frozen-lockfile && pnpm --filter @quizmb/api... build` (includes the database package and generated Prisma client).
 - Start command: `pnpm --filter @quizmb/api start` (runs `dist/server.js`, which serves REST and Socket.IO on one port).
-- Production environment: `NODE_ENV=production`, `ALLOWED_ORIGINS` (the web origin), `LOG_LEVEL=info`, `DATABASE_URL`, `AUTH_ACCESS_SECRET`, `REDIS_URL`, Storage variables, and optional `DATABASE_SSL_CA_BASE64`. `AUTH_COOKIE_DOMAIN` depends on the pending cross-domain auth change. Apply migrations separately with the tooling connection before release; builds do not migrate databases.
+- Production environment: `NODE_ENV=production`, `ALLOWED_ORIGINS` (the web origin), `LOG_LEVEL=info`, `DATABASE_URL`, `AUTH_ACCESS_SECRET`, `REDIS_URL`, `TRUST_PROXY_HOPS=1`, Storage variables, and optional `DATABASE_SSL_CA_BASE64`. `AUTH_COOKIE_DOMAIN` depends on the pending cross-domain auth change. Apply migrations separately with the tooling connection before release; builds do not migrate databases.
 - The free Render tier sleeps when idle; the first request after a pause can take up to a minute. It runs a single instance, so no Socket.IO Redis adapter is configured yet.
 
 `src/app.ts` constructs the Express application, `src/index.ts` wires dependencies (and still exports the app for serverless REST-only use), and `src/server.ts` starts the long-running HTTP + Socket.IO server.

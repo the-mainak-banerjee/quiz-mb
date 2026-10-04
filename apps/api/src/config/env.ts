@@ -19,6 +19,9 @@ const schema = z.object({
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
+  // Proxies in front of the API (Render adds one) whose X-Forwarded-For
+  // entry is trusted for the client IP used by rate limits.
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   // Live sessions (Redis-backed presence and locks). Upstash: rediss:// URL.
   REDIS_URL: z
     .url()

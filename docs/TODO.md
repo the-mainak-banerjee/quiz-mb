@@ -13,19 +13,6 @@ Fix direction to evaluate:
 - Socket.IO cannot go through such a rewrite (no WebSocket upgrade), so it must keep connecting directly to the API domain. It already uses cookie-free ticket authentication for this reason (see API_DESIGN §17).
 - Update README hosting instructions and `.env.example` files, and re-run the auth integration tests against the new setup.
 
-## Add rate limiting (auth, registration, uploads and live sockets)
-
-No rate limiting exists yet. It was deliberately deferred and must be added before public rollout. The code already marks the auth part with `TODO(auth-rate-limit)` in `apps/api/src/modules/auth/routes.ts`: "Add distributed Redis counters before public rollout for signup/login/refresh (IP + normalized account key). Intentionally deferred by product approval; no per-instance in-memory substitute."
-
-Scope, following API_DESIGN §46 and DATABASE_REDIS_SOCKET_DESIGN §52:
-
-- REST: `POST /api/auth/signup`, `/auth/login`, `/auth/refresh` (per IP and per normalized email/account), `POST /api/quizzes/:id/register`, `POST /api/media/upload-request`, `POST /api/quizzes/:id/live-session` and `POST /api/live-sessions/:id/socket-ticket`.
-- Socket.IO: `session:join`, `session:sync`, `answer:submit`, `host:question-start` and `host:quiz-end`, per user. Today a joined participant can loop `answer:submit` with unknown question ids (one database read each) or `session:sync` (several reads each), which can exhaust the small connection pool for every session.
-- Use Redis counters with TTL (`rate:{scope}:{identifier}:{window}`) so limits hold across instances; return `429 RATE_LIMITED` (REST) or a `RATE_LIMITED` acknowledgement (sockets). Do not add an in-memory per-instance fallback.
-- Upstash free tier: each limited request costs at least one Redis command (`INCR` plus `EXPIRE`, or a single Lua script). Choose windows and scopes that keep monthly usage within the free quota.
-- Behind Render's proxy, derive the client IP from a trusted `X-Forwarded-For` hop (configure Express `trust proxy` accordingly), never from an arbitrary header.
-- Remove the `TODO(auth-rate-limit)` comment when done and add integration tests for limit, reset and `429` responses.
-
 ## Show planned date/time in the viewer's time zone
 
 The planned date/time on the public quiz page (`/quiz/[publicId]`) and the published-quiz management page is formatted during server rendering in `apps/web/src/features/publishing/view-model.ts` (`toLocaleDateString`/`toLocaleTimeString` with no explicit locale or time zone). The result uses the server's locale and time zone instead of the viewer's, so production viewers (server in UTC) may see a different local time than expected. The dashboard cards in `apps/web/src/features/dashboard/quiz-data.ts` share the same pattern.
@@ -83,3 +70,11 @@ Participant snapshots now carry `hostConnected`, and participants receive `sessi
 - In `use-live-session.ts`, keep `hostConnected` from every participant snapshot and update it from `LIVE_EVENTS.hostPresence`.
 - Show a calm, non-blocking "The host is reconnecting…" notice on participant screens while `hostConnected` is false. The quiz keeps running: an active question can still be answered and its timer still ends on time; only the host can move the quiz on.
 - A host who has not connected since the API started (for example after a restart) also reads as away until they rejoin.
+
+## Phase 11 — Segment 4: frontend for rate limits
+
+The API now answers `429 RATE_LIMITED` with a `Retry-After` header (seconds) on login, signup, refresh, registration, upload requests, opening a lobby and socket tickets, and socket commands over their budget get a `RATE_LIMITED` acknowledgement. The web app shows only the generic message:
+
+- Login and signup: show "Too many attempts. Try again in N minutes." using `Retry-After`, and keep the form usable afterwards.
+- Refresh: a `429` on `/auth/refresh` must not sign the user out; retry after the wait instead of treating it as an expired session.
+- Live room: a `RATE_LIMITED` acknowledgement should not be shown as a failure screen; retry the sync once after a short delay.

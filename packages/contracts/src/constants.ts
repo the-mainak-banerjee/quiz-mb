@@ -88,6 +88,7 @@ export const ERROR_CODE = {
   CONFLICT: 'CONFLICT',
   FORBIDDEN: 'FORBIDDEN',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
+  RATE_LIMITED: 'RATE_LIMITED',
   // Authentication
   UNAUTHENTICATED: 'UNAUTHENTICATED',
   TOKEN_EXPIRED: 'TOKEN_EXPIRED',
@@ -148,6 +149,7 @@ export const HTTP_HEADER = {
   COOKIE: 'Cookie',
   ORIGIN: 'Origin',
   REQUEST_ID: 'X-Request-ID',
+  RETRY_AFTER: 'Retry-After',
   TRANSFER_ENCODING: 'Transfer-Encoding',
   USER_AGENT: 'User-Agent',
 } as const;

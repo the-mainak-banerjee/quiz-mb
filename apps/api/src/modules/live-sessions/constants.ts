@@ -1,3 +1,5 @@
+import { LIVE_EVENTS } from '@quizmb/contracts';
+
 // Socket.IO room names for live sessions. Host and participant sockets join
 // different audience rooms so role-specific payloads reach only their role.
 export const ROOM_AUDIENCE = {
@@ -18,6 +20,36 @@ export const statusRoom = (quizId: string) => `status:${quizId}`;
  * page refresh or brief network drop stays invisible to them.
  */
 export const HOST_AWAY_GRACE_MS = 5_000;
+
+/**
+ * Commands one socket may send per window. Counted in memory per socket:
+ * a socket always talks to one API process, so this is exact and costs no
+ * Redis commands; opening more sockets needs a Redis-limited ticket.
+ */
+export const SOCKET_RATE_WINDOW_MS = 10_000;
+export const SOCKET_RATE_LIMITS = {
+  join: 10,
+  sync: 20,
+  answer: 10,
+  host: 30,
+} as const;
+export type SocketRateBucket = keyof typeof SOCKET_RATE_LIMITS;
+
+/** Which budget each limited command draws from (others are unlimited). */
+export const SOCKET_RATE_BUCKET: Partial<Record<string, SocketRateBucket>> = {
+  [LIVE_EVENTS.join]: 'join',
+  [LIVE_EVENTS.sync]: 'sync',
+  [LIVE_EVENTS.answerSubmit]: 'answer',
+  [LIVE_EVENTS.quizStart]: 'host',
+  [LIVE_EVENTS.questionStart]: 'host',
+  [LIVE_EVENTS.lateJoinSet]: 'host',
+  [LIVE_EVENTS.leaderboardGet]: 'host',
+  [LIVE_EVENTS.leaderboardShow]: 'host',
+  [LIVE_EVENTS.leaderboardHide]: 'host',
+  [LIVE_EVENTS.quizEnd]: 'host',
+  [LIVE_EVENTS.finalLeaderboardShow]: 'host',
+  [LIVE_EVENTS.lobbyClose]: 'host',
+};
 
 /** Socket.IO's own lifecycle events (not part of our contract). */
 export const SOCKET_EVENT = { DISCONNECT: 'disconnect' } as const;

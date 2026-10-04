@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -10,7 +11,10 @@ import {
   type ParticipantFinalResultDto,
   type ParticipantLiveSnapshotDto,
 } from '@quizmb/contracts';
-import { HOST_AWAY_GRACE_MS } from '../src/modules/live-sessions/constants.js';
+import {
+  HOST_AWAY_GRACE_MS,
+  SOCKET_RATE_LIMITS,
+} from '../src/modules/live-sessions/constants.js';
 import { LiveSessionsRepository } from '../src/modules/live-sessions/repository.js';
 import { LiveStore } from '../src/modules/live-sessions/live-store.js';
 import { liveSkip, singleChoice, startLiveHarness } from './live-harness.js';
@@ -284,6 +288,35 @@ test(
         await end(host);
       },
     );
+
+    await t.test('a burst of socket commands is rate limited', async () => {
+      const { liveSessionId } = await openQuiz('Command burst', ['p1']);
+      const p1 = await joinAs(liveSessionId, 'p1');
+      const burst = SOCKET_RATE_LIMITS.sync + 5;
+      const acks = await Promise.all(
+        Array.from({ length: burst }, () => p1.emit(LIVE_EVENTS.sync)),
+      );
+      const codes = acks.map((ack) => errorCode(ack));
+      assert.equal(
+        codes.filter((code) => code === ERROR_CODE.RATE_LIMITED).length,
+        5,
+        'commands over the budget are refused',
+      );
+      assert.equal(
+        codes.filter((code) => code === 'OK').length,
+        SOCKET_RATE_LIMITS.sync,
+      );
+      // Budgets are per command type: answering is unaffected.
+      assert.notEqual(
+        errorCode(
+          await p1.emit(LIVE_EVENTS.answerSubmit, {
+            askedQuestionId: randomUUID(),
+            selectedOptionIds: [randomUUID()],
+          }),
+        ),
+        ERROR_CODE.RATE_LIMITED,
+      );
+    });
   },
 );
 

@@ -15,6 +15,7 @@ import { LiveSessionsService } from './modules/live-sessions/service.js';
 import { LiveStore } from './modules/live-sessions/live-store.js';
 import { SocketTickets } from './modules/live-sessions/tickets.js';
 import { NODE_ENV } from './config/constants.js';
+import { RateLimiter } from './infrastructure/rate-limiter.js';
 
 const env = parseEnv(process.env);
 const authConfig = parseAuthEnv(process.env);
@@ -47,4 +48,6 @@ export default createApp({
   storage,
   live,
   events,
+  rateLimiter: new RateLimiter(redis, logger),
+  trustProxyHops: env.TRUST_PROXY_HOPS,
 });

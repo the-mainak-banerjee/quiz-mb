@@ -25,9 +25,8 @@ export function authRoutes(
     next();
   });
   router.use(csrf(origins));
-  // TODO(auth-rate-limit): Add distributed Redis counters before public rollout
-  // for signup/login/refresh (IP + normalized account key). Intentionally
-  // deferred by product approval; no per-instance in-memory substitute.
+  // Signup, login and refresh are rate limited before this router
+  // (http/rate-limit.ts).
   router.post('/auth/signup', async (req, res) => {
     const credentials = await auth.signup(
       validate(signupSchema, req.body),
