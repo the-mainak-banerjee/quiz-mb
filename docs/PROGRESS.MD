@@ -2,9 +2,23 @@
 
 ## Current status
 
-Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Phase 5 (lobby and live-session foundation), Phases 6–8 (live questions, submission, scoring, personal rank and live distribution) and Phase 9 (host presentation controls and leaderboard) and Phase 10 (end quiz, final results and history) are implemented end to end. No deployment has been performed.
+Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Phase 5 (lobby and live-session foundation), Phases 6–8 (live questions, submission, scoring, personal rank and live distribution) and Phase 9 (host presentation controls and leaderboard) and Phase 10 (end quiz, final results and history) are implemented end to end. Phase 11 (reliability and hardening) is implemented except the load test, which waits for email verification and per-account project/quiz limits. No deployment has been performed.
 
 This document records implementation progress, verification results, limitations, and approved scope adjustments. Project setup and usage instructions belong in the root README.
+
+## Phase 11 — Reliability and hardening — October 4, 2026
+
+Branch `phase-11-hardening` (from `main` after Phase 10). In progress: the load test is deferred until email verification and per-account limits for projects and quizzes are in place.
+
+- Content and capacity: questions are fixed once the lobby opens (details until the quiz goes live), a published quiz keeps at least one question, and the registration limit cannot drop below current registrations. Lock rules live in `@quizmb/contracts`; the editor shows them (read-only questions in the lobby, `/view` for live and completed quizzes, registration count beside the limit).
+- Live edge cases are covered by `live-edge-cases.integration.test.ts`: nobody joining, ending before any question, from the result or leaderboard, or mid-question, and replaced devices.
+- Presence: stale presence is cleared at startup; participants are told when the host has been away for 5 seconds and when they return (the quiz keeps running).
+- Rate limits: Redis counters for login, signup, refresh, registration, uploads, lobby and socket tickets (`429 RATE_LIMITED` with `Retry-After`, fails open); per-socket in-memory budgets for live commands. `TRUST_PROXY_HOPS` sets the trusted proxy hops for the client IP.
+- Registration bursts: one database call (`register_participant`, migration `20261004000000_register_participant`); 300 simultaneous registrations now all succeed in about 7 s (previously 9 of 30). `DATABASE_POOL_MAX` (default 10); saturation answers `503 SERVICE_BUSY` and the web client retries it.
+- Logging of joins, reconnects, disconnects, refused commands and question lifecycle, without answer content.
+- UI fixes: cover upload before the first save, empty completed screens, host console after every question is asked, disabled-looking fields on the view page, tabular timer digits.
+- Checks: format, lint, typecheck, unit tests, build, and every integration test (auth, authoring, publishing, rate limit, registration burst, live sessions, live questions, live edge cases) passed.
+- Remaining: load test; loading and error screens (custom design pending); mobile pass on the participant live flow.
 
 ## Phase 10 — End quiz, final results and history — October 2, 2026
 
