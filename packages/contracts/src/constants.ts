@@ -89,6 +89,8 @@ export const ERROR_CODE = {
   FORBIDDEN: 'FORBIDDEN',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   RATE_LIMITED: 'RATE_LIMITED',
+  /** Temporarily overloaded; safe to retry after `Retry-After` seconds. */
+  SERVICE_BUSY: 'SERVICE_BUSY',
   // Authentication
   UNAUTHENTICATED: 'UNAUTHENTICATED',
   TOKEN_EXPIRED: 'TOKEN_EXPIRED',

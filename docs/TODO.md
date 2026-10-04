@@ -78,3 +78,9 @@ The API now answers `429 RATE_LIMITED` with a `Retry-After` header (seconds) on 
 - Login and signup: show "Too many attempts. Try again in N minutes." using `Retry-After`, and keep the form usable afterwards.
 - Refresh: a `429` on `/auth/refresh` must not sign the user out; retry after the wait instead of treating it as an expired session.
 - Live room: a `RATE_LIMITED` acknowledgement should not be shown as a failure screen; retry the sync once after a short delay.
+
+## Phase 11 — Segment 5: frontend for busy responses
+
+When the database is saturated the API now answers `503 SERVICE_BUSY` with `Retry-After` (seconds) instead of a 500; nothing was changed, so the request is safe to repeat. The web client treats it as a generic error:
+
+- In the shared API client, retry `SERVICE_BUSY` responses automatically once or twice after `Retry-After`, showing "Busy, retrying…" on the action (registration in particular), and show a friendly message if it still fails.

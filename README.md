@@ -118,6 +118,7 @@ Browser requests go directly to Express using the global [API client](apps/web/s
 - `SUPABASE_SERVICE_ROLE_KEY` — server-only Storage credential. Never expose it to the web application.
 - `SUPABASE_STORAGE_BUCKET` — private image bucket, default `quizmb-media`.
 - `REDIS_URL` — Upstash Redis TCP URL (`rediss://…`) for live-session presence, active-device tracking and locks. Required in production and for live sessions locally; without it the API serves REST only and logs that live sessions are disabled.
+- `DATABASE_POOL_MAX` — connections in the API's database pool (default `10`). Requests that cannot get a connection in time get `503 SERVICE_BUSY` with `Retry-After` and are safe to retry.
 - `TRUST_PROXY_HOPS` — proxies in front of the API whose `X-Forwarded-For` entry is trusted for the client IP used by rate limits: `0` locally, `1` on Render. Rate limits use Redis counters, so they are off when `REDIS_URL` is unset.
 
 For local image uploads, configure these Storage variables in `apps/api/.env`, then run `pnpm --filter @quizmb/api storage:setup`. The development-only command creates the bucket if absent, or checks an existing bucket without changing it. It requires private access, PNG/JPEG/WebP MIME types, and a 10 MiB limit. Browsers receive short-lived upload/read URLs, never a service-role key.

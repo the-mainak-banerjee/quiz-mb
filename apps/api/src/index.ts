@@ -22,6 +22,7 @@ const authConfig = parseAuthEnv(process.env);
 export const database = createDatabase(
   authConfig.DATABASE_URL,
   authConfig.DATABASE_SSL_CA_BASE64,
+  env.DATABASE_POOL_MAX,
 );
 export const events = new DomainEvents();
 export const logger = createLogger(env.LOG_LEVEL);

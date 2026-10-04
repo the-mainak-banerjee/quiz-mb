@@ -9,86 +9,65 @@ import {
   REGISTRATION_STATUS,
 } from '@quizmb/contracts';
 
+/** The API error for a `register_participant` outcome. */
+function registrationRefusal(outcome: string | undefined) {
+  switch (outcome) {
+    case ERROR_CODE.HOST_CANNOT_REGISTER:
+      return new ApiError(
+        403,
+        ERROR_CODE.HOST_CANNOT_REGISTER,
+        'Quiz hosts cannot register as participants in their own quiz.',
+      );
+    case ERROR_CODE.QUIZ_COMPLETED:
+    case ERROR_CODE.REGISTRATION_CLOSED:
+      return new ApiError(
+        409,
+        outcome,
+        'Registration is not open for this quiz.',
+      );
+    case ERROR_CODE.ALREADY_REGISTERED:
+      return new ApiError(
+        409,
+        ERROR_CODE.ALREADY_REGISTERED,
+        'You are already registered for this quiz.',
+      );
+    case ERROR_CODE.QUIZ_FULL:
+      return new ApiError(
+        409,
+        ERROR_CODE.QUIZ_FULL,
+        'This quiz is fully registered.',
+      );
+    default:
+      return new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');
+  }
+}
+
 export class RegistrationsRepository {
   constructor(readonly db: PrismaClient) {}
 
-  register(quizId: string, userId: string) {
-    return this.db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM quizzes WHERE id = ${quizId}::uuid FOR UPDATE`;
-      const quiz = await tx.quiz.findUnique({
-        where: { id: quizId },
-        select: {
-          id: true,
-          projectId: true,
-          creatorUserId: true,
-          registrationLimit: true,
-          status: true,
+  /**
+   * One database call (`register_participant`, see its migration): the quiz
+   * row lock is held for milliseconds, so bursts stay fast and capacity
+   * exact. Outcomes other than REGISTERED are API error codes.
+   */
+  async register(quizId: string, userId: string) {
+    const [row] = await this.db.$queryRaw<
+      {
+        outcome: string;
+        registrationId: string | null;
+        registeredAt: Date | null;
+        registrationCount: number;
+      }[]
+    >`SELECT * FROM register_participant(${quizId}::uuid, ${userId}::uuid)`;
+    if (row?.outcome === REGISTRATION_STATUS.REGISTERED)
+      return {
+        registration: {
+          id: row.registrationId!,
+          registeredAt: row.registeredAt!,
         },
-      });
-      if (!quiz)
-        throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');
-      if (quiz.creatorUserId === userId)
-        throw new ApiError(
-          403,
-          ERROR_CODE.HOST_CANNOT_REGISTER,
-          'Quiz hosts cannot register as participants in their own quiz.',
-        );
-      // Registration stays open in the lobby and closes when the host starts.
-      if (
-        quiz.status !== QUIZ_STATUS.PUBLISHED &&
-        quiz.status !== QUIZ_STATUS.LOBBY
-      )
-        throw new ApiError(
-          409,
-          quiz.status === QUIZ_STATUS.COMPLETED
-            ? ERROR_CODE.QUIZ_COMPLETED
-            : ERROR_CODE.REGISTRATION_CLOSED,
-          'Registration is not open for this quiz.',
-        );
-      const existing = await tx.quizRegistration.findUnique({
-        where: { quizId_userId: { quizId, userId } },
-      });
-      if (existing?.status === REGISTRATION_STATUS.REGISTERED)
-        throw new ApiError(
-          409,
-          ERROR_CODE.ALREADY_REGISTERED,
-          'You are already registered for this quiz.',
-        );
-      const registrationCount = await tx.quizRegistration.count({
-        where: { quizId, status: REGISTRATION_STATUS.REGISTERED },
-      });
-      if (registrationCount >= quiz.registrationLimit)
-        throw new ApiError(
-          409,
-          ERROR_CODE.QUIZ_FULL,
-          'This quiz is fully registered.',
-        );
-      const now = new Date();
-      const registration = existing
-        ? await tx.quizRegistration.update({
-            where: { id: existing.id },
-            data: {
-              status: REGISTRATION_STATUS.REGISTERED,
-              registeredAt: now,
-              cancelledAt: null,
-            },
-          })
-        : await tx.quizRegistration.create({
-            data: { quizId, userId, registeredAt: now },
-          });
-      await tx.projectAssociation.upsert({
-        where: {
-          projectId_userId: { projectId: quiz.projectId, userId },
-        },
-        create: {
-          projectId: quiz.projectId,
-          userId,
-          createdViaQuizId: quizId,
-        },
-        update: {},
-      });
-      return { registration, registrationCount: registrationCount + 1 };
-    }, lockedTransaction);
+        registrationCount: row.registrationCount,
+      };
+    throw registrationRefusal(row?.outcome);
   }
 
   unregister(quizId: string, userId: string) {
