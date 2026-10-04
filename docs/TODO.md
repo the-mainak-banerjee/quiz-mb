@@ -52,11 +52,6 @@ Question prompts are written in Markdown, but its behaviour is not production re
 - Confirm sanitization and link handling are safe for participant-facing content, and that long or complex prompts stay readable.
 - Improve the editor experience (toolbar, preview, character limits) as needed.
 
-## Phase 10: reveal and standings when the host ends during a question
-
-`LiveSessionsRepository.end()` force-completes the active asked question but no `questionEnded` event follows, so participants never see that question's reveal, their own correctness and points, or standings that include it (accepted answers are kept and scored). Handle it with Phase 10's End Quiz and final leaderboard: show the final question's result and recalculated standings, or the final results, after ending mid-question. Cover it in the live questions integration test.
-
-
 ## Ui Issues
 - The image upload should be on even before saving the quiz basis
 - After saving a question it should scroll up to top
@@ -72,3 +67,11 @@ The API now fixes questions once the lobby opens (`409 QUIZ_LOCKED`), keeps at l
 - A quiz with an open lobby (status `LOBBY`) still opens in the normal editor; saving a question only shows the error. Show its questions read only (like the completed `/view` page) while quiz details stay editable, and explain that questions are fixed once the lobby is open.
 - On a published quiz, disable or explain deleting the last question instead of relying on the error.
 - Optionally show the current registration count next to the limit field when editing a published quiz.
+
+## Phase 11 — Segment 2: frontend checks for live edge cases
+
+The API now has tests for these cases (`apps/api/tests/live-edge-cases.integration.test.ts`); their screens have not been checked:
+
+- Host "Quiz completed" screen when nobody joined (0 participants, empty final Top 10, no podium) and when the quiz ended before any question was asked (0 asked, everyone tied at rank 1 with 0 points).
+- Participant final result when nothing was asked (all counts 0): the outcome bar and tiles should not look broken.
+- Ending during a question sends participants straight to their final result (no reveal of that last question); confirm this reads well.
