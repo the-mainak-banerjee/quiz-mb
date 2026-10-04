@@ -276,6 +276,7 @@ export async function startLiveHarness<Role extends string>(
 
   return {
     db,
+    redis,
     live,
     request,
     data,

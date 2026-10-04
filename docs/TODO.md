@@ -75,3 +75,11 @@ The API now has tests for these cases (`apps/api/tests/live-edge-cases.integrati
 - Host "Quiz completed" screen when nobody joined (0 participants, empty final Top 10, no podium) and when the quiz ended before any question was asked (0 asked, everyone tied at rank 1 with 0 points).
 - Participant final result when nothing was asked (all counts 0): the outcome bar and tiles should not look broken.
 - Ending during a question sends participants straight to their final result (no reveal of that last question); confirm this reads well.
+
+## Phase 11 — Segment 3: frontend for host presence
+
+Participant snapshots now carry `hostConnected`, and participants receive `session:host-presence` (`LiveHostPresenceDto { hostConnected }`) when the host has been disconnected for more than 5 seconds and again when the host returns. The web app ignores both:
+
+- In `use-live-session.ts`, keep `hostConnected` from every participant snapshot and update it from `LIVE_EVENTS.hostPresence`.
+- Show a calm, non-blocking "The host is reconnecting…" notice on participant screens while `hostConnected` is false. The quiz keeps running: an active question can still be answered and its timer still ends on time; only the host can move the quiz on.
+- A host who has not connected since the API started (for example after a restart) also reads as away until they rejoin.

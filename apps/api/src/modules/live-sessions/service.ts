@@ -45,7 +45,7 @@ import type {
   SubmissionRow,
 } from './repository.js';
 import type { SocketTickets } from './tickets.js';
-import { LOCK_OPERATION } from './constants.js';
+import { HOST_AWAY_GRACE_MS, LOCK_OPERATION } from './constants.js';
 
 /** Host snapshots list at most this many registrations; counts stay exact. */
 export const HOST_ROSTER_LIMIT = 100;
@@ -167,6 +167,10 @@ export class LiveSessionsService {
   >();
   private caches = new Map<string, SessionCache>();
   private lastSweepAt = Date.now();
+  /** Connected host sockets per session (in process; one API instance). */
+  private hostSockets = new Map<string, Set<string>>();
+  /** When each session's host closed its last connection. */
+  private hostAwaySince = new Map<string, number>();
 
   /** The session's caches, created on first use; sweeps idle ones. */
   private cacheFor(liveSessionId: string) {
@@ -197,6 +201,53 @@ export class LiveSessionsService {
   private forget(liveSessionId: string) {
     this.clearTimer(liveSessionId);
     this.caches.delete(liveSessionId);
+    this.hostAwaySince.delete(liveSessionId);
+  }
+
+  // ---- Host presence -------------------------------------------------------
+
+  /** Records a host socket; true when the host had no connection before. */
+  private hostArrived(liveSessionId: string, socketId: string) {
+    let sockets = this.hostSockets.get(liveSessionId);
+    if (!sockets) {
+      sockets = new Set();
+      this.hostSockets.set(liveSessionId, sockets);
+    }
+    const returned = sockets.size === 0;
+    sockets.add(socketId);
+    this.hostAwaySince.delete(liveSessionId);
+    return returned;
+  }
+
+  /** Forgets a host socket; true when it was the host's last connection. */
+  hostLeft(liveSessionId: string, socketId: string) {
+    const sockets = this.hostSockets.get(liveSessionId);
+    if (!sockets?.delete(socketId) || sockets.size) return false;
+    this.hostSockets.delete(liveSessionId);
+    this.hostAwaySince.set(liveSessionId, Date.now());
+    return true;
+  }
+
+  /**
+   * Whether participants should see the host as connected: a live host
+   * socket, or one that dropped less than the grace period ago. A host who
+   * has not connected since the API started counts as away.
+   */
+  hostConnected(liveSessionId: string) {
+    if (this.hostSockets.get(liveSessionId)?.size) return true;
+    const since = this.hostAwaySince.get(liveSessionId);
+    return since !== undefined && Date.now() - since < HOST_AWAY_GRACE_MS;
+  }
+
+  /**
+   * Startup: no socket survives a restart, so presence recorded for
+   * unfinished sessions is stale. Clients claim it again on reconnect;
+   * attendance itself is stored in PostgreSQL and is unaffected.
+   */
+  async resetPresence() {
+    const ids = await this.repository.unfinishedSessionIds();
+    await this.store.resetPresence(ids);
+    return ids.length;
   }
 
   constructor(
@@ -586,6 +637,7 @@ export class LiveSessionsService {
       role: LIVE_ROLE.PARTICIPANT,
       question: asked ? await this.participantQuestion(asked) : null,
       leaderboard,
+      hostConnected: this.hostConnected(session.id),
     };
     if (userId === undefined) return snapshot;
     if (!asked)
@@ -840,13 +892,16 @@ export class LiveSessionsService {
   async join(liveSessionId: string, userId: string, socketId: string) {
     const session = await this.current(await this.load(liveSessionId));
     const role = await this.roleFor(session, userId);
-    if (role === LIVE_ROLE.HOST)
+    if (role === LIVE_ROLE.HOST) {
+      const hostReturned = this.hostArrived(session.id, socketId);
       return {
         role,
         snapshot: await this.hostSnapshot(session),
         replacedSocketId: null,
         newlyConnected: false,
+        hostReturned,
       };
+    }
     if (session.state === LIVE_SESSION_STATE.COMPLETED)
       throw new ApiError(
         409,
@@ -880,6 +935,7 @@ export class LiveSessionsService {
       snapshot: await this.participantSnapshot(session, userId),
       replacedSocketId,
       newlyConnected: replacedSocketId === null,
+      hostReturned: false,
     };
   }
 

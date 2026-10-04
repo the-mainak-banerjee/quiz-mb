@@ -531,6 +531,13 @@ export class LiveSessionsRepository {
   }
 
   /** Every active question across sessions, for timer recovery at boot. */
+  /** Ids of every unfinished session (lobby or running). */
+  async unfinishedSessionIds() {
+    const rows = await this.db.$queryRaw<{ id: string }[]>`
+      SELECT s.id FROM live_quiz_sessions s WHERE ${unfinished}`;
+    return rows.map((row) => row.id);
+  }
+
   allActiveAsked() {
     return this.db.askedQuestion.findMany({
       where: { status: ASKED_QUESTION_STATUS.ACTIVE },

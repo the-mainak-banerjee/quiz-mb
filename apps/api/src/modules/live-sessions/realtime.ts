@@ -10,6 +10,7 @@ import {
   liveSessionCommandSchema,
   questionStartCommandSchema,
   type LiveCountDto,
+  type LiveHostPresenceDto,
   type LivePresenceDto,
   type LiveRemovedDto,
   type LiveRole,
@@ -24,7 +25,12 @@ import {
 } from '../../infrastructure/domain-events.js';
 import type { AskedQuestionRow, LiveSessionRow } from './repository.js';
 import type { LiveSessionsService } from './service.js';
-import { ROOM_AUDIENCE, SOCKET_EVENT, liveRoom } from './constants.js';
+import {
+  HOST_AWAY_GRACE_MS,
+  ROOM_AUDIENCE,
+  SOCKET_EVENT,
+  liveRoom,
+} from './constants.js';
 
 type SocketData = {
   userId: string;
@@ -172,6 +178,27 @@ export function attachLiveRealtime(
         .emit(LIVE_EVENTS.count, payload);
     },
   );
+
+  function sendHostPresence(liveSessionId: string, hostConnected: boolean) {
+    const payload: LiveHostPresenceDto = { hostConnected };
+    nsp
+      .to(liveRoom(liveSessionId, ROOM_AUDIENCE.PARTICIPANTS))
+      .emit(LIVE_EVENTS.hostPresence, payload);
+  }
+
+  /**
+   * The host's last connection closed. Participants are told only if the
+   * host is still away after the grace period, so a refresh goes unnoticed;
+   * the quiz itself keeps running either way.
+   */
+  function hostDisconnected(liveSessionId: string, socketId: string) {
+    if (!service.hostLeft(liveSessionId, socketId)) return;
+    setTimeout(() => {
+      if (service.hostConnected(liveSessionId)) return;
+      sendHostPresence(liveSessionId, false);
+      logger.info({ liveSessionId }, 'Live host away');
+    }, HOST_AWAY_GRACE_MS + 100).unref();
+  }
 
   // Host-only answer progress for the active question: one database read
   // per interval however many answers arrive.
@@ -337,6 +364,7 @@ export function attachLiveRealtime(
               : ROOM_AUDIENCE.PARTICIPANTS,
           ),
         ]);
+        if (result.hostReturned) sendHostPresence(liveSessionId, true);
         if (result.replacedSocketId) {
           nsp.to(result.replacedSocketId).emit(LIVE_EVENTS.replaced, {
             reason: 'A newer session was opened for this quiz.',
@@ -499,6 +527,7 @@ export function attachLiveRealtime(
           .in(liveRoom(liveSessionId))
           .except(socket.id)
           .disconnectSockets(true);
+        service.hostLeft(liveSessionId, socket.id);
         socket.data.role = undefined;
         return null;
       },
@@ -506,6 +535,8 @@ export function attachLiveRealtime(
 
     async function release() {
       const liveSessionId = socket.data.ticketSessionId;
+      // A no-op unless this socket joined as the host.
+      hostDisconnected(liveSessionId, socket.id);
       if (socket.data.role !== LIVE_ROLE.PARTICIPANT) return;
       socket.data.role = undefined;
       const connectedCount = await service.leave(

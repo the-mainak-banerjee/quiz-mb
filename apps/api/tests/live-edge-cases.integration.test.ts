@@ -6,9 +6,13 @@ import {
   LIVE_SESSION_STATE,
   type HostLiveSnapshotDto,
   type HostQuizResultsDto,
+  type LiveHostPresenceDto,
   type ParticipantFinalResultDto,
   type ParticipantLiveSnapshotDto,
 } from '@quizmb/contracts';
+import { HOST_AWAY_GRACE_MS } from '../src/modules/live-sessions/constants.js';
+import { LiveSessionsRepository } from '../src/modules/live-sessions/repository.js';
+import { LiveStore } from '../src/modules/live-sessions/live-store.js';
 import { liveSkip, singleChoice, startLiveHarness } from './live-harness.js';
 
 // Short enough to wait for the timer, long enough for remote round trips.
@@ -280,5 +284,84 @@ test(
         await end(host);
       },
     );
+  },
+);
+
+test(
+  'live presence: host away and back, refresh grace, startup reset',
+  { skip: liveSkip },
+  async (t) => {
+    const harness = await startLiveHarness(t, ['host', 'p1', 'p2'] as const);
+    const { db, redis, openQuiz, joinAs, waitFor, ok } = harness;
+    const { liveSessionId } = await openQuiz('Host presence', ['p1', 'p2']);
+    const hostPresence = (
+      socket: Parameters<typeof waitFor>[0],
+      connected: boolean,
+    ) =>
+      waitFor<LiveHostPresenceDto>(
+        socket,
+        LIVE_EVENTS.hostPresence,
+        (payload) => payload.hostConnected === connected,
+      );
+    const sync = async (participant: Awaited<ReturnType<typeof joinAs>>) =>
+      ok(await participant.emit<ParticipantLiveSnapshotDto>(LIVE_EVENTS.sync));
+
+    // The lobby is open but the host has not connected yet.
+    const p1 = await joinAs(liveSessionId, 'p1');
+    assert.equal(
+      (p1.snapshot as ParticipantLiveSnapshotDto).hostConnected,
+      false,
+      'a host who never connected counts as away',
+    );
+    const arrived = hostPresence(p1.socket, true);
+    let host = await joinAs(liveSessionId, 'host');
+    await arrived;
+    assert.equal((await sync(p1)).hostConnected, true);
+
+    // A refresh inside the grace period is never announced as away.
+    const awayEvents: LiveHostPresenceDto[] = [];
+    p1.socket.on(LIVE_EVENTS.hostPresence, (payload: LiveHostPresenceDto) => {
+      if (!payload.hostConnected) awayEvents.push(payload);
+    });
+    host.socket.disconnect();
+    assert.equal((await sync(p1)).hostConnected, true, 'within the grace');
+    host = await joinAs(liveSessionId, 'host');
+    await new Promise((resolve) =>
+      setTimeout(resolve, HOST_AWAY_GRACE_MS + 1_000),
+    );
+    assert.deepEqual(awayEvents, [], 'a quick refresh stays invisible');
+
+    // A real drop is announced after the grace; the session keeps running.
+    const away = hostPresence(p1.socket, false);
+    host.socket.disconnect();
+    await away;
+    const whileAway = await sync(p1);
+    assert.equal(whileAway.hostConnected, false);
+    assert.equal(whileAway.state, LIVE_SESSION_STATE.LOBBY, 'nothing ends');
+    const back = hostPresence(p1.socket, true);
+    host = await joinAs(liveSessionId, 'host');
+    await back;
+    assert.equal((await sync(p1)).hostConnected, true);
+
+    // Startup reset: presence from before a restart is dropped, and clients
+    // claim it again when they reconnect.
+    const p2 = await joinAs(liveSessionId, 'p2');
+    const connected = async () =>
+      ok(await host.emit<HostLiveSnapshotDto>(LIVE_EVENTS.sync)).counts
+        .connected;
+    assert.equal(await connected(), 2);
+    assert.ok(
+      (await new LiveSessionsRepository(db).unfinishedSessionIds()).includes(
+        liveSessionId,
+      ),
+      'unfinished sessions are reset at startup',
+    );
+    // Only this test's session: other development sessions stay untouched.
+    await new LiveStore(redis).resetPresence([liveSessionId]);
+    assert.equal(await connected(), 0, 'stale presence is gone');
+    p1.socket.disconnect();
+    p2.socket.disconnect();
+    await joinAs(liveSessionId, 'p1');
+    assert.equal(await connected(), 1, 'a reconnect claims presence again');
   },
 );

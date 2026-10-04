@@ -13,6 +13,12 @@ export const liveRoom = (liveSessionId: string, audience?: RoomAudience) =>
 /** `/quiz-status` namespace room: watchers of one quiz's lifecycle. */
 export const statusRoom = (quizId: string) => `status:${quizId}`;
 
+/**
+ * How long the host may be disconnected before participants are told; a
+ * page refresh or brief network drop stays invisible to them.
+ */
+export const HOST_AWAY_GRACE_MS = 5_000;
+
 /** Socket.IO's own lifecycle events (not part of our contract). */
 export const SOCKET_EVENT = { DISCONNECT: 'disconnect' } as const;
 
