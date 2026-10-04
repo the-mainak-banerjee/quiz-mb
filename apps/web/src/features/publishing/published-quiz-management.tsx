@@ -22,7 +22,7 @@ import { QuizCover } from './quiz-cover';
 import { pluralize } from '@/lib/utils';
 import { CopyLinkButton } from '@/components/copy-link-button';
 import { HostLiveEntry } from './host-live-entry';
-import { QUIZ_STATUS } from '@quizmb/contracts';
+import { EDIT_SCOPE, isEditLocked, QUIZ_STATUS } from '@quizmb/contracts';
 
 type Participant = {
   id: string;
@@ -110,6 +110,8 @@ export function PublishedQuizManagement({
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const participantPreview = participants.slice(0, 5);
   const completed = quiz.status === QUIZ_STATUS.COMPLETED;
+  // Live and completed quizzes are viewed, not edited.
+  const viewOnly = isEditLocked(quiz.status, EDIT_SCOPE.DETAILS);
   const remaining = Math.max(quiz.registrationLimit - quiz.registeredCount, 0);
   const percent = Math.min(
     (quiz.registeredCount / quiz.registrationLimit) * 100,
@@ -204,12 +206,12 @@ export function PublishedQuizManagement({
             <div className="flex shrink-0 flex-wrap items-start gap-space-xs lg:self-start">
               <NavigationItem
                 href={
-                  completed
+                  viewOnly
                     ? APP_LINKS.WORKSPACE.VIEW_QUIZ(quiz.id)
                     : APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)
                 }
                 icon={
-                  completed ? (
+                  viewOnly ? (
                     <Eye size={18} aria-hidden="true" />
                   ) : (
                     <Pencil size={18} aria-hidden="true" />
@@ -217,7 +219,7 @@ export function PublishedQuizManagement({
                 }
                 className="h-control min-h-0 shrink-0 border border-border-surface bg-surface text-text-primary hover:border-accent hover:bg-canvas"
               >
-                {completed ? 'View quiz' : 'Edit details'}
+                {viewOnly ? 'View quiz' : 'Edit details'}
               </NavigationItem>
               <Link
                 href={APP_LINKS.PUBLIC_QUIZ(quiz.slug)}

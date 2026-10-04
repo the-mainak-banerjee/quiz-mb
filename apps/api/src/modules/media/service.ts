@@ -7,7 +7,8 @@ import {
   type UploadInput,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
-import { lockEditableQuiz } from '../quizzes/repository.js';
+import { lockedTransaction } from '../../infrastructure/transactions.js';
+import { lockEditableQuiz, mediaEditScope } from '../quizzes/repository.js';
 import type { SupabaseStorage } from './storage.js';
 type Asset = Prisma.MediaAssetGetPayload<object>;
 export class MediaService {
@@ -33,7 +34,6 @@ export class MediaService {
     };
   }
   async request(userId: string, input: UploadInput) {
-    const storage = this.adapter();
     const id = randomUUID();
     const extension = {
       'image/png': 'png',
@@ -41,8 +41,15 @@ export class MediaService {
       'image/webp': 'webp',
     }[input.mimeType];
     const path = `${userId}/${input.resource.quizId}/${id}.${extension}`;
-    await this.db.$transaction(async (tx) => {
-      await lockEditableQuiz(tx, input.resource.quizId, userId);
+    // Ownership and edit locks are checked before storage availability.
+    const storage = await this.db.$transaction(async (tx) => {
+      await lockEditableQuiz(
+        tx,
+        input.resource.quizId,
+        userId,
+        mediaEditScope(input.purpose),
+      );
+      const storage = this.adapter();
       await tx.mediaAsset.create({
         data: {
           id,
@@ -56,7 +63,8 @@ export class MediaService {
           sizeBytes: input.sizeBytes,
         },
       });
-    });
+      return storage;
+    }, lockedTransaction);
     return { mediaId: id, upload: await storage.authorize(path) };
   }
   private async owned(id: string, userId: string) {
@@ -75,7 +83,12 @@ export class MediaService {
       asset.mimeType,
     );
     const ready = await this.db.$transaction(async (tx) => {
-      await lockEditableQuiz(tx, asset.quizId, userId);
+      await lockEditableQuiz(
+        tx,
+        asset.quizId,
+        userId,
+        mediaEditScope(asset.purpose),
+      );
       const current = await tx.mediaAsset.findUniqueOrThrow({ where: { id } });
       if (current.status === MEDIA_STATUS.DELETED)
         throw new ApiError(409, ERROR_CODE.INVALID_MEDIA, 'Image was removed.');
@@ -83,13 +96,18 @@ export class MediaService {
         where: { id },
         data: { status: MEDIA_STATUS.READY, readyAt: new Date() },
       });
-    });
+    }, lockedTransaction);
     return this.dto(ready);
   }
   async remove(id: string, userId: string) {
     const asset = await this.owned(id, userId);
     await this.db.$transaction(async (tx) => {
-      await lockEditableQuiz(tx, asset.quizId, userId);
+      await lockEditableQuiz(
+        tx,
+        asset.quizId,
+        userId,
+        mediaEditScope(asset.purpose),
+      );
       if (
         (await tx.quiz.count({ where: { coverMediaId: id } })) ||
         (await tx.question.count({ where: { imageMediaId: id } }))
@@ -104,6 +122,6 @@ export class MediaService {
         where: { id },
         data: { status: MEDIA_STATUS.DELETED },
       });
-    });
+    }, lockedTransaction);
   }
 }

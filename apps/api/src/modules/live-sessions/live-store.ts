@@ -124,6 +124,16 @@ export class LiveStore {
     );
   }
 
+  /**
+   * Drops presence for these sessions in one command. Used at startup: no
+   * socket survives a restart, so every recorded presence is stale and
+   * clients claim it again when they reconnect.
+   */
+  async resetPresence(liveSessionIds: readonly string[]) {
+    if (!liveSessionIds.length) return;
+    await guard(this.redis.del(...liveSessionIds.map(presenceKey)));
+  }
+
   /** Drops all presence for a session that no longer exists. */
   async clearPresence(liveSessionId: string) {
     await guard(this.redis.del(presenceKey(liveSessionId)));

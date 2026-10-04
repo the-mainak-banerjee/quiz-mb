@@ -118,6 +118,8 @@ Browser requests go directly to Express using the global [API client](apps/web/s
 - `SUPABASE_SERVICE_ROLE_KEY` — server-only Storage credential. Never expose it to the web application.
 - `SUPABASE_STORAGE_BUCKET` — private image bucket, default `quizmb-media`.
 - `REDIS_URL` — Upstash Redis TCP URL (`rediss://…`) for live-session presence, active-device tracking and locks. Required in production and for live sessions locally; without it the API serves REST only and logs that live sessions are disabled.
+- `DATABASE_POOL_MAX` — connections in the API's database pool (default `10`). Requests that cannot get a connection in time get `503 SERVICE_BUSY` with `Retry-After` and are safe to retry.
+- `TRUST_PROXY_HOPS` — proxies in front of the API whose `X-Forwarded-For` entry is trusted for the client IP used by rate limits: `0` locally, `1` on Render. Rate limits use Redis counters, so they are off when `REDIS_URL` is unset.
 
 For local image uploads, configure these Storage variables in `apps/api/.env`, then run `pnpm --filter @quizmb/api storage:setup`. The development-only command creates the bucket if absent, or checks an existing bucket without changing it. It requires private access, PNG/JPEG/WebP MIME types, and a 10 MiB limit. Browsers receive short-lived upload/read URLs, never a service-role key.
 
@@ -129,7 +131,7 @@ The access cookie is retained until session expiry so server pages can recognize
 
 Production requires trusted subdomains under the same site, such as app.quizmb.com and api.quizmb.com. A Domain cookie reaches all subdomains: do not host untrusted applications under quizmb.com. Unrelated Vercel preview domains cannot use this cookie setup. Existing production BFF sessions require a fresh login after switching cookie names; old web-host-only cookies are no longer read. Use localhost for both local applications (do not mix localhost and 127.0.0.1).
 
-Express owns authentication and profile data. Access credentials reference persisted sessions. Refresh rotates the stored token hash atomically; reuse revokes the session family. Simultaneous refreshes in different browser tabs may require signing in again under this strict replay policy. Logout revokes the current session family. Unsafe requests require an allowed Origin and JSON content type. Authentication rate limiting is intentionally deferred; add distributed limits before public rollout.
+Express owns authentication and profile data. Access credentials reference persisted sessions. Refresh rotates the stored token hash atomically; reuse revokes the session family. Simultaneous refreshes in different browser tabs may require signing in again under this strict replay policy. Logout revokes the current session family. Unsafe requests require an allowed Origin and JSON content type. Login, signup and refresh are rate limited with Redis counters (per IP and per account); limits live in `apps/api/src/config/rate-limits.ts`.
 
 Live sessions (Phase 5): run `pnpm dev` (the API's `src/server.ts` attaches Socket.IO when `REDIS_URL` is set). Publish a quiz, then use **Open live lobby** on its manage page to reach the host console at `/quizzes/:quizId/live`. Registered participants join from the quiz page or dashboard at `/quiz/:publicId/live`. The socket authenticates with a 60-second ticket from `POST /api/live-sessions/:id/socket-ticket` rather than cookies, because web and API are deployed on different sites. Redis usage is kept small for the Upstash free tier (writes only on join/leave and lifecycle changes; no polling, KEYS/SCAN or pub/sub). Fixture previews of every live screen remain at `/dev/live` in development.
 
@@ -165,7 +167,7 @@ Use Node.js 24 and the repository's pnpm lockfile. Allow access to workspace fil
 - Root directory: repository root (workspace install), Node.js 24.
 - Build command: `pnpm install --frozen-lockfile && pnpm --filter @quizmb/api... build` (includes the database package and generated Prisma client).
 - Start command: `pnpm --filter @quizmb/api start` (runs `dist/server.js`, which serves REST and Socket.IO on one port).
-- Production environment: `NODE_ENV=production`, `ALLOWED_ORIGINS` (the web origin), `LOG_LEVEL=info`, `DATABASE_URL`, `AUTH_ACCESS_SECRET`, `REDIS_URL`, Storage variables, and optional `DATABASE_SSL_CA_BASE64`. `AUTH_COOKIE_DOMAIN` depends on the pending cross-domain auth change. Apply migrations separately with the tooling connection before release; builds do not migrate databases.
+- Production environment: `NODE_ENV=production`, `ALLOWED_ORIGINS` (the web origin), `LOG_LEVEL=info`, `DATABASE_URL`, `AUTH_ACCESS_SECRET`, `REDIS_URL`, `TRUST_PROXY_HOPS=1`, Storage variables, and optional `DATABASE_SSL_CA_BASE64`. `AUTH_COOKIE_DOMAIN` depends on the pending cross-domain auth change. Apply migrations separately with the tooling connection before release; builds do not migrate databases.
 - The free Render tier sleeps when idle; the first request after a pause can take up to a minute. It runs a single instance, so no Socket.IO Redis adapter is configured yet.
 
 `src/app.ts` constructs the Express application, `src/index.ts` wires dependencies (and still exports the app for serverless REST-only use), and `src/server.ts` starts the long-running HTTP + Socket.IO server.

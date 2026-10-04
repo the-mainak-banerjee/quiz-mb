@@ -20,6 +20,9 @@ async function start() {
     io = createSocketServer(server, env.ALLOWED_ORIGINS);
     attachLiveRealtime(io, live, logger, events);
     attachQuizStatusRealtime(io, live, logger, events);
+    // Presence from before the restart is stale; clients claim it again.
+    const reset = await live.resetPresence();
+    if (reset) logger.info({ sessions: reset }, 'Live presence reset');
     // Questions that were running when the process stopped close on time
     // (or at once if overdue) instead of waiting for the next interaction.
     const recovered = await live.recoverQuestionTimers();

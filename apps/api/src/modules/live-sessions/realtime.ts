@@ -10,6 +10,7 @@ import {
   liveSessionCommandSchema,
   questionStartCommandSchema,
   type LiveCountDto,
+  type LiveHostPresenceDto,
   type LivePresenceDto,
   type LiveRemovedDto,
   type LiveRole,
@@ -24,7 +25,14 @@ import {
 } from '../../infrastructure/domain-events.js';
 import type { AskedQuestionRow, LiveSessionRow } from './repository.js';
 import type { LiveSessionsService } from './service.js';
-import { ROOM_AUDIENCE, SOCKET_EVENT, liveRoom } from './constants.js';
+import {
+  HOST_AWAY_GRACE_MS,
+  ROOM_AUDIENCE,
+  SOCKET_EVENT,
+  SOCKET_RATE_BUCKET,
+  liveRoom,
+} from './constants.js';
+import { socketRateLimiter } from './socket-rate.js';
 
 type SocketData = {
   userId: string;
@@ -173,6 +181,27 @@ export function attachLiveRealtime(
     },
   );
 
+  function sendHostPresence(liveSessionId: string, hostConnected: boolean) {
+    const payload: LiveHostPresenceDto = { hostConnected };
+    nsp
+      .to(liveRoom(liveSessionId, ROOM_AUDIENCE.PARTICIPANTS))
+      .emit(LIVE_EVENTS.hostPresence, payload);
+  }
+
+  /**
+   * The host's last connection closed. Participants are told only if the
+   * host is still away after the grace period, so a refresh goes unnoticed;
+   * the quiz itself keeps running either way.
+   */
+  function hostDisconnected(liveSessionId: string, socketId: string) {
+    if (!service.hostLeft(liveSessionId, socketId)) return;
+    setTimeout(() => {
+      if (service.hostConnected(liveSessionId)) return;
+      sendHostPresence(liveSessionId, false);
+      logger.info({ liveSessionId }, 'Live host away');
+    }, HOST_AWAY_GRACE_MS + 100).unref();
+  }
+
   // Host-only answer progress for the active question: one database read
   // per interval however many answers arrive.
   const PROGRESS_INTERVAL_MS = 1_000;
@@ -210,7 +239,10 @@ export function attachLiveRealtime(
             .emit(LIVE_EVENTS.snapshot, host);
           for (const { socketId, snapshot } of participants)
             nsp.to(socketId).emit(LIVE_EVENTS.snapshot, snapshot);
-          logger.info({ liveSessionId }, 'Live question ended');
+          logger.info(
+            { liveSessionId, askedQuestionId },
+            'Live question ended',
+          );
           const standings = await service.standingDeliveries(
             liveSessionId,
             askedQuestionId,
@@ -264,6 +296,7 @@ export function attachLiveRealtime(
   nsp.on('connection', (raw) => {
     const socket = raw as unknown as LiveSocket;
     const { userId } = socket.data;
+    const withinBudget = socketRateLimiter();
 
     function on<Schema extends z.ZodType, Result>(
       event: string,
@@ -278,6 +311,19 @@ export function attachLiveRealtime(
         ) => {
           let response: SocketAck<Result>;
           try {
+            const bucket = SOCKET_RATE_BUCKET[event];
+            const budget = bucket ? withinBudget(bucket) : null;
+            if (budget?.firstRefusal)
+              logger.warn(
+                { event, liveSessionId: socket.data.ticketSessionId, userId },
+                'Live commands rate limited',
+              );
+            if (budget && !budget.allowed)
+              throw new ApiError(
+                429,
+                ERROR_CODE.RATE_LIMITED,
+                'Too many requests. Please wait a moment and try again.',
+              );
             const parsed = schema.safeParse(payload);
             if (!parsed.success)
               throw new ApiError(
@@ -297,6 +343,22 @@ export function attachLiveRealtime(
             response = { ok: true, data: await handler(parsed.data) };
           } catch (error) {
             response = failure(error, logger, event) as SocketAck<Result>;
+            // Refusals are part of normal play (late answers, invalid host
+            // steps); log what was refused, never what was sent. Rate-limited
+            // commands were logged once above.
+            if (
+              error instanceof ApiError &&
+              error.code !== ERROR_CODE.RATE_LIMITED
+            )
+              logger.info(
+                {
+                  event,
+                  code: error.code,
+                  liveSessionId: socket.data.ticketSessionId,
+                  userId,
+                },
+                'Live command refused',
+              );
           }
           if (typeof ack === 'function') ack(response);
         }) as never,
@@ -337,6 +399,19 @@ export function attachLiveRealtime(
               : ROOM_AUDIENCE.PARTICIPANTS,
           ),
         ]);
+        if (result.role === LIVE_ROLE.HOST)
+          logger.info(
+            { liveSessionId, userId, returned: result.hostReturned },
+            'Live host joined',
+          );
+        else
+          logger.info(
+            { liveSessionId, userId },
+            result.firstEntry
+              ? 'Live participant joined'
+              : 'Live participant reconnected',
+          );
+        if (result.hostReturned) sendHostPresence(liveSessionId, true);
         if (result.replacedSocketId) {
           nsp.to(result.replacedSocketId).emit(LIVE_EVENTS.replaced, {
             reason: 'A newer session was opened for this quiz.',
@@ -398,7 +473,14 @@ export function attachLiveRealtime(
           userId,
           questionId,
         );
-        logger.info({ liveSessionId }, 'Live question started');
+        logger.info(
+          {
+            liveSessionId,
+            askedQuestionId: asked.id,
+            number: asked.sequenceNumber,
+          },
+          'Live question started',
+        );
         return broadcast(session, asked);
       },
     );
@@ -435,6 +517,15 @@ export function attachLiveRealtime(
           'Only participants can answer questions.',
         );
       const answer = await service.submit(userId, socket.id, command);
+      // Debug only: one line per answer is too much at info for big rooms.
+      logger.debug(
+        {
+          liveSessionId: command.liveSessionId,
+          askedQuestionId: command.askedQuestionId,
+          userId,
+        },
+        'Live answer accepted',
+      );
       publishProgress(command.liveSessionId, command.askedQuestionId);
       return answer;
     });
@@ -499,6 +590,7 @@ export function attachLiveRealtime(
           .in(liveRoom(liveSessionId))
           .except(socket.id)
           .disconnectSockets(true);
+        service.hostLeft(liveSessionId, socket.id);
         socket.data.role = undefined;
         return null;
       },
@@ -506,6 +598,8 @@ export function attachLiveRealtime(
 
     async function release() {
       const liveSessionId = socket.data.ticketSessionId;
+      // A no-op unless this socket joined as the host.
+      hostDisconnected(liveSessionId, socket.id);
       if (socket.data.role !== LIVE_ROLE.PARTICIPANT) return;
       socket.data.role = undefined;
       const connectedCount = await service.leave(
@@ -538,7 +632,17 @@ export function attachLiveRealtime(
       },
     );
 
-    socket.on(SOCKET_EVENT.DISCONNECT, () => {
+    socket.on(SOCKET_EVENT.DISCONNECT, (reason: string) => {
+      if (socket.data.role)
+        logger.info(
+          {
+            liveSessionId: socket.data.ticketSessionId,
+            userId,
+            role: socket.data.role,
+            reason,
+          },
+          'Live socket disconnected',
+        );
       release().catch(() =>
         logger.warn(
           { code: ERROR_CODE.LIVE_UNAVAILABLE },

@@ -150,6 +150,8 @@ export function HostQuizCompleted({
 }) {
   const unused = summary.quizQuestionCount - summary.askedQuestionCount;
   const rest: LeaderboardDto = { ...board, entries: board.entries.slice(3) };
+  // Only participants who scored are listed, so the board can be empty.
+  const empty = board.entries.length === 0;
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-space-md px-margin-sm py-space-lg md:px-margin">
       <div className="flex flex-col gap-space-sm md:flex-row md:items-end md:justify-between">
@@ -231,8 +233,11 @@ export function HostQuizCompleted({
             <div>
               <Text variant="card-title">Host private view</Text>
               <Text variant="body-secondary" tone="secondary">
-                Participants see their own result. They see this leaderboard
-                only when you reveal it.
+                {summary.participantCount === 0
+                  ? 'Nobody joined, so there are no results to share.'
+                  : empty
+                    ? 'Participants see their own result. There is no leaderboard to reveal.'
+                    : 'Participants see their own result. They see this leaderboard only when you reveal it.'}
               </Text>
             </div>
           </div>
@@ -244,14 +249,16 @@ export function HostQuizCompleted({
             >
               View full results
             </NavigationItem>
-            <ActionButton
-              preview="Revealing the final leaderboard"
-              onAction={onReveal}
-              disabled={busy}
-              icon={<Eye size={18} aria-hidden="true" />}
-            >
-              Reveal final leaderboard
-            </ActionButton>
+            {!empty && (
+              <ActionButton
+                preview="Revealing the final leaderboard"
+                onAction={onReveal}
+                disabled={busy}
+                icon={<Eye size={18} aria-hidden="true" />}
+              >
+                Reveal final leaderboard
+              </ActionButton>
+            )}
           </div>
         </Surface>
       )}
@@ -267,7 +274,13 @@ export function HostQuizCompleted({
             Final standings — Top 10
           </Text>
         </div>
-        {shown && board.entries.length > 0 ? (
+        {empty ? (
+          <Text tone="secondary">
+            {summary.participantCount === 0
+              ? 'Nobody joined this quiz, so there are no standings.'
+              : 'Nobody scored any points, so there are no standings.'}
+          </Text>
+        ) : shown ? (
           <>
             <FinalPodium
               board={board}

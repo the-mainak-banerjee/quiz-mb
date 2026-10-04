@@ -1,8 +1,12 @@
 import pino from 'pino';
 import { SERVICE_NAME } from '../config/constants.js';
 
-export function createLogger(level: string) {
-  return pino({
+/** `destination` lets tests read log lines; the default is stdout. */
+export function createLogger(
+  level: string,
+  destination?: pino.DestinationStream,
+) {
+  const options: pino.LoggerOptions = {
     level,
     base: { service: SERVICE_NAME },
     redact: {
@@ -22,5 +26,6 @@ export function createLogger(level: string) {
       ],
       censor: '[REDACTED]',
     },
-  });
+  };
+  return destination ? pino(options, destination) : pino(options);
 }

@@ -165,6 +165,8 @@ export type QuizDto = Omit<QuizInput, 'plannedStartAt'> & {
   publicId: string;
   plannedStartAt: string | null;
   status: QuizStatus;
+  /** Confirmed registrations; the limit cannot go below this. */
+  registrationCount: number;
   updatedAt: string;
   cover: MediaDto | null;
   questions: QuestionDto[];
@@ -367,6 +369,8 @@ export const LIVE_EVENTS = {
   quizEnded: 'quiz:ended',
   /** Host reveals the final Top 10 on every participant screen. */
   finalLeaderboardShow: 'host:final-leaderboard-show',
+  /** Participants: the host lost connection or came back (after a grace). */
+  hostPresence: 'session:host-presence',
 } as const;
 
 /** Most rows a leaderboard lists; tied scores share a rank. */
@@ -581,6 +585,11 @@ export type ParticipantLiveSnapshotDto = LiveSnapshotBase & {
   /** Present while the host shows the leaderboard (LEADERBOARD). */
   leaderboard: LeaderboardDto | null;
   /**
+   * False once the host has been disconnected for longer than a short grace
+   * period. The quiz keeps running; only the host can move it on.
+   */
+  hostConnected: boolean;
+  /**
    * Personal fields: present only when the snapshot is addressed to one
    * participant (join, sync, question end). Absent means unchanged.
    */
@@ -604,6 +613,9 @@ export type LiveReplacedDto = { reason: string };
 export type LiveRemovedDto = { code: string; message: string };
 
 export type LiveCountDto = { connectedCount: number };
+
+/** Sent to participants when the host's connection changes. */
+export type LiveHostPresenceDto = { hostConnected: boolean };
 
 export type SocketAck<T> =
   | { ok: true; data: T }

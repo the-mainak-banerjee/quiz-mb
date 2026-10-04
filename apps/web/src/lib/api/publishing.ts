@@ -7,8 +7,13 @@ const auth = { authenticated: true };
 export const publishingApi = {
   publish: (quizId: string) =>
     api.post<QuizDto>(`/api/quizzes/${quizId}/publish`, {}, auth),
-  register: (quizId: string) =>
-    api.post<RegistrationDto>(`/api/quizzes/${quizId}/register`, {}, auth),
+  /** `onBusyRetry` runs before each automatic retry of a busy server. */
+  register: (quizId: string, onBusyRetry?: () => void) =>
+    api.post<RegistrationDto>(
+      `/api/quizzes/${quizId}/register`,
+      {},
+      { ...auth, ...(onBusyRetry ? { onBusyRetry } : {}) },
+    ),
   registration: (quizId: string) =>
     api.get<RegistrationDto>(API_ROUTES.QUIZZES.REGISTRATION(quizId), auth),
   unregister: (quizId: string) =>

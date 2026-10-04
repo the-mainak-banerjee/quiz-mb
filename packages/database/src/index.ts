@@ -2,7 +2,12 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from './generated/client.js';
 export { Prisma, PrismaClient } from './generated/client.js';
 export type { User, AuthSession } from './generated/client.js';
-export function createDatabase(connectionString: string, caBase64?: string) {
+export function createDatabase(
+  connectionString: string,
+  caBase64?: string,
+  /** Connections in this process's pool (DATABASE_POOL_MAX in the API). */
+  poolMax = 10,
+) {
   if (!connectionString) throw new Error('DATABASE_URL is required');
   const url = new URL(connectionString);
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
@@ -28,7 +33,7 @@ export function createDatabase(connectionString: string, caBase64?: string) {
               ? { ca: Buffer.from(caBase64, 'base64').toString('utf8') }
               : {}),
           },
-      max: 3,
+      max: poolMax,
       connectionTimeoutMillis: 10000,
       idleTimeoutMillis: 30000,
     }),

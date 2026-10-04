@@ -29,6 +29,7 @@ export class QuizzesService {
       title: q.title,
       description: q.description,
       registrationLimit: q.registrationLimit,
+      registrationCount: q._count.registrations,
       defaultQuestionDurationSeconds: q.defaultQuestionDurationSeconds,
       allowLateJoin: q.allowLateJoin,
       coverMediaId: q.coverMediaId,

@@ -26,7 +26,7 @@ export function HostConsoleHeader({
 }) {
   return (
     <header className="flex flex-col justify-between gap-space-sm border-b border-border-surface pb-space-md lg:flex-row lg:items-end">
-      <div className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex min-w-0 flex-col gap-1.5 lg:flex-1">
         <Text
           variant="caption"
           tone="secondary"
@@ -42,7 +42,8 @@ export function HostConsoleHeader({
         </Text>
         <Text tone="secondary">{description}</Text>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Keeps its chips on one row while the description wraps. */}
+      <div className="flex flex-wrap items-center gap-3 lg:shrink-0 lg:flex-nowrap">
         <Text
           as="span"
           variant="label"

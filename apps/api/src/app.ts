@@ -17,6 +17,9 @@ import type { LiveSessionsService } from './modules/live-sessions/service.js';
 import { liveSessionRoutes } from './modules/live-sessions/routes.js';
 import type { DomainEvents } from './infrastructure/domain-events.js';
 import { HTTP_HEADER, HTTP_METHOD } from '@quizmb/contracts';
+import type { RateLimiter } from './infrastructure/rate-limiter.js';
+import { RATE_LIMITS, type RateLimits } from './config/rate-limits.js';
+import { authRateLimits, userRateLimits } from './http/rate-limit.js';
 
 export function createApp({
   allowedOrigins,
@@ -28,6 +31,9 @@ export function createApp({
   storage,
   live,
   events,
+  rateLimiter,
+  rateLimits = RATE_LIMITS,
+  trustProxyHops = 0,
 }: {
   allowedOrigins: readonly string[];
   logger: Logger;
@@ -38,9 +44,15 @@ export function createApp({
   storage?: SupabaseStorage | undefined;
   live?: LiveSessionsService | undefined;
   events?: DomainEvents | undefined;
+  /** Without one, nothing is rate limited (tests and REST-only runs). */
+  rateLimiter?: RateLimiter | undefined;
+  rateLimits?: RateLimits;
+  /** Proxies in front of the API whose X-Forwarded-For entry is trusted. */
+  trustProxyHops?: number;
 }) {
   const app = express();
   app.disable('x-powered-by');
+  if (trustProxyHops) app.set('trust proxy', trustProxyHops);
   app.use(requestContext(logger));
   app.use(
     cors({
@@ -53,6 +65,7 @@ export function createApp({
   );
   app.get('/api/health', health);
   app.use(express.json({ limit: '128kb' }));
+  if (rateLimiter) app.use('/api', authRateLimits(rateLimiter, rateLimits));
   if (auth && users)
     app.use('/api', authRoutes(auth, users, production, allowedOrigins));
   if (database) app.use('/api', publicAuthoringRoutes(database, storage));
@@ -61,6 +74,7 @@ export function createApp({
       '/api',
       authenticate(auth, production),
       csrf(allowedOrigins),
+      ...(rateLimiter ? [userRateLimits(rateLimiter, rateLimits)] : []),
       authoringRoutes(database, storage, events),
       ...(live ? [liveSessionRoutes(live)] : []),
     );

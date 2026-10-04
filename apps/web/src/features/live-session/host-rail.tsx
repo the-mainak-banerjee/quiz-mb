@@ -195,7 +195,7 @@ export function LeaderboardPanel({
           disabled={!canShowParticipants || busy}
           icon={<Eye size={18} aria-hidden="true" />}
         >
-          View leaderboard (host only)
+          View privately
         </ActionButton>
         {shown ? (
           <ActionButton

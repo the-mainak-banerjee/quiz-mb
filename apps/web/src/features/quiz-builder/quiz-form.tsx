@@ -7,6 +7,8 @@ import {
   type QuizInput,
   type QuizDto,
   type MediaDto,
+  MEDIA_PURPOSE,
+  QUIZ_STATUS,
 } from '@quizmb/contracts';
 import { Button, FormField, Input, Surface, Text } from '@/components/ui';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,7 +17,7 @@ import { CalendarClock, Clock3, Settings2, Users } from 'lucide-react';
 import { Field } from '@/components/forms/field';
 import { setApiErrors } from '@/components/forms/form-errors';
 import { useUnsavedChanges } from '@/components/forms/unsaved-changes';
-import { authoringApi } from '@/lib/api/authoring';
+import { authoringApi, uploadImage } from '@/lib/api/authoring';
 import { ImageUpload } from './image-upload';
 
 export function quizValues(q?: QuizDto): QuizInput {
@@ -48,11 +50,14 @@ export function QuizForm({
   initial?: QuizDto;
   /** Show the saved details with every control disabled. */
   readOnly?: boolean;
-  onSaved: (quiz: QuizDto, next: boolean) => void;
+  /** `coverFailed`: the quiz saved but a cover chosen before saving did not upload. */
+  onSaved: (quiz: QuizDto, next: boolean, coverFailed?: boolean) => void;
   onCancel: () => void;
   ref?: Ref<{ confirm: (action: () => void) => void }>;
 }) {
   const [cover, setCover] = useState<MediaDto | null>(initial?.cover ?? null);
+  /** A cover chosen before the quiz exists; uploaded after the first save. */
+  const [pendingCover, setPendingCover] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [next, setNext] = useState(false);
   const {
@@ -69,7 +74,7 @@ export function QuizForm({
     mode: 'onChange',
     defaultValues: quizValues(initial),
   });
-  const guard = useUnsavedChanges(isDirty || uploading);
+  const guard = useUnsavedChanges(isDirty || uploading || !!pendingCover);
   useImperativeHandle(ref, () => ({ confirm: guard.confirm }));
   const values = useWatch({ control });
   const title = values.title;
@@ -81,13 +86,32 @@ export function QuizForm({
         noValidate
         onSubmit={handleSubmit(async (input) => {
           try {
-            const saved = await authoringApi.saveQuiz(
+            let saved = await authoringApi.saveQuiz(
               projectId,
               input,
               initial?.id,
             );
+            let coverFailed = false;
+            if (pendingCover) {
+              // The quiz exists now: upload the cover chosen before saving.
+              try {
+                const media = await uploadImage(
+                  saved.id,
+                  MEDIA_PURPOSE.QUIZ_COVER,
+                  pendingCover,
+                );
+                saved = await authoringApi.saveQuiz(
+                  projectId,
+                  { ...quizValues(saved), coverMediaId: media.id },
+                  saved.id,
+                );
+              } catch {
+                coverFailed = true;
+              }
+              setPendingCover(null);
+            }
             reset(quizValues(saved));
-            guard.afterSave(() => onSaved(saved, next));
+            guard.afterSave(() => onSaved(saved, next, coverFailed));
           } catch (e) {
             setApiErrors(e, setError);
           }
@@ -133,6 +157,7 @@ export function QuizForm({
               purpose="QUIZ_COVER"
               value={cover}
               readOnly={readOnly}
+              {...(initial ? {} : { onDefer: setPendingCover })}
               onBusy={setUploading}
               onChange={(m) => {
                 setCover(m);
@@ -155,6 +180,11 @@ export function QuizForm({
                 id="registration-limit"
                 label="Maximum participants"
                 required
+                {...(initial && initial.status !== QUIZ_STATUS.DRAFT
+                  ? {
+                      hint: `${initial.registrationCount} registered so far · the limit cannot go below this.`,
+                    }
+                  : {})}
                 error={errors.registrationLimit?.message}
               >
                 <div className="relative">
@@ -255,7 +285,11 @@ export function QuizForm({
                   disabled={uploading}
                   onClick={() => setNext(false)}
                 >
-                  {isSubmitting ? 'Saving…' : 'Save draft'}
+                  {isSubmitting
+                    ? 'Saving…'
+                    : initial && initial.status !== QUIZ_STATUS.DRAFT
+                      ? 'Save changes'
+                      : 'Save draft'}
                 </Button>
                 <Button
                   type={continueWithoutSaving ? 'button' : 'submit'}

@@ -161,3 +161,25 @@ test('central handler hides internal messages and stack traces', async () => {
     );
   });
 });
+
+test('a saturated database answers 503 SERVICE_BUSY with Retry-After', async () => {
+  const app = express();
+  app.use(requestContext(logger));
+  // Test-only routes: pg-pool's timeout and Prisma's transaction-start timeout.
+  app.get('/pool', () => {
+    throw new Error('timeout exceeded when trying to connect');
+  });
+  app.get('/transaction', () => {
+    throw Object.assign(new Error('Transaction API error'), { code: 'P2028' });
+  });
+  app.use(errorHandler(logger));
+  await withServer(app, async (url) => {
+    for (const path of ['/pool', '/transaction']) {
+      const response = await fetch(`${url}${path}`);
+      assert.equal(response.status, 503, path);
+      assert.equal(response.headers.get('retry-after'), '2', path);
+      const body = (await response.json()) as { error: { code: string } };
+      assert.equal(body.error.code, 'SERVICE_BUSY', path);
+    }
+  });
+});

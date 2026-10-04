@@ -15,12 +15,14 @@ import { LiveSessionsService } from './modules/live-sessions/service.js';
 import { LiveStore } from './modules/live-sessions/live-store.js';
 import { SocketTickets } from './modules/live-sessions/tickets.js';
 import { NODE_ENV } from './config/constants.js';
+import { RateLimiter } from './infrastructure/rate-limiter.js';
 
 const env = parseEnv(process.env);
 const authConfig = parseAuthEnv(process.env);
 export const database = createDatabase(
   authConfig.DATABASE_URL,
   authConfig.DATABASE_SSL_CA_BASE64,
+  env.DATABASE_POOL_MAX,
 );
 export const events = new DomainEvents();
 export const logger = createLogger(env.LOG_LEVEL);
@@ -47,4 +49,6 @@ export default createApp({
   storage,
   live,
   events,
+  rateLimiter: new RateLimiter(redis, logger),
+  trustProxyHops: env.TRUST_PROXY_HOPS,
 });

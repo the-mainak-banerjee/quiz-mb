@@ -2,9 +2,23 @@
 
 ## Current status
 
-Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Phase 5 (lobby and live-session foundation), Phases 6–8 (live questions, submission, scoring, personal rank and live distribution) and Phase 9 (host presentation controls and leaderboard) and Phase 10 (end quiz, final results and history) are implemented end to end. No deployment has been performed.
+Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data, including live quizzes and history. Phase 5 (lobby and live-session foundation), Phases 6–8 (live questions, submission, scoring, personal rank and live distribution) and Phase 9 (host presentation controls and leaderboard) and Phase 10 (end quiz, final results and history) are implemented end to end. Phase 11 (reliability and hardening) is implemented except the load test, which waits for email verification and per-account project/quiz limits. No deployment has been performed.
 
 This document records implementation progress, verification results, limitations, and approved scope adjustments. Project setup and usage instructions belong in the root README.
+
+## Phase 11 — Reliability and hardening — October 4, 2026
+
+Branch `phase-11-hardening` (from `main` after Phase 10). In progress: the load test is deferred until email verification and per-account limits for projects and quizzes are in place.
+
+- Content and capacity: questions are fixed once the lobby opens (details until the quiz goes live), a published quiz keeps at least one question, and the registration limit cannot drop below current registrations. Lock rules live in `@quizmb/contracts`; the editor shows them (read-only questions in the lobby, `/view` for live and completed quizzes, registration count beside the limit).
+- Live edge cases are covered by `live-edge-cases.integration.test.ts`: nobody joining, ending before any question, from the result or leaderboard, or mid-question, and replaced devices.
+- Presence: stale presence is cleared at startup; participants are told when the host has been away for 5 seconds and when they return (the quiz keeps running).
+- Rate limits: Redis counters for login, signup, refresh, registration, uploads, lobby and socket tickets (`429 RATE_LIMITED` with `Retry-After`, fails open); per-socket in-memory budgets for live commands. `TRUST_PROXY_HOPS` sets the trusted proxy hops for the client IP.
+- Registration bursts: one database call (`register_participant`, migration `20261004000000_register_participant`); 300 simultaneous registrations now all succeed in about 7 s (previously 9 of 30). `DATABASE_POOL_MAX` (default 10); saturation answers `503 SERVICE_BUSY` and the web client retries it.
+- Logging of joins, reconnects, disconnects, refused commands and question lifecycle, without answer content.
+- UI fixes: cover upload before the first save, empty completed screens, host console after every question is asked, disabled-looking fields on the view page, tabular timer digits.
+- Checks: format, lint, typecheck, unit tests, build, and every integration test (auth, authoring, publishing, rate limit, registration burst, live sessions, live questions, live edge cases) passed.
+- Remaining: load test; loading and error screens (custom design pending); mobile pass on the participant live flow.
 
 ## Phase 10 — End quiz, final results and history — October 2, 2026
 
@@ -66,12 +80,12 @@ Branch `phase-5-live`. Built on the approved frontend screens, assuming the web 
 
 ### Known limitations
 
-- End quiz is minimal: it completes the session and quiz without results; Phase 10 replaces it. A host cannot end a quiz from the lobby without starting it first.
+- End quiz is minimal: it completes the session and quiz without results; Phase 10 replaces it. A host cannot end a quiz from the lobby without starting it first. _(Resolved in Phase 10: ending saves final results and history.)_
 - Presence has no heartbeat TTL (to save Upstash commands); if the API process crashes, stale presence can remain until the 24-hour key expiry. Presence is best effort; attendance is durable in `ParticipantSession`.
 - Single API instance only: device replacement, broadcasts and registration-change events (in-process `DomainEvents`) rely on one Socket.IO server. Horizontal scaling needs the Redis adapter (and its pub/sub command cost).
 - Participant lobby connected counts refresh on join and on each state change rather than continuously.
 - Cross-domain REST auth is still pending (docs/TODO.md), so a deployed web app cannot yet sign in against a Render-hosted API. Socket authentication already works cross-domain.
-- Rate limiting (auth, registration, uploads, live sockets) is not implemented; tracked in docs/TODO.md.
+- Rate limiting (auth, registration, uploads, live sockets) is not implemented; tracked in docs/TODO.md. _(Resolved in Phase 11.)_
 - Pre-existing schema drift: the `quizzes_status_plannedStartAt_idx` index exists in migrations but not in `schema.prisma`.
 
 ## Phase 5 — Live screens, frontend only — September 29, 2026
@@ -143,7 +157,7 @@ Implemented in commit `419a5eb` (September 28); verified and cleaned up on Septe
 
 ### Known limitations
 
-- Registration capacity is serialized per quiz through one row lock, and each registration makes several round trips to the remote database while holding it. Small bursts now queue successfully, but a large simultaneous burst (hundreds of participants the moment a link is shared) can still exceed the 15-second wait and return 500. A throughput-oriented approach (fewer round trips inside the lock, a larger pool, or a retryable error code) should be decided before load testing in Phase 11.
+- Registration capacity is serialized per quiz through one row lock, and each registration makes several round trips to the remote database while holding it. Small bursts now queue successfully, but a large simultaneous burst (hundreds of participants the moment a link is shared) can still exceed the 15-second wait and return 500. A throughput-oriented approach (fewer round trips inside the lock, a larger pool, or a retryable error code) should be decided before load testing in Phase 11. _(Resolved in Phase 11: registration is one database call; 300 simultaneous registrations succeed and saturation returns a retryable `503 SERVICE_BUSY`.)_
 - There is no database constraint requiring `plannedStartAt` on non-draft quizzes; the rule is enforced in the service, the publish transaction, and the request contract. A `CHECK (status = 'DRAFT' OR "plannedStartAt" IS NOT NULL)` migration would harden it if approved.
 - Planned date/time strings on the public and management pages are formatted during server rendering, so they use the server's locale and time zone rather than the viewer's. In production (UTC) viewers may see a different local time than expected.
 - `/registrations/all` is unpaginated; its size is bounded by the registration limit (maximum 10,000).
@@ -190,7 +204,7 @@ Implemented only account signup, login, refresh, logout, current-user retrieval,
 - Refresh tokens are random 256-bit credentials; PostgreSQL stores only SHA-256 hashes. Family-root row locks serialize refresh, logout, and replay revocation.
 - Reuse revokes the family. Concurrent requests across different web instances may force re-login, as approved. A short-lived per-process coalescing cache reduces duplicate refresh requests within one web instance.
 - Production cookies are HttpOnly, Secure, SameSite=Lax, Path=/ with __Host- names and no Domain. Local HTTP uses unprefixed cookies without Secure. Origin and JSON-content checks protect unsafe requests, including login.
-- Distributed rate limiting is deliberately deferred with TODO(auth-rate-limit) in the auth router. It remains a pre-public-rollout task.
+- Distributed rate limiting is deliberately deferred with TODO(auth-rate-limit) in the auth router. It remains a pre-public-rollout task. _(Resolved in Phase 11: Redis rate limits; the TODO is removed.)_
 
 ### Database and dependencies
 
@@ -322,7 +336,7 @@ These decisions were approved before implementation and remain guidance for late
 - Registration closes and quiz/question content locks when the host officially starts the quiz, not when the lobby opens.
 - During an active question, participant-visible scores/ranks remain frozen at the last revealed state.
 - PRD governs product behavior; API design governs contract shapes; database/realtime design governs persistence and Redis behavior; system design governs high-level architecture. More specific later designs supersede older examples unless they contradict the PRD.
-- Exact scoring formulas/constants, password policy, token lifetimes, detailed rate limits, media limits, Redis TTLs, and detailed pagination limits remain intentionally deferred.
+- Exact scoring formulas/constants, password policy, token lifetimes, media limits, Redis TTLs, and detailed pagination limits remain intentionally deferred. Rate limits were set in Phase 11 (`apps/api/src/config/rate-limits.ts`).
 
 ## Documentation organization
 
@@ -399,7 +413,7 @@ The publishing slice implements `POST /api/quizzes/:quizId/publish`, `GET /api/p
 - Registration locks the quiz row (`SELECT … FOR UPDATE`) before counting `REGISTERED` rows, so concurrent requests are serialized and capacity cannot be exceeded. Waiting requests queue for up to 15 seconds instead of failing.
 - Additional error codes beyond section 5: `HOST_CANNOT_REGISTER` (403, host registering for their own quiz), `REGISTRATION_CLOSED` (409, quiz not `PUBLISHED`), `UNREGISTRATION_CLOSED` (409, quiz `LIVE` or `COMPLETED`), `NOT_REGISTERED` (404 on unregister), and `QUIZ_LOCKED` (409, publishing a non-draft quiz).
 - `GET /api/public/quizzes/:publicId` returns `PublicQuizDto` for `PUBLISHED`, `LOBBY`, `LIVE`, and `COMPLETED` quizzes only; drafts return 404. It never includes options or answer keys.
-- `GET /api/dashboard/host` currently returns `{ projects, quizzes }` (quizzes of every status, grouped by the web client) rather than the per-status lists sketched in 11.2. `GET /api/dashboard/participant` returns `upcoming`; `live` and `history` are empty until later phases.
+- `GET /api/dashboard/host` currently returns `{ projects, quizzes }` (quizzes of every status, grouped by the web client) rather than the per-status lists sketched in 11.2. `GET /api/dashboard/participant` returns `upcoming`, `live` and (since Phase 10) `history`.
 
 
 ## Live session implementation notes — Phase 5 — 2026-09-29
@@ -416,7 +430,7 @@ Socket.IO (`/quiz` namespace) as implemented:
 - Handshake: `auth.ticket` is verified before the connection is accepted; `allowRequest` also rejects WebSocket upgrades from origins outside `ALLOWED_ORIGINS` (requests without an Origin still need a ticket). Command payloads must target the ticket's live session.
 - `session:join` → role-safe snapshot (`HostLiveSnapshotDto` with roster ≤ 100 and host questions including answer keys; `ParticipantLiveSnapshotDto` with neither). Participants must be registered; after the quiz starts, first-time entrants need late join enabled (`403 LATE_JOIN_DISABLED`) while returning attendees always reconnect; completed sessions return `QUIZ_COMPLETED`. The newest participant socket replaces the previous one (`session:replaced`, then a forced disconnect). The host may keep several tabs connected.
 - `session:sync` (participants must still be the active device, else `SESSION_REPLACED`) and `session:leave`.
-- Host-only commands with server-side host checks and a short Redis lock: `host:quiz-start` (`LOBBY → LIVE_IDLE`, quiz → `LIVE`, closes registration and locks content), `host:late-join-set`, and a minimal `host:quiz-end` (session and quiz → `COMPLETED`, idempotent; results and leaderboard arrive in Phase 10). Invalid transitions return `INVALID_STATE_TRANSITION`; concurrent transitions `OPERATION_IN_PROGRESS`.
+- Host-only commands with server-side host checks and a short Redis lock: `host:quiz-start` (`LOBBY → LIVE_IDLE`, quiz → `LIVE`, closes registration and locks content), `host:late-join-set`, and a minimal `host:quiz-end` (session and quiz → `COMPLETED`, idempotent; Phase 10 added final results and the final leaderboard). Invalid transitions return `INVALID_STATE_TRANSITION`; concurrent transitions `OPERATION_IN_PROGRESS`.
 - Server → client: after every lifecycle change the server broadcasts a full role-safe `session:snapshot` to the host and participant rooms (instead of separate `quiz:started`/`quiz:ended` events in Phase 5). `host:presence-updated { userId, connected, connectedCount }` goes to the host room only. Participants receive `session:connected-count { connectedCount }`, throttled to at most one update per 2 seconds per session (sent in memory, no Redis commands).
 - Acknowledgements use `{ ok: true, data } | { ok: false, error: { code, message } }`.
 - Additional codes: `REGISTRATION_CLOSED` also applies once the quiz is `LIVE` (registration stays open in `LOBBY`), `LIVE_UNAVAILABLE` (503, Redis unreachable), `NOT_JOINED`, `OPERATION_IN_PROGRESS`.

@@ -7,6 +7,7 @@ import {
   LIVE_SOCKET_NAMESPACE,
   type HostQuestionProgressDto,
   type LiveCountDto,
+  type LiveHostPresenceDto,
   type LivePresenceDto,
   type LiveRemovedDto,
   type LiveSnapshotDto,
@@ -96,6 +97,9 @@ const timedOut = {
     message: 'The live room did not respond. Please try again.',
   },
 } as const;
+
+/** Wait before repeating a sync refused for exceeding its budget. */
+const SYNC_RETRY_MS = 2_000;
 
 /**
  * Socket.IO connection to one live session. The server is authoritative: the
@@ -257,6 +261,15 @@ export function useLiveSession(liveSessionId: string) {
           : current,
       ),
     );
+    socket.on(
+      LIVE_EVENTS.hostPresence,
+      ({ hostConnected }: LiveHostPresenceDto) =>
+        setSnapshot((current) =>
+          current?.role === LIVE_ROLE.PARTICIPANT
+            ? { ...current, hostConnected }
+            : current,
+        ),
+    );
     socket.on(LIVE_EVENTS.replaced, () => setConnection('replaced'));
     socket.on('disconnect', (reason) => {
       joinedRef.current = false;
@@ -362,17 +375,25 @@ export function useLiveSession(liveSessionId: string) {
 
   /**
    * Asks the server for the current state, e.g. when the local countdown
-   * reaches zero; this also closes an overdue question on the server.
+   * reaches zero; this also closes an overdue question on the server. A sync
+   * refused for exceeding its budget is tried once more after a pause.
    */
   const resync = useCallback(async () => {
-    const socket = socketRef.current;
-    if (!socket?.connected || !joinedRef.current) return;
-    const sentAt = Date.now();
-    const ack = (await socket
-      .timeout(10_000)
-      .emitWithAck(LIVE_EVENTS.sync, { liveSessionId })
-      .catch(() => null)) as SocketAck<LiveSnapshotDto> | null;
-    if (ack?.ok) receive(ack.data, sentAt);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const socket = socketRef.current;
+      if (!socket?.connected || !joinedRef.current) return;
+      const sentAt = Date.now();
+      const ack = (await socket
+        .timeout(10_000)
+        .emitWithAck(LIVE_EVENTS.sync, { liveSessionId })
+        .catch(() => null)) as SocketAck<LiveSnapshotDto> | null;
+      if (ack?.ok) {
+        receive(ack.data, sentAt);
+        return;
+      }
+      if (ack?.error.code !== ERROR_CODE.RATE_LIMITED) return;
+      await new Promise((resolve) => window.setTimeout(resolve, SYNC_RETRY_MS));
+    }
   }, [liveSessionId, receive]);
 
   /**
