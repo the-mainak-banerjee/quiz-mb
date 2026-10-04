@@ -17,10 +17,13 @@ export const APP_LINKS = {
     NEW_PROJECT_QUIZ: (projectId: string) =>
       `/quizzes/new?projectId=${projectId}`,
     EDIT_QUIZ: (quizId: string) => `/quizzes/${quizId}/edit`,
+    VIEW_QUIZ: (quizId: string) => `/quizzes/${quizId}/view`,
     MANAGE_QUIZ: (quizId: string) => `/quizzes/${quizId}/manage`,
     LIVE_QUIZ: (quizId: string) => `/quizzes/${quizId}/live`,
     LIVE_CONFLICT: (quizId: string) => `/quizzes/${quizId}/live-conflict`,
+    QUIZ_RESULTS: (quizId: string) => `/quizzes/${quizId}/results`,
     HISTORY: '/history',
+    HISTORY_RESULT: (liveSessionId: string) => `/history/${liveSessionId}`,
   },
   PUBLIC_QUIZ: (slug: string) => `/quiz/${slug}`,
   PUBLIC_QUIZ_LIVE: (slug: string) => `/quiz/${slug}/live`,

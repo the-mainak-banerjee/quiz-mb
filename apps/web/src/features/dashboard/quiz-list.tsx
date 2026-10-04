@@ -145,17 +145,21 @@ export function QuizList({
         <div className="grid grid-cols-1 gap-gutter md:grid-cols-2 lg:grid-cols-3">
           {visible.map((quiz) => {
             const actionHref =
-              quiz.role === 'host' && quiz.status === 'live'
-                ? APP_LINKS.WORKSPACE.LIVE_QUIZ(quiz.id)
-                : quiz.role === 'host' && quiz.status === 'scheduled'
-                  ? APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id)
-                  : quiz.role === 'host' && quiz.status === 'draft'
-                    ? APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)
-                    : quiz.role === 'participant' && quiz.status === 'live'
-                      ? APP_LINKS.PUBLIC_QUIZ_LIVE(quiz.publicId ?? quiz.id)
-                      : quiz.role === 'participant'
-                        ? APP_LINKS.PUBLIC_QUIZ(quiz.publicId ?? quiz.id)
-                        : undefined;
+              quiz.role === 'host' && quiz.status === 'completed'
+                ? APP_LINKS.WORKSPACE.QUIZ_RESULTS(quiz.id)
+                : quiz.role === 'participant' && quiz.liveSessionId
+                  ? APP_LINKS.WORKSPACE.HISTORY_RESULT(quiz.liveSessionId)
+                  : quiz.role === 'host' && quiz.status === 'live'
+                    ? APP_LINKS.WORKSPACE.LIVE_QUIZ(quiz.id)
+                    : quiz.role === 'host' && quiz.status === 'scheduled'
+                      ? APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id)
+                      : quiz.role === 'host' && quiz.status === 'draft'
+                        ? APP_LINKS.WORKSPACE.EDIT_QUIZ(quiz.id)
+                        : quiz.role === 'participant' && quiz.status === 'live'
+                          ? APP_LINKS.PUBLIC_QUIZ_LIVE(quiz.publicId ?? quiz.id)
+                          : quiz.role === 'participant'
+                            ? APP_LINKS.PUBLIC_QUIZ(quiz.publicId ?? quiz.id)
+                            : undefined;
 
             return (
               <QuizCard

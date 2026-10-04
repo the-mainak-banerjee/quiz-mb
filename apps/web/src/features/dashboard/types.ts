@@ -1,6 +1,8 @@
 export type Quiz = {
   id: string;
   publicId?: string;
+  /** Completed quizzes a participant registered for: their summary page. */
+  liveSessionId?: string;
   project: string;
   role: 'host' | 'participant';
   status: 'live' | 'scheduled' | 'draft' | 'completed';

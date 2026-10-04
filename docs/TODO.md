@@ -55,3 +55,12 @@ Question prompts are written in Markdown, but its behaviour is not production re
 ## Phase 10: reveal and standings when the host ends during a question
 
 `LiveSessionsRepository.end()` force-completes the active asked question but no `questionEnded` event follows, so participants never see that question's reveal, their own correctness and points, or standings that include it (accepted answers are kept and scored). Handle it with Phase 10's End Quiz and final leaderboard: show the final question's result and recalculated standings, or the final results, after ending mid-question. Cover it in the live questions integration test.
+
+
+## Ui Issues
+- The image upload should be on even before saving the quiz basis
+- After saving a question it should scroll up to top
+- In the live question screen fix the layout of the header and buttons after all question asked
+- 0 did not answer - If it is 0 we don't need to show this text
+- We need to add tabular nums in timing section
+- The completed view quiz page The input fields in question details don't look like they are disabled make them look like disabled same as Basic details input

@@ -202,6 +202,8 @@ export type RegistrationDto = {
   registered: boolean;
   registeredAt: string | null;
   registrationCount: number;
+  /** The ended live session of a quiz the user registered for (their result). */
+  completedLiveSessionId: string | null;
 };
 
 export type HostRegistrationDto = {
@@ -211,10 +213,90 @@ export type HostRegistrationDto = {
   registeredAt: string;
 };
 
+/**
+ * A participant's final result. Counts cover scored (single-choice and
+ * multiple-answer) questions that were actually asked; descriptive
+ * questions are not counted.
+ */
+export type ParticipantFinalResultDto = {
+  totalScore: number;
+  rank: number;
+  /** Everyone who entered the live session. */
+  participantCount: number;
+  correctCount: number;
+  incorrectCount: number;
+  notAttemptedCount: number;
+};
+
+/** One completed quiz the participant took part in. */
+/**
+ * One completed quiz the participant was registered for. `result` is null
+ * when they never entered the live room.
+ */
+export type ParticipantHistoryDto = {
+  liveSessionId: string;
+  quiz: PublicQuizDto;
+  completedAt: string | null;
+  result: ParticipantFinalResultDto | null;
+};
+
 export type ParticipantDashboardDto = {
   upcoming: PublicQuizDto[];
   live: PublicQuizDto[];
-  history: PublicQuizDto[];
+  /** Completed quizzes with the participant's final result, newest first. */
+  history: ParticipantHistoryDto[];
+};
+
+/** Totals for a completed live session. */
+export type FinalSummaryDto = {
+  participantCount: number;
+  askedQuestionCount: number;
+  /** Every question in the quiz, asked or not. */
+  quizQuestionCount: number;
+  /** Asked single-choice and multiple-answer questions. */
+  scoredQuestionCount: number;
+  /** Mean final score across participants (rounded). */
+  averageScore: number;
+  completedAt: string | null;
+};
+
+/** Completed quiz summary for one participant (`result` null if absent). */
+export type ParticipantQuizResultDto = {
+  liveSessionId: string;
+  quiz: {
+    id: string;
+    publicId: string;
+    title: string;
+    projectName: string;
+    hostName: string;
+  };
+  /** When the host started the quiz; null if it ended from the lobby. */
+  startedAt: string | null;
+  completedAt: string | null;
+  result: ParticipantFinalResultDto | null;
+};
+
+/** Rows on the host results page; results pages hold this many. */
+export const RESULTS_PAGE_SIZE = 100;
+
+export type HostResultEntryDto = {
+  rank: number;
+  userId: string;
+  name: string;
+  score: number;
+  correctCount: number;
+  incorrectCount: number;
+  notAttemptedCount: number;
+};
+
+export type HostQuizResultsDto = {
+  liveSessionId: string;
+  quiz: { id: string; publicId: string; title: string; projectName: string };
+  summary: FinalSummaryDto;
+  /** Ranked participants for this page (ties ordered by name). */
+  entries: HostResultEntryDto[];
+  /** Offset of the next page, or null when this is the last one. */
+  nextOffset: number | null;
 };
 
 export type HostDashboardQuizDto = {
@@ -281,6 +363,10 @@ export const LIVE_EVENTS = {
   leaderboardShow: 'host:leaderboard-show',
   /** Host returns participants to the latest question result. */
   leaderboardHide: 'host:leaderboard-hide',
+  /** Personal: this participant's final result once the quiz ends. */
+  quizEnded: 'quiz:ended',
+  /** Host reveals the final Top 10 on every participant screen. */
+  finalLeaderboardShow: 'host:final-leaderboard-show',
 } as const;
 
 /** Most rows a leaderboard lists; tied scores share a rank. */
@@ -410,6 +496,8 @@ export type LeaderboardEntryDto = {
   userId: string;
   name: string;
   score: number;
+  /** Final leaderboard only: correct scored answers. */
+  correctCount?: number;
 };
 
 /**
@@ -477,6 +565,13 @@ export type HostLiveSnapshotDto = LiveSnapshotBase & {
   currentQuestion: HostCurrentQuestionDto | null;
   /** Present while the leaderboard is shown to participants. */
   leaderboard: LeaderboardDto | null;
+  /** After the quiz ends: totals and the final Top 10 (COMPLETED). */
+  final: {
+    summary: FinalSummaryDto;
+    leaderboard: LeaderboardDto;
+    /** Whether participants can see the final leaderboard. */
+    leaderboardShown: boolean;
+  } | null;
 };
 
 export type ParticipantLiveSnapshotDto = LiveSnapshotBase & {

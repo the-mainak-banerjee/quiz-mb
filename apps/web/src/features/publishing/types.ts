@@ -1,7 +1,7 @@
 import type { MediaDto, PublicQuizStatus } from '@quizmb/contracts';
 
 export type PublicQuizState =
-  'logged-out' | 'open' | 'registered' | 'full' | 'closed';
+  'logged-out' | 'open' | 'registered' | 'full' | 'closed' | 'completed';
 
 export type PublishedQuizViewModel = {
   id: string;

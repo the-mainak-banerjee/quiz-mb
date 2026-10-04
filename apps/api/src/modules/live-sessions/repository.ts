@@ -7,6 +7,7 @@ import {
   PUBLIC_QUIZ_STATUSES,
   ERROR_CODE,
   LIVE_SESSION_STATE,
+  QUESTION_TYPE,
   type LiveSessionState,
   QUIZ_STATUS,
   REGISTRATION_STATUS,
@@ -25,6 +26,8 @@ export type LiveSessionRow = {
   startedAt: Date | null;
   endedAt: Date | null;
   createdAt: Date;
+  /** Set once the host reveals the final leaderboard. */
+  finalLeaderboardShownAt: Date | null;
   quiz: {
     id: string;
     publicId: string;
@@ -66,6 +69,40 @@ function rankedStandings(liveSessionId: string) {
     GROUP BY ps."userId"`;
 }
 
+/**
+ * Final results for everyone who entered the session: total points over all
+ * asked questions (the shared RANK() semantics), and correct / incorrect /
+ * not-attempted counts over asked scored questions only. Descriptive
+ * questions never score and are not counted. Unasked questions have no
+ * AskedQuestion row, so they cannot affect anything.
+ */
+function finalResultRows(liveSessionId: string) {
+  return Prisma.sql`
+    SELECT ps."userId",
+      COALESCE(SUM(s."pointsAwarded"), 0)::int AS "totalScore",
+      RANK() OVER (
+        ORDER BY COALESCE(SUM(s."pointsAwarded"), 0) DESC
+      )::int AS rank,
+      COUNT(s.id) FILTER (
+        WHERE s."isCorrect" AND q.type <> ${QUESTION_TYPE.DESCRIPTIVE}::"QuestionType"
+      )::int AS "correctCount",
+      COUNT(s.id) FILTER (
+        WHERE NOT s."isCorrect" AND q.type <> ${QUESTION_TYPE.DESCRIPTIVE}::"QuestionType"
+      )::int AS "incorrectCount",
+      (COUNT(aq.id) FILTER (
+        WHERE q.type <> ${QUESTION_TYPE.DESCRIPTIVE}::"QuestionType"
+      ) - COUNT(s.id) FILTER (
+        WHERE q.type <> ${QUESTION_TYPE.DESCRIPTIVE}::"QuestionType"
+      ))::int AS "notAttemptedCount"
+    FROM participant_sessions ps
+    LEFT JOIN asked_questions aq ON aq."liveSessionId" = ps."liveSessionId"
+    LEFT JOIN questions q ON q.id = aq."questionId"
+    LEFT JOIN answer_submissions s
+      ON s."askedQuestionId" = aq.id AND s."userId" = ps."userId"
+    WHERE ps."liveSessionId" = ${liveSessionId}::uuid
+    GROUP BY ps."userId"`;
+}
+
 const askedInclude = {
   question: {
     include: { options: { orderBy: { position: 'asc' } }, image: true },
@@ -85,9 +122,18 @@ export type SubmissionRow = Prisma.AnswerSubmissionGetPayload<{
 /** Newest descriptive responses included in host progress. */
 const HOST_RESPONSE_LIMIT = 50;
 
-const isUniqueViolation = (error: unknown) =>
-  error instanceof Prisma.PrismaClientKnownRequestError &&
-  error.code === 'P2002';
+/** Unique-key violation from a Prisma call (P2002) or raw SQL (P2010). */
+const isUniqueViolation = (error: unknown) => {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (error.code === 'P2002') return true;
+  const cause = (
+    error.meta as
+      { driverAdapterError?: { cause?: { originalCode?: string } } } | undefined
+  )?.driverAdapterError?.cause;
+  return error.code === 'P2010' && cause?.originalCode === '23505';
+};
+
+type AskedQuestion = Prisma.AskedQuestionGetPayload<object>;
 
 const alreadyAsked = () =>
   new ApiError(
@@ -159,6 +205,7 @@ export class LiveSessionsRepository {
         startedAt: Date | null;
         endedAt: Date | null;
         createdAt: Date;
+        finalLeaderboardShownAt: Date | null;
         publicId: string;
         title: string;
         plannedStartAt: Date | null;
@@ -172,7 +219,8 @@ export class LiveSessionsRepository {
     >`
       SELECT s.id::text, s."quizId"::text, s."hostUserId"::text,
         s.state::text, s."allowLateJoin", s."startedAt", s."endedAt",
-        s."createdAt", q."publicId", q.title, q."plannedStartAt",
+        s."createdAt", s."finalLeaderboardShownAt", q."publicId", q.title,
+        q."plannedStartAt",
         q."registrationLimit", q."defaultQuestionDurationSeconds",
         p.name AS "projectName", u.name AS "creatorName",
         (SELECT COUNT(*) FROM questions WHERE "quizId" = q.id)::int
@@ -196,6 +244,7 @@ export class LiveSessionsRepository {
       startedAt: row.startedAt,
       endedAt: row.endedAt,
       createdAt: row.createdAt,
+      finalLeaderboardShownAt: row.finalLeaderboardShownAt,
       quiz: {
         id: row.quizId,
         publicId: row.publicId,
@@ -401,6 +450,16 @@ export class LiveSessionsRepository {
         where: { liveSessionId: id, status: ASKED_QUESTION_STATUS.ACTIVE },
         data: { status: ASKED_QUESTION_STATUS.COMPLETED, completedAt: endedAt },
       });
+      // Persist final results once, from asked questions only. All asked
+      // questions are closed above, so every answer is final.
+      await tx.$executeRaw`
+        INSERT INTO quiz_results
+          (id, "liveSessionId", "userId", "totalScore", rank,
+           "correctCount", "incorrectCount", "notAttemptedCount")
+        SELECT gen_random_uuid(), ${id}::uuid, r."userId", r."totalScore",
+          r.rank, r."correctCount", r."incorrectCount", r."notAttemptedCount"
+        FROM (${finalResultRows(id)}) r
+        ON CONFLICT ("liveSessionId", "userId") DO NOTHING`;
       await tx.liveQuizSession.update({
         where: { id },
         data: { state: LIVE_SESSION_STATE.COMPLETED, endedAt },
@@ -411,6 +470,17 @@ export class LiveSessionsRepository {
       });
       return true;
     }, lockedTransaction);
+  }
+
+  // ---- Final results ---------------------------------------------------------
+
+  /** Marks the final leaderboard as revealed (completed sessions only). */
+  async showFinalLeaderboard(id: string) {
+    const { count } = await this.db.liveQuizSession.updateMany({
+      where: { id, state: LIVE_SESSION_STATE.COMPLETED },
+      data: { finalLeaderboardShownAt: new Date() },
+    });
+    if (count === 0) invalidTransition();
   }
 
   roster(quizId: string, limit: number) {
@@ -474,39 +544,47 @@ export class LiveSessionsRepository {
    * unique keys reject a reused question or a second active one.
    */
   async startQuestion(id: string, questionId: string, durationSeconds: number) {
+    const startedAt = new Date();
+    const endsAt = new Date(startedAt.getTime() + durationSeconds * 1000);
+    // One atomic statement (one round trip). The conditional UPDATE takes the
+    // session row lock and only matches an idle session, so concurrent starts
+    // serialize and the loser matches nothing. Asking from the leaderboard
+    // hides it implicitly. A reused question violates the unique key and the
+    // whole statement, including the state change, rolls back.
+    let rows: AskedQuestion[];
     try {
-      return await this.db.$transaction(async (tx) => {
-        const session = await lockSession(tx, id);
-        // Asking from the leaderboard hides it implicitly.
-        if (
-          session.state !== LIVE_SESSION_STATE.LIVE_IDLE &&
-          session.state !== LIVE_SESSION_STATE.QUESTION_RESULT &&
-          session.state !== LIVE_SESSION_STATE.LEADERBOARD
+      rows = await this.db.$queryRaw<AskedQuestion[]>`
+        WITH session AS (
+          UPDATE live_quiz_sessions
+          SET state = ${LIVE_SESSION_STATE.QUESTION_ACTIVE}::"LiveSessionState",
+            "updatedAt" = now()
+          WHERE id = ${id}::uuid
+            AND state IN (
+              ${LIVE_SESSION_STATE.LIVE_IDLE}::"LiveSessionState",
+              ${LIVE_SESSION_STATE.QUESTION_RESULT}::"LiveSessionState",
+              ${LIVE_SESSION_STATE.LEADERBOARD}::"LiveSessionState"
+            )
+          RETURNING id
         )
-          invalidTransition();
-        const startedAt = new Date();
-        const sequenceNumber =
-          (await tx.askedQuestion.count({ where: { liveSessionId: id } })) + 1;
-        const asked = await tx.askedQuestion.create({
-          data: {
-            liveSessionId: id,
-            questionId,
-            sequenceNumber,
-            durationSeconds,
-            startedAt,
-            endsAt: new Date(startedAt.getTime() + durationSeconds * 1000),
-          },
-        });
-        await tx.liveQuizSession.update({
-          where: { id },
-          data: { state: LIVE_SESSION_STATE.QUESTION_ACTIVE },
-        });
-        return asked;
-      }, lockedTransaction);
+        INSERT INTO asked_questions
+          (id, "liveSessionId", "questionId", "sequenceNumber", status,
+           "durationSeconds", "startedAt", "endsAt")
+        SELECT gen_random_uuid(), session.id, ${questionId}::uuid,
+          (SELECT COUNT(*) FROM asked_questions
+            WHERE "liveSessionId" = ${id}::uuid) + 1,
+          ${ASKED_QUESTION_STATUS.ACTIVE}::"AskedQuestionStatus",
+          ${durationSeconds}::int, ${startedAt}, ${endsAt}
+        FROM session
+        RETURNING id::text, "liveSessionId"::text, "questionId"::text,
+          "sequenceNumber", status::text, "durationSeconds", "startedAt",
+          "endsAt", "completedAt", "createdAt"`;
     } catch (error) {
       if (isUniqueViolation(error)) throw alreadyAsked();
       throw error;
     }
+    const [asked] = rows;
+    if (!asked) invalidTransition();
+    return asked;
   }
 
   /**

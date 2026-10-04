@@ -11,6 +11,7 @@ import {
   type LiveRemovedDto,
   type LiveSnapshotDto,
   type ParticipantAnswerDto,
+  type ParticipantFinalResultDto,
   type ParticipantStandingDto,
   type SocketAck,
   ERROR_CODE,
@@ -116,6 +117,9 @@ export function useLiveSession(liveSessionId: string) {
   const [myStanding, setMyStanding] = useState<ParticipantStandingDto | null>(
     null,
   );
+  /** This participant's final result, sent once when the quiz ends. */
+  const [finalResult, setFinalResult] =
+    useState<ParticipantFinalResultDto | null>(null);
   /**
    * Server clock minus browser clock, measured from join and sync replies
    * (half the round trip corrects for latency). Broadcasts and host command
@@ -236,6 +240,7 @@ export function useLiveSession(liveSessionId: string) {
     socket.on(LIVE_EVENTS.removed, (removed: LiveRemovedDto) => fail(removed));
     socket.on(LIVE_EVENTS.snapshot, (next: LiveSnapshotDto) => receive(next));
     socket.on(LIVE_EVENTS.standing, setMyStanding);
+    socket.on(LIVE_EVENTS.quizEnded, setFinalResult);
     socket.on(LIVE_EVENTS.submissions, (progress: HostQuestionProgressDto) =>
       setSnapshot((current) => applyProgress(current, progress)),
     );
@@ -392,6 +397,7 @@ export function useLiveSession(liveSessionId: string) {
     reconnect,
     myAnswer,
     myStanding,
+    finalResult,
     lateJoinQuestionId,
     clockOffsetMs,
     submitAnswer,

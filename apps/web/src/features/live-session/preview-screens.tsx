@@ -26,6 +26,12 @@ import {
   hostQuestions,
   participantQuestions,
   previewDescriptiveAnswer,
+  previewFinalBoard,
+  previewFinalResult,
+  previewFinalSummary,
+  previewHistory,
+  previewHostResults,
+  previewParticipantResult,
   previewLeaderboard,
   previewParticipantId,
   previewResult,
@@ -33,6 +39,10 @@ import {
   type ParticipantQuestionFixture,
 } from './mock-data';
 import { HostLeaderboardView, ParticipantLeaderboard } from './leaderboard';
+import { HostQuizCompleted, ParticipantQuizEnded } from './quiz-completed';
+import { HistoryView } from '@/features/results/history-view';
+import { HostResultsView } from '@/features/results/host-results-view';
+import { ParticipantSummary } from '@/features/results/participant-summary';
 import { ParticipantQuestionView } from './participant-question';
 import { ParticipantQuestionDemo } from './participant-question-demo';
 import type { ParticipantQuestionPhase, SubmittedAnswer } from './types';
@@ -131,6 +141,24 @@ export const LIVE_PREVIEW_SCREENS = [
     slug: 'participant-leaderboard-outside',
     title: 'Participant — leaderboard, outside the top 10',
   },
+  { slug: 'host-quiz-completed', title: 'Host — quiz completed, private' },
+  {
+    slug: 'host-quiz-completed-revealed',
+    title: 'Host — quiz completed, final leaderboard revealed',
+  },
+  { slug: 'participant-quiz-ended', title: 'Participant — quiz ended' },
+  {
+    slug: 'participant-final-leaderboard',
+    title: 'Participant — final leaderboard',
+  },
+  { slug: 'history', title: 'Participant — history' },
+  { slug: 'history-empty', title: 'Participant — history, empty' },
+  { slug: 'history-summary', title: 'Participant — completed quiz summary' },
+  {
+    slug: 'history-summary-absent',
+    title: 'Participant — completed quiz summary, did not join',
+  },
+  { slug: 'host-results', title: 'Host — completed quiz results' },
 ] as const;
 
 type PreviewSlug = (typeof LIVE_PREVIEW_SCREENS)[number]['slug'];
@@ -409,7 +437,6 @@ export function LivePreviewScreen({
           board={previewLeaderboard}
           participantId={inside ? previewParticipantId : 'user-outside'}
           standing={{
-            askedQuestionId: 'asked-3',
             totalScore: inside ? 4120 : 3240,
             rank: inside ? 8 : 18,
             participantCount: 500,
@@ -466,6 +493,67 @@ export function LivePreviewScreen({
             participantName={previewParticipantName}
           />
         </LiveSessionShell>
+      );
+    case 'host-quiz-completed':
+    case 'host-quiz-completed-revealed':
+      return (
+        <LiveSessionShell>
+          <HostQuizCompleted
+            quiz={liveQuiz}
+            summary={previewFinalSummary}
+            board={previewFinalBoard}
+            shown={screen === 'host-quiz-completed-revealed'}
+            resultsHref="/dev/live/host-results"
+            dashboardHref={APP_LINKS.WORKSPACE.DASHBOARD}
+          />
+        </LiveSessionShell>
+      );
+    case 'participant-quiz-ended':
+      return (
+        <LiveSessionShell>
+          <ParticipantQuizEnded
+            quizTitle={liveQuiz.title}
+            result={previewFinalResult}
+            historyHref="/dev/live/history"
+          />
+        </LiveSessionShell>
+      );
+    case 'participant-final-leaderboard':
+      return (
+        <LiveSessionShell>
+          <ParticipantLeaderboard
+            board={previewFinalBoard}
+            standing={previewFinalResult}
+            participantId="user-outside"
+            final
+          />
+        </LiveSessionShell>
+      );
+    case 'history':
+    case 'history-empty':
+    case 'history-summary':
+    case 'history-summary-absent':
+    case 'host-results':
+      return (
+        <CurrentUserProvider initialUser={previewHost}>
+          <WorkspaceShell>
+            <main className="mx-auto flex w-full max-w-content flex-1 flex-col px-margin-sm py-space-lg md:px-margin lg:px-space-xl">
+              {screen === 'history' && <HistoryView items={previewHistory} />}
+              {screen === 'history-empty' && <HistoryView items={[]} />}
+              {screen === 'history-summary' && (
+                <ParticipantSummary data={previewParticipantResult} />
+              )}
+              {screen === 'history-summary-absent' && (
+                <ParticipantSummary
+                  data={{ ...previewParticipantResult, result: null }}
+                />
+              )}
+              {screen === 'host-results' && (
+                <HostResultsView initial={previewHostResults} />
+              )}
+            </main>
+          </WorkspaceShell>
+        </CurrentUserProvider>
       );
     case 'host-conflict':
       return (

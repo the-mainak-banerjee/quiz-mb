@@ -7,6 +7,7 @@ import {
   type HostCurrentQuestionDto,
   type HostQuestionProgressDto,
   LEADERBOARD_SIZE,
+  type FinalSummaryDto,
   type LeaderboardDto,
   type HostLiveSnapshotDto,
   LIVE_ROLE,
@@ -32,6 +33,8 @@ import {
   type DomainEvents,
 } from '../../infrastructure/domain-events.js';
 import type { MediaService } from '../media/service.js';
+import { ResultsRepository } from '../results/repository.js';
+import { ResultsService } from '../results/service.js';
 import { evaluateAnswer } from './answers.js';
 import { pointsFor } from './scoring.js';
 import type { LiveStore } from './live-store.js';
@@ -203,7 +206,12 @@ export class LiveSessionsService {
     private events?: DomainEvents,
     private media?: Pick<MediaService, 'dto'>,
     private logger?: Pick<Logger, 'warn' | 'error'>,
-  ) {}
+  ) {
+    this.results = new ResultsService(new ResultsRepository(repository.db));
+  }
+
+  /** Saved final results; written by `end`, read through this service. */
+  private results: ResultsService;
 
   /** Lifecycle changes are published in-process for the status namespace. */
   private publishStatus(quizId: string, status: QuizStatusDto['status']) {
@@ -426,10 +434,61 @@ export class LiveSessionsService {
     };
   }
 
+  /** What participants see as the leaderboard right now, if anything. */
   private shownLeaderboard(session: LiveSessionRow) {
-    return session.state === LIVE_SESSION_STATE.LEADERBOARD
-      ? this.leaderboard(session.id)
-      : Promise.resolve(null);
+    if (session.state === LIVE_SESSION_STATE.LEADERBOARD)
+      return this.leaderboard(session.id);
+    if (
+      session.state === LIVE_SESSION_STATE.COMPLETED &&
+      session.finalLeaderboardShownAt
+    )
+      return this.finalBoard(session).then(({ leaderboard }) => leaderboard);
+    return Promise.resolve(null);
+  }
+
+  // ---- Final results (completed sessions) ------------------------------------
+
+  /** Totals and the final Top 10, read from saved results. */
+  private async finalBoard(session: LiveSessionRow): Promise<{
+    summary: FinalSummaryDto;
+    leaderboard: LeaderboardDto;
+  }> {
+    const summary = await this.results.summary(session.id, session.endedAt);
+    return {
+      summary,
+      leaderboard: await this.results.leaderboard(session.id, summary),
+    };
+  }
+
+  private async hostFinal(session: LiveSessionRow) {
+    if (session.state !== LIVE_SESSION_STATE.COMPLETED) return null;
+    return {
+      ...(await this.finalBoard(session)),
+      leaderboardShown: session.finalLeaderboardShownAt !== null,
+    };
+  }
+
+  /**
+   * Each connected participant's own final result, sent when the quiz ends.
+   * There is no rejoining afterwards; history shows it from then on.
+   */
+  async finalResultDeliveries(liveSessionId: string) {
+    const [presence, results] = await Promise.all([
+      this.store.presence(liveSessionId),
+      this.results.all(liveSessionId),
+    ]);
+    return [...results].flatMap(([userId, result]) => {
+      const socketId = presence.get(userId);
+      return socketId ? [{ socketId, result }] : [];
+    });
+  }
+
+  /** Host reveals the final Top 10 on participant screens (after End). */
+  async showFinalLeaderboard(liveSessionId: string, userId: string) {
+    const session = await this.load(liveSessionId);
+    this.requireHost(session, userId);
+    await this.repository.showFinalLeaderboard(liveSessionId);
+    return { ...session, finalLeaderboardShownAt: new Date() };
   }
 
   /** Host-only progress for throttled realtime updates. */
@@ -456,15 +515,23 @@ export class LiveSessionsService {
     session: LiveSessionRow,
     preloaded?: AskedQuestionRow | null,
   ): Promise<HostLiveSnapshotDto> {
-    const [connectedIds, roster, questions, asked, current, leaderboard] =
-      await Promise.all([
-        this.store.connectedUserIds(session.id),
-        this.repository.roster(session.quizId, HOST_ROSTER_LIMIT),
-        this.quizQuestions(session),
-        this.repository.askedQuestions(session.id),
-        preloaded === undefined ? this.currentAsked(session) : preloaded,
-        this.shownLeaderboard(session),
-      ]);
+    const [
+      connectedIds,
+      roster,
+      questions,
+      asked,
+      current,
+      leaderboard,
+      final,
+    ] = await Promise.all([
+      this.store.connectedUserIds(session.id),
+      this.repository.roster(session.quizId, HOST_ROSTER_LIMIT),
+      this.quizQuestions(session),
+      this.repository.askedQuestions(session.id),
+      preloaded === undefined ? this.currentAsked(session) : preloaded,
+      this.shownLeaderboard(session),
+      this.hostFinal(session),
+    ]);
     return {
       ...this.base(session, connectedIds.size),
       role: LIVE_ROLE.HOST,
@@ -495,6 +562,7 @@ export class LiveSessionsService {
       })),
       currentQuestion: current ? await this.hostCurrent(current) : null,
       leaderboard,
+      final,
     };
   }
 
@@ -923,16 +991,13 @@ export class LiveSessionsService {
     );
     if (!question)
       throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Question not found.');
-    const asked = await this.store.withLock(
-      LOCK_OPERATION.SESSION_TRANSITION,
+    // No Redis lock: the single conditional statement already serializes
+    // concurrent starts on the session row.
+    const asked = await this.repository.startQuestion(
       liveSessionId,
-      () =>
-        this.repository.startQuestion(
-          liveSessionId,
-          questionId,
-          question.durationOverrideSeconds ??
-            session.quiz.defaultQuestionDurationSeconds,
-        ),
+      questionId,
+      question.durationOverrideSeconds ??
+        session.quiz.defaultQuestionDurationSeconds,
     );
     this.cacheFor(liveSessionId).answerKeys.set(asked.id, {
       liveSessionId,

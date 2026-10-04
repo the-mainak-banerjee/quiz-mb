@@ -456,6 +456,26 @@ export function attachLiveRealtime(
         requireHost();
         const session = await service.end(liveSessionId, userId);
         logger.info({ liveSessionId }, 'Live quiz ended');
+        // Each participant gets their own final result first; the final
+        // leaderboard stays hidden until the host reveals it.
+        for (const { socketId, result } of await service.finalResultDeliveries(
+          liveSessionId,
+        ))
+          nsp.to(socketId).emit(LIVE_EVENTS.quizEnded, result);
+        return broadcast(session);
+      },
+    );
+
+    on(
+      LIVE_EVENTS.finalLeaderboardShow,
+      liveSessionCommandSchema,
+      async ({ liveSessionId }) => {
+        requireHost();
+        const session = await service.showFinalLeaderboard(
+          liveSessionId,
+          userId,
+        );
+        logger.info({ liveSessionId }, 'Final leaderboard shown');
         return broadcast(session);
       },
     );

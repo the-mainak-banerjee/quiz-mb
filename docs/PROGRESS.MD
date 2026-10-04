@@ -2,9 +2,20 @@
 
 ## Current status
 
-Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Phase 5 (lobby and live-session foundation), Phases 6–8 (live questions, submission, scoring, personal rank and live distribution) and Phase 9 (host presentation controls and leaderboard) are implemented end to end, including a minimal End quiz; final results and history remain for Phase 10. No deployment has been performed.
+Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data; live, scoring, and history sections stay empty until later phases. Phase 5 (lobby and live-session foundation), Phases 6–8 (live questions, submission, scoring, personal rank and live distribution) and Phase 9 (host presentation controls and leaderboard) and Phase 10 (end quiz, final results and history) are implemented end to end. No deployment has been performed.
 
 This document records implementation progress, verification results, limitations, and approved scope adjustments. Project setup and usage instructions belong in the root README.
+
+## Phase 10 — End quiz, final results and history — October 2, 2026
+
+Branch `phase-10-results`.
+
+- Ending the quiz saves each participant's final score, rank and correct / incorrect / not-attempted counts in `quiz_results` (migration `20261002000000_quiz_results`), in the same transaction that completes the session. Only questions the host asked count; descriptive questions are not scored.
+- Participants immediately see their own final result; the host sees totals and a private final Top 10, and can reveal it to every connected participant (`host:final-leaderboard-show`). There is no rejoining after the end.
+- History page lists completed quizzes the participant registered for (including ones they missed) and opens a per-quiz summary with start and end times. The host results page shows totals and every participant ranked, 100 per page with Load more.
+- Completed quizzes are read only at `/quizzes/:id/view` (the edit address redirects there); the editor shows the real status and links back to the manage page. The public quiz page shows a completed state, with View results for the host and View your result (that quiz's summary) for registered participants.
+- Starting a question is now one database statement without a Redis lock (participant delivery about 1.8 s → 0.56 s at high database latency).
+- Checks: format, lint, typecheck, unit tests, build, and the live questions, live sessions and publishing integration tests passed.
 
 ## Phase 9 — Host presentation controls and leaderboard — October 1, 2026
 
