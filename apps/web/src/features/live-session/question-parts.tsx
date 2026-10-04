@@ -94,7 +94,7 @@ export function TimerPill({
           className={urgent ? 'stroke-danger' : 'stroke-accent'}
         />
       </svg>
-      <span className="text-label font-bold">
+      <span className="text-label font-bold tabular-nums">
         {remainingSeconds}s remaining
       </span>
     </span>
@@ -103,7 +103,7 @@ export function TimerPill({
 
 export function DurationLabel({ seconds }: { seconds: number }) {
   return (
-    <span className="inline-flex items-center gap-1">
+    <span className="inline-flex items-center gap-1 tabular-nums">
       <Timer size={14} aria-hidden="true" />
       {seconds}s
     </span>

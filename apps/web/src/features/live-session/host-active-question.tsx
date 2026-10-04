@@ -23,6 +23,8 @@ type ActiveQuestionProps = {
   connected: number;
   /** The question's timer has ended: show its final results. */
   ended?: boolean;
+  /** No unused questions remain, so there is no next question to choose. */
+  allAsked?: boolean;
 } & (
   | { kind: 'scored'; results: OptionResult[] }
   | { kind: 'descriptive'; responses: DescriptiveResponse[] }
@@ -210,6 +212,7 @@ export function HostActiveQuestion(props: ActiveQuestionProps) {
     submitted,
     connected,
     ended = false,
+    allAsked = false,
   } = props;
   const scored = props.kind === 'scored';
   return (
@@ -270,10 +273,12 @@ export function HostActiveQuestion(props: ActiveQuestionProps) {
                 className="text-accent"
               />
               {submitted} submitted
-              <Text as="span" variant="body-secondary" tone="secondary">
-                · {Math.max(connected - submitted, 0)}{' '}
-                {ended ? 'did not answer' : 'waiting'}
-              </Text>
+              {connected > submitted && (
+                <Text as="span" variant="body-secondary" tone="secondary">
+                  · {connected - submitted}{' '}
+                  {ended ? 'did not answer' : 'waiting'}
+                </Text>
+              )}
             </Text>
             <Text variant="label" className="text-accent">
               {percentOf(submitted, connected)}% participation
@@ -303,7 +308,7 @@ export function HostActiveQuestion(props: ActiveQuestionProps) {
         <div
           role="status"
           className={cn(
-            'flex h-control-large items-center justify-center gap-2 rounded-control px-space-md text-label',
+            'flex h-control-large items-center justify-center gap-2 rounded-control px-space-md text-label tabular-nums',
             ended
               ? 'bg-surface-low text-text-primary'
               : 'bg-action-primary text-action-on-primary',
@@ -327,9 +332,11 @@ export function HostActiveQuestion(props: ActiveQuestionProps) {
           className="flex items-center justify-center gap-1 text-center"
         >
           <Timer size={14} aria-hidden="true" />
-          {ended
-            ? 'Select the next question from the list when you are ready.'
-            : 'Submissions close automatically at 0:00. Choose the next question after it ends.'}
+          {ended && allAsked
+            ? 'Every question has been asked.'
+            : ended
+              ? 'Select the next question from the list when you are ready.'
+              : 'Submissions close automatically at 0:00. Choose the next question after it ends.'}
         </Text>
       </Surface>
     </>

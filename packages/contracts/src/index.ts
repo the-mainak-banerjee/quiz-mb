@@ -165,6 +165,8 @@ export type QuizDto = Omit<QuizInput, 'plannedStartAt'> & {
   publicId: string;
   plannedStartAt: string | null;
   status: QuizStatus;
+  /** Confirmed registrations; the limit cannot go below this. */
+  registrationCount: number;
   updatedAt: string;
   cover: MediaDto | null;
   questions: QuestionDto[];

@@ -55,6 +55,7 @@ function ActiveQuestionMain({
   connected,
   clockOffsetMs,
   onExpired,
+  allAsked,
 }: {
   entry: QueueQuestion;
   question: HostLiveQuestionDto;
@@ -63,6 +64,7 @@ function ActiveQuestionMain({
   connected: number;
   clockOffsetMs: number;
   onExpired: () => unknown;
+  allAsked: boolean;
 }) {
   const remainingSeconds = useRemainingSeconds(current.endsAt, clockOffsetMs);
   const expired = !current.ended && remainingSeconds === 0;
@@ -78,6 +80,7 @@ function ActiveQuestionMain({
     submitted: current.submittedCount,
     connected,
     ended: current.ended,
+    allAsked,
   };
   return question.type === QUESTION_TYPE.DESCRIPTIVE ? (
     <HostActiveQuestion
@@ -252,6 +255,7 @@ export function HostLiveConsole({
     activeId,
   );
   const asked = host.askedQuestions.length;
+  const allAsked = asked >= quiz.questionCount;
   const activeEntry = queue.find((item) => item.id === activeId);
   const activeQuestion = host.questions.find((item) => item.id === activeId);
   const showing = host.state === LIVE_SESSION_STATE.LEADERBOARD;
@@ -295,11 +299,15 @@ export function HostLiveConsole({
       description={
         activeId
           ? 'Submissions close automatically when the timer ends.'
-          : showing
-            ? 'Participants see the top 10. Hide it, or select the next question when you are ready.'
-            : justEnded
-              ? 'Participants now see the correct answer and their own result. Choose the next question when you are ready.'
-              : 'No question is active. Connected participants are waiting for your next question.'
+          : allAsked
+            ? showing
+              ? 'Participants see the top 10. Every question has been asked. Hide it, or end the quiz when you are ready.'
+              : 'Every question has been asked. Show the leaderboard, or end the quiz when you are ready.'
+            : showing
+              ? 'Participants see the top 10. Hide it, or select the next question when you are ready.'
+              : justEnded
+                ? 'Participants now see the correct answer and their own result. Choose the next question when you are ready.'
+                : 'No question is active. Connected participants are waiting for your next question.'
       }
       status={
         activeId
@@ -413,6 +421,7 @@ export function HostLiveConsole({
               connected={host.counts.connected}
               clockOffsetMs={clockOffsetMs}
               onExpired={resync}
+              allAsked={allAsked}
             />
           }
           rail={rail}
@@ -451,6 +460,7 @@ export function HostLiveConsole({
                 connected={host.counts.connected}
                 clockOffsetMs={clockOffsetMs}
                 onExpired={resync}
+                allAsked={allAsked}
               />
             ) : undefined
           }

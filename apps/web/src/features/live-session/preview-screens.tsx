@@ -40,6 +40,7 @@ import {
 } from './mock-data';
 import { HostLeaderboardView, ParticipantLeaderboard } from './leaderboard';
 import { HostQuizCompleted, ParticipantQuizEnded } from './quiz-completed';
+import { HostAwayNotice } from './host-away-notice';
 import { HistoryView } from '@/features/results/history-view';
 import { HostResultsView } from '@/features/results/host-results-view';
 import { ParticipantSummary } from '@/features/results/participant-summary';
@@ -59,6 +60,10 @@ import type { QueueQuestion } from './types';
 export const LIVE_PREVIEW_SCREENS = [
   { slug: 'host-lobby', title: 'Host lobby' },
   { slug: 'participant-lobby', title: 'Participant — joined lobby' },
+  {
+    slug: 'participant-host-away',
+    title: 'Participant — host reconnecting notice',
+  },
   { slug: 'participant-reconnecting', title: 'Participant — reconnecting' },
   { slug: 'participant-live-idle', title: 'Participant — quiz live, idle' },
   { slug: 'host-conflict', title: 'Host — active quiz conflict' },
@@ -143,10 +148,22 @@ export const LIVE_PREVIEW_SCREENS = [
   },
   { slug: 'host-quiz-completed', title: 'Host — quiz completed, private' },
   {
+    slug: 'host-quiz-completed-empty',
+    title: 'Host — quiz completed, nobody joined',
+  },
+  {
+    slug: 'host-quiz-completed-unscored',
+    title: 'Host — quiz completed before any question',
+  },
+  {
     slug: 'host-quiz-completed-revealed',
     title: 'Host — quiz completed, final leaderboard revealed',
   },
   { slug: 'participant-quiz-ended', title: 'Participant — quiz ended' },
+  {
+    slug: 'participant-quiz-ended-unscored',
+    title: 'Participant — quiz ended before any question',
+  },
   {
     slug: 'participant-final-leaderboard',
     title: 'Participant — final leaderboard',
@@ -474,6 +491,13 @@ export function LivePreviewScreen({
           <ParticipantLobby quiz={liveQuiz} connected={liveCounts.connected} />
         </LiveSessionShell>
       );
+    case 'participant-host-away':
+      return (
+        <LiveSessionShell>
+          <ParticipantLobby quiz={liveQuiz} connected={liveCounts.connected} />
+          <HostAwayNotice questionOpen={false} />
+        </LiveSessionShell>
+      );
     case 'participant-reconnecting':
       return (
         <LiveSessionShell>
@@ -505,6 +529,43 @@ export function LivePreviewScreen({
             shown={screen === 'host-quiz-completed-revealed'}
             resultsHref="/dev/live/host-results"
             dashboardHref={APP_LINKS.WORKSPACE.DASHBOARD}
+          />
+        </LiveSessionShell>
+      );
+    case 'host-quiz-completed-empty':
+    case 'host-quiz-completed-unscored':
+      return (
+        <LiveSessionShell>
+          <HostQuizCompleted
+            quiz={liveQuiz}
+            summary={{
+              ...previewFinalSummary,
+              participantCount: screen === 'host-quiz-completed-empty' ? 0 : 12,
+              askedQuestionCount: 0,
+              scoredQuestionCount: 0,
+              averageScore: 0,
+            }}
+            board={{ ...previewFinalBoard, entries: [] }}
+            shown={false}
+            resultsHref="/dev/live/host-results"
+            dashboardHref={APP_LINKS.WORKSPACE.DASHBOARD}
+          />
+        </LiveSessionShell>
+      );
+    case 'participant-quiz-ended-unscored':
+      return (
+        <LiveSessionShell>
+          <ParticipantQuizEnded
+            quizTitle={liveQuiz.title}
+            result={{
+              totalScore: 0,
+              rank: 1,
+              participantCount: 12,
+              correctCount: 0,
+              incorrectCount: 0,
+              notAttemptedCount: 0,
+            }}
+            historyHref="/dev/live/history"
           />
         </LiveSessionShell>
       );

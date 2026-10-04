@@ -158,6 +158,7 @@ function RegistrationPanel({
   onRegister,
   onUnregister,
   registering,
+  retrying = false,
 }: {
   quiz: PublishedQuizViewModel;
   state: Exclude<PublicQuizState, 'completed'>;
@@ -165,6 +166,8 @@ function RegistrationPanel({
   onUnregister: () => void;
   /** A registration request is in flight; blocks repeat clicks. */
   registering: boolean;
+  /** The server was busy and the registration is being retried. */
+  retrying?: boolean;
 }) {
   if (state === 'registered') {
     const liveOpen =
@@ -320,7 +323,11 @@ function RegistrationPanel({
         disabled={registering}
         aria-busy={registering}
       >
-        {registering ? 'Registering…' : 'Register for quiz'}
+        {registering
+          ? retrying
+            ? 'Busy, retrying…'
+            : 'Registering…'
+          : 'Register for quiz'}
       </Button>
       <Text
         variant="caption"
@@ -357,6 +364,7 @@ export function PublicQuizView({
     null,
   );
   const [hostNoticeOpen, setHostNoticeOpen] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState('');
   const signedIn = !!user;
   // Live lifecycle updates (lobby opened/closed, started, ended) for
@@ -408,8 +416,11 @@ export function PublicQuizView({
     if (pending) return;
     setPending('register');
     setError('');
+    setRetrying(false);
     try {
-      const registration = await publishingApi.register(quiz.id);
+      const registration = await publishingApi.register(quiz.id, () =>
+        setRetrying(true),
+      );
       setRegistrationCount(registration.registrationCount);
       setState('registered');
     } catch (cause) {
@@ -533,6 +544,7 @@ export function PublicQuizView({
                   onRegister={() => void register()}
                   onUnregister={() => setUnregisterOpen(true)}
                   registering={pending === 'register'}
+                  retrying={retrying}
                 />
               )}
               {error && (

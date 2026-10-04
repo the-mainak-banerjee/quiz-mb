@@ -23,6 +23,28 @@ export const PUBLIC_QUIZ_STATUSES = [
 ] as const;
 export type PublicQuizStatus = (typeof PUBLIC_QUIZ_STATUSES)[number];
 
+/** What an authoring change touches, which decides when it locks. */
+export const EDIT_SCOPE = {
+  /** Quiz details and cover: editable until the quiz goes live. */
+  DETAILS: 'DETAILS',
+  /** Questions and their images: fixed once the lobby opens. */
+  QUESTIONS: 'QUESTIONS',
+} as const;
+export type EditScope = ValueOf<typeof EDIT_SCOPE>;
+
+/** Quiz statuses in which each kind of change is refused. */
+export const EDIT_LOCKED_STATUSES: Record<EditScope, readonly QuizStatus[]> = {
+  [EDIT_SCOPE.DETAILS]: [QUIZ_STATUS.LIVE, QUIZ_STATUS.COMPLETED],
+  [EDIT_SCOPE.QUESTIONS]: [
+    QUIZ_STATUS.LOBBY,
+    QUIZ_STATUS.LIVE,
+    QUIZ_STATUS.COMPLETED,
+  ],
+};
+
+export const isEditLocked = (status: QuizStatus, scope: EditScope) =>
+  EDIT_LOCKED_STATUSES[scope].includes(status);
+
 export const LIVE_SESSION_STATE = {
   LOBBY: 'LOBBY',
   LIVE_IDLE: 'LIVE_IDLE',

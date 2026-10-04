@@ -8,7 +8,7 @@ export function Choice({
     <input
       {...props}
       className={cn(
-        'ds-focus size-space-sm shrink-0 accent-action-primary',
+        'ds-focus size-space-sm shrink-0 accent-action-primary disabled:cursor-not-allowed disabled:opacity-(--disabled-opacity)',
         className,
       )}
     />

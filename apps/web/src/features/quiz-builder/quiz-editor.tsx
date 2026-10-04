@@ -18,6 +18,8 @@ import {
 import {
   type ProjectDto,
   QUESTION_TYPE,
+  EDIT_SCOPE,
+  isEditLocked,
   QUIZ_STATUS,
   type QuestionDto,
   questionSchema,
@@ -44,11 +46,16 @@ import { QuizOption } from './quiz-option';
 import { ReviewPublishPanel } from '@/features/publishing/review-publish-panel';
 const MarkdownPreview = dynamic(() => import('@/components/markdown-preview'));
 type Step = 'details' | 'questions' | 'review';
+
+/** Notices passed to the editor in the URL after the quiz is created. */
+export const EDITOR_NOTICE = { COVER_FAILED: 'cover-upload-failed' } as const;
+export type EditorNotice = (typeof EDITOR_NOTICE)[keyof typeof EDITOR_NOTICE];
 function StatusBadge({ status }: { status: QuizStatus | undefined }) {
   switch (status) {
     case QUIZ_STATUS.PUBLISHED:
-    case QUIZ_STATUS.LOBBY:
       return <Badge variant="scheduled" label="Published" />;
+    case QUIZ_STATUS.LOBBY:
+      return <Badge variant="scheduled" label="Lobby open" />;
     case QUIZ_STATUS.LIVE:
       return <Badge variant="live" />;
     case QUIZ_STATUS.COMPLETED:
@@ -62,12 +69,15 @@ export function QuizEditor({
   initial,
   initialStep = 'details',
   readOnly = false,
+  notice,
 }: {
   project: Pick<ProjectDto, 'id' | 'name'>;
   initial?: QuizDto;
   initialStep?: Step;
-  /** A completed quiz: details and questions are shown, nothing is editable. */
+  /** A live or completed quiz: everything is shown, nothing is editable. */
   readOnly?: boolean;
+  /** A message carried over from the save that created the quiz. */
+  notice?: EditorNotice | undefined;
 }) {
   const router = useRouter();
   const [quiz, setQuiz] = useState(initial);
@@ -79,7 +89,11 @@ export function QuizEditor({
   const [revision, setRevision] = useState(0);
   const [preview, setPreview] = useState(false);
   const [deleting, setDeleting] = useState<QuestionDto | null>(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(
+    notice === EDITOR_NOTICE.COVER_FAILED
+      ? 'The quiz was saved, but its cover image could not be uploaded. Please add it again.'
+      : '',
+  );
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState('');
   const [dragged, setDragged] = useState<string | null>(null);
@@ -135,6 +149,13 @@ export function QuizEditor({
     quiz.questions.every(
       (q) => questionSchema.safeParse(questionValues(q)).success,
     );
+  const status = quiz?.status ?? QUIZ_STATUS.DRAFT;
+  // Questions are fixed once the lobby opens; details only once live.
+  const questionsLocked =
+    readOnly || isEditLocked(status, EDIT_SCOPE.QUESTIONS);
+  // A published quiz keeps at least one question (the API enforces it).
+  const keepsLastQuestion =
+    status !== QUIZ_STATUS.DRAFT && (quiz?.questions.length ?? 0) <= 1;
   const steps = readOnly
     ? (['details', 'questions'] as const)
     : (['details', 'questions', 'review'] as const);
@@ -204,10 +225,13 @@ export function QuizEditor({
           </Button>
         ))}
       </nav>
-      {readOnly && (
+      {questionsLocked && (
         <Callout icon={<Lock size={16} aria-hidden="true" />}>
-          This quiz is completed, so it can no longer be edited. Its details and
-          questions are shown as they were run.
+          {!readOnly
+            ? 'The lobby is open, so the questions are fixed. You can still edit the quiz details until the quiz starts.'
+            : status === QUIZ_STATUS.LIVE
+              ? 'This quiz is live, so it can no longer be edited.'
+              : 'This quiz is completed, so it can no longer be edited. Its details and questions are shown as they were run.'}
         </Callout>
       )}
       {saved && (
@@ -228,12 +252,18 @@ export function QuizEditor({
           readOnly={readOnly}
           {...(quiz ? { initial: quiz } : {})}
           onCancel={() => router.push(`/projects/${project.id}`)}
-          onSaved={(q, next) => {
+          onSaved={(q, next, coverFailed) => {
             setQuiz(q);
-            setSaved('Quiz draft saved.');
+            setSaved(
+              q.status === QUIZ_STATUS.DRAFT
+                ? 'Quiz draft saved.'
+                : 'Quiz saved.',
+            );
             if (!quiz)
               router.replace(
-                `/quizzes/${q.id}/edit?step=${next ? 'questions' : 'details'}`,
+                `/quizzes/${q.id}/edit?step=${next ? 'questions' : 'details'}${
+                  coverFailed ? `&notice=${EDITOR_NOTICE.COVER_FAILED}` : ''
+                }`,
               );
             else if (next) setStep('questions');
           }}
@@ -247,7 +277,7 @@ export function QuizEditor({
                 <Text as="h2" variant="card-title">
                   Questions ({quiz.questions.length})
                 </Text>
-                {!readOnly && (
+                {!questionsLocked && (
                   <Button
                     variant="ghost"
                     className="px-space-xs"
@@ -263,7 +293,7 @@ export function QuizEditor({
                 {quiz.questions.map((q, index) => (
                   <li
                     key={q.id}
-                    draggable={!busy && !readOnly}
+                    draggable={!busy && !questionsLocked}
                     onDragStart={() => setDragged(q.id)}
                     onDragEnd={() => setDragged(null)}
                     onDragOver={(e) => e.preventDefault()}
@@ -317,7 +347,7 @@ export function QuizEditor({
                         quiz.defaultQuestionDurationSeconds}
                       s
                     </Text>
-                    {!readOnly && (
+                    {!questionsLocked && (
                       <div className="mt-space-sm flex items-center justify-end gap-space-xs border-t border-border-surface pt-space-xs">
                         {[
                           { label: 'Move up', Icon: ArrowUp, offset: -1 },
@@ -370,11 +400,18 @@ export function QuizEditor({
                           variant="ghost"
                           className="px-space-xs"
                           icon={<Trash2 size={16} />}
-                          disabled={busy}
+                          disabled={busy || keepsLastQuestion}
+                          title={
+                            keepsLastQuestion
+                              ? 'A published quiz needs at least one question'
+                              : undefined
+                          }
                           onClick={() => confirm(() => setDeleting(q))}
                         >
                           <VisuallyHidden>
                             Delete question {index + 1}
+                            {keepsLastQuestion &&
+                              ' (a published quiz needs at least one question)'}
                           </VisuallyHidden>
                         </Button>
                       </div>
@@ -382,7 +419,7 @@ export function QuizEditor({
                   </li>
                 ))}
               </ol>
-              {!readOnly && (
+              {!questionsLocked && (
                 <Button
                   variant="secondary"
                   className="w-full"
@@ -394,10 +431,12 @@ export function QuizEditor({
                 </Button>
               )}
             </Surface>
-            {!readOnly && (
+            {!questionsLocked && (
               <Text variant="caption" tone="secondary">
                 Drag to reorder or use the move buttons. Authoring order does
                 not determine the host’s live question sequence.
+                {keepsLastQuestion &&
+                  ' A published quiz keeps at least one question, so the last one cannot be deleted.'}
               </Text>
             )}
           </aside>
@@ -406,7 +445,7 @@ export function QuizEditor({
               key={`${active ?? 'new'}-${revision}`}
               ref={questionRef}
               quiz={quiz}
-              readOnly={readOnly}
+              readOnly={questionsLocked}
               questionNumber={
                 current
                   ? quiz.questions.indexOf(current) + 1
@@ -428,6 +467,8 @@ export function QuizEditor({
                 setDraft(undefined);
                 setRevision((r) => r + 1);
                 setSaved('Question saved.');
+                // The next question (or the saved one) starts at the top.
+                window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
             />
           </div>

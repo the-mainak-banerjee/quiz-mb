@@ -21,6 +21,7 @@ import {
 } from './participant-screens';
 import { MAX_RECONNECT_ATTEMPTS, useLiveSession } from './use-live-session';
 import { toQuizSummary } from './view-models';
+import { HostAwayNotice } from './host-away-notice';
 
 const refusals: Record<string, { eyebrow: string; title: string }> = {
   [ERROR_CODE.LATE_JOIN_DISABLED]: {
@@ -175,39 +176,58 @@ export function ParticipantLiveView({
       />
     );
 
-  if (snapshot.role === LIVE_ROLE.PARTICIPANT && snapshot.leaderboard)
-    return (
-      <ParticipantLeaderboard
-        board={snapshot.leaderboard}
-        // A standing from an earlier question is still being recalculated.
-        standing={
-          myStanding?.askedQuestionId === snapshot.question?.askedQuestionId
-            ? myStanding
-            : null
-        }
-        participantId={participantId}
-      />
-    );
+  /** The participant screen for the current live state. */
+  function renderScreen() {
+    if (!snapshot) return null;
+    if (snapshot.role === LIVE_ROLE.PARTICIPANT && snapshot.leaderboard)
+      return (
+        <ParticipantLeaderboard
+          board={snapshot.leaderboard}
+          // A standing from an earlier question is still being recalculated.
+          standing={
+            myStanding?.askedQuestionId === snapshot.question?.askedQuestionId
+              ? myStanding
+              : null
+          }
+          participantId={participantId}
+        />
+      );
 
-  if (snapshot.role === LIVE_ROLE.PARTICIPANT && snapshot.question)
-    return (
-      <ParticipantLiveQuestion
-        key={snapshot.question.askedQuestionId}
-        question={snapshot.question}
-        myAnswer={myAnswer}
-        myStanding={myStanding}
-        joinedDuringQuestion={
-          lateJoinQuestionId === snapshot.question.askedQuestionId
-        }
-        clockOffsetMs={clockOffsetMs}
-        submitAnswer={submitAnswer}
-        resync={resync}
-      />
-    );
+    if (snapshot.role === LIVE_ROLE.PARTICIPANT && snapshot.question)
+      return (
+        <ParticipantLiveQuestion
+          key={snapshot.question.askedQuestionId}
+          question={snapshot.question}
+          myAnswer={myAnswer}
+          myStanding={myStanding}
+          joinedDuringQuestion={
+            lateJoinQuestionId === snapshot.question.askedQuestionId
+          }
+          clockOffsetMs={clockOffsetMs}
+          submitAnswer={submitAnswer}
+          resync={resync}
+        />
+      );
 
-  return snapshot.state === LIVE_SESSION_STATE.LOBBY ? (
-    <ParticipantLobby quiz={quiz} connected={snapshot.counts.connected} />
-  ) : (
-    <ParticipantLiveIdle quiz={quiz} participantName={participantName} />
+    return snapshot.state === LIVE_SESSION_STATE.LOBBY ? (
+      <ParticipantLobby quiz={quiz} connected={snapshot.counts.connected} />
+    ) : (
+      <ParticipantLiveIdle quiz={quiz} participantName={participantName} />
+    );
+  }
+
+  const hostAway =
+    snapshot.role === LIVE_ROLE.PARTICIPANT && !snapshot.hostConnected;
+  return (
+    <>
+      {renderScreen()}
+      {hostAway && (
+        <HostAwayNotice
+          questionOpen={
+            snapshot.state === LIVE_SESSION_STATE.QUESTION_ACTIVE && !myAnswer
+          }
+        />
+      )}
+    </>
   );
 }

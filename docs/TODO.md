@@ -17,7 +17,7 @@ Fix direction to evaluate:
 
 The planned date/time on the public quiz page (`/quiz/[publicId]`) and the published-quiz management page is formatted during server rendering in `apps/web/src/features/publishing/view-model.ts` (`toLocaleDateString`/`toLocaleTimeString` with no explicit locale or time zone). The result uses the server's locale and time zone instead of the viewer's, so production viewers (server in UTC) may see a different local time than expected. The dashboard cards in `apps/web/src/features/dashboard/quiz-data.ts` share the same pattern.
 
-Fix direction: pass the ISO `plannedStartAt` to the client and format it in the browser, for example with a small client component, keeping the server-rendered markup hydration-safe.
+Fix direction: pass the ISO `plannedStartAt` to the client and format it in the browser. The hydration-safe `components/local-date-time.tsx` (added in Phase 10 for results and history) already does this and can be reused here.
 
 ## Database rule requiring `plannedStartAt` on non-draft quizzes
 
@@ -39,48 +39,10 @@ Question prompts are written in Markdown, but its behaviour is not production re
 - Confirm sanitization and link handling are safe for participant-facing content, and that long or complex prompts stay readable.
 - Improve the editor experience (toolbar, preview, character limits) as needed.
 
-## Ui Issues
-- The image upload should be on even before saving the quiz basis
-- After saving a question it should scroll up to top
-- In the live question screen fix the layout of the header and buttons after all question asked
-- 0 did not answer - If it is 0 we don't need to show this text
-- We need to add tabular nums in timing section
-- The completed view quiz page The input fields in question details don't look like they are disabled make them look like disabled same as Basic details input
+## Phase 11 — still open
 
-## Phase 11 — Segment 1: frontend for quiz content and capacity rules
+Done on branch `phase-11-hardening`: the rate limiting item, the Phase 10 "end during a question" item and the earlier UI issues list (all removed from this file), plus backend Segments 1–6 and their frontend work. Still open:
 
-The API now fixes questions once the lobby opens (`409 QUIZ_LOCKED`), keeps at least one question on a published quiz (`422`, `questions` field) and refuses a registration limit below the current registrations (`422`, `registrationLimit` field). The web app does not reflect this yet:
-
-- A quiz with an open lobby (status `LOBBY`) still opens in the normal editor; saving a question only shows the error. Show its questions read only (like the completed `/view` page) while quiz details stay editable, and explain that questions are fixed once the lobby is open.
-- On a published quiz, disable or explain deleting the last question instead of relying on the error.
-- Optionally show the current registration count next to the limit field when editing a published quiz.
-
-## Phase 11 — Segment 2: frontend checks for live edge cases
-
-The API now has tests for these cases (`apps/api/tests/live-edge-cases.integration.test.ts`); their screens have not been checked:
-
-- Host "Quiz completed" screen when nobody joined (0 participants, empty final Top 10, no podium) and when the quiz ended before any question was asked (0 asked, everyone tied at rank 1 with 0 points).
-- Participant final result when nothing was asked (all counts 0): the outcome bar and tiles should not look broken.
-- Ending during a question sends participants straight to their final result (no reveal of that last question); confirm this reads well.
-
-## Phase 11 — Segment 3: frontend for host presence
-
-Participant snapshots now carry `hostConnected`, and participants receive `session:host-presence` (`LiveHostPresenceDto { hostConnected }`) when the host has been disconnected for more than 5 seconds and again when the host returns. The web app ignores both:
-
-- In `use-live-session.ts`, keep `hostConnected` from every participant snapshot and update it from `LIVE_EVENTS.hostPresence`.
-- Show a calm, non-blocking "The host is reconnecting…" notice on participant screens while `hostConnected` is false. The quiz keeps running: an active question can still be answered and its timer still ends on time; only the host can move the quiz on.
-- A host who has not connected since the API started (for example after a restart) also reads as away until they rejoin.
-
-## Phase 11 — Segment 4: frontend for rate limits
-
-The API now answers `429 RATE_LIMITED` with a `Retry-After` header (seconds) on login, signup, refresh, registration, upload requests, opening a lobby and socket tickets, and socket commands over their budget get a `RATE_LIMITED` acknowledgement. The web app shows only the generic message:
-
-- Login and signup: show "Too many attempts. Try again in N minutes." using `Retry-After`, and keep the form usable afterwards.
-- Refresh: a `429` on `/auth/refresh` must not sign the user out; retry after the wait instead of treating it as an expired session.
-- Live room: a `RATE_LIMITED` acknowledgement should not be shown as a failure screen; retry the sync once after a short delay.
-
-## Phase 11 — Segment 5: frontend for busy responses
-
-When the database is saturated the API now answers `503 SERVICE_BUSY` with `Retry-After` (seconds) instead of a 500; nothing was changed, so the request is safe to repeat. The web client treats it as a generic error:
-
-- In the shared API client, retry `SERVICE_BUSY` responses automatically once or twice after `Retry-After`, showing "Busy, retrying…" on the action (registration in particular), and show a friendly message if it still fails.
+- Segment 7: load test of a full live quiz (target participant count to be decided). On hold.
+- Loading and error screens (`loading.tsx` / `error.tsx` for the workspace, live room and public quiz page): waiting for a custom design.
+- Mobile (375px) pass on the participant live flow.

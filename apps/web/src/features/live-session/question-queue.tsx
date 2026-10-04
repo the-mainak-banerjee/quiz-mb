@@ -115,8 +115,10 @@ export function QuestionQueue({
         </Callout>
       ) : (
         <Text variant="caption" tone="secondary">
-          Choose any order. Select an available question to preview it before
-          asking.
+          {questions.length > 0 &&
+          questions.every((question) => question.state === 'asked')
+            ? 'Every question has been asked.'
+            : 'Choose any order. Select an available question to preview it before asking.'}
         </Text>
       )}
 

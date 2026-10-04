@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from '@quizmb/database';
 import {
   AUTHORING_LIMITS,
   type QuestionInput,
+  EDIT_SCOPE,
   ERROR_CODE,
   MEDIA_PURPOSE,
   QUIZ_STATUS,
@@ -9,7 +10,6 @@ import {
 import { ApiError } from '../../http/api-error.js';
 import { lockedTransaction } from '../../infrastructure/transactions.js';
 import { lockEditableQuiz, validateMedia } from '../quizzes/repository.js';
-import { EDIT_SCOPE } from '../quizzes/constants.js';
 
 async function setPositions(
   tx: Prisma.TransactionClient,

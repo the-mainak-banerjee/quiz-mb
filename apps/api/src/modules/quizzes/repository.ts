@@ -6,13 +6,15 @@ import {
   PUBLIC_QUIZ_STATUSES,
   type MediaPurpose,
   type QuizInput,
+  EDIT_SCOPE,
   ERROR_CODE,
   MEDIA_PURPOSE,
+  isEditLocked,
+  type EditScope,
   MEDIA_STATUS,
   QUIZ_STATUS,
   REGISTRATION_STATUS,
 } from '@quizmb/contracts';
-import { EDIT_SCOPE, LOCKED_STATUSES, type EditScope } from './constants.js';
 
 export const quizInclude = {
   project: true,
@@ -20,6 +22,11 @@ export const quizInclude = {
   questions: {
     orderBy: { position: 'asc' },
     include: { image: true, options: { orderBy: { position: 'asc' } } },
+  },
+  _count: {
+    select: {
+      registrations: { where: { status: REGISTRATION_STATUS.REGISTERED } },
+    },
   },
 } satisfies Prisma.QuizInclude;
 export type QuizRow = Prisma.QuizGetPayload<{ include: typeof quizInclude }>;
@@ -53,7 +60,7 @@ export async function lockEditableQuiz(
     where: { id, creatorUserId: userId, project: { ownerUserId: userId } },
   });
   if (!quiz) throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');
-  if (LOCKED_STATUSES[scope].includes(quiz.status))
+  if (isEditLocked(quiz.status, scope))
     throw new ApiError(
       409,
       ERROR_CODE.QUIZ_LOCKED,

@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { QUESTION_TYPE, type QuizDto } from '@quizmb/contracts';
+import { QUESTION_TYPE, QUIZ_STATUS, type QuizDto } from '@quizmb/contracts';
+import { NavigationItem } from '@/components/workspace/navigation-item';
 import {
   ArrowLeft,
   ArrowRight,
@@ -37,6 +38,9 @@ export function ReviewPublishPanel({
   const router = useRouter();
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState('');
+  // Edits to a published quiz are saved as they are made; there is nothing
+  // left to publish.
+  const published = quiz.status !== QUIZ_STATUS.DRAFT;
   const scored = quiz.questions.filter(
     (question) => question.type !== QUESTION_TYPE.DESCRIPTIVE,
   );
@@ -66,9 +70,11 @@ export function ReviewPublishPanel({
           <div>
             <div className="flex flex-wrap items-center gap-space-xs">
               <Text as="h2" variant="section-heading">
-                {valid
-                  ? 'Ready for publication'
-                  : 'Complete your quiz before publishing'}
+                {published
+                  ? 'Published'
+                  : valid
+                    ? 'Ready for publication'
+                    : 'Complete your quiz before publishing'}
               </Text>
               <Badge
                 variant={valid ? 'scheduled' : 'draft'}
@@ -290,31 +296,42 @@ export function ReviewPublishPanel({
         >
           Back to questions
         </Button>
-        <div className="space-y-space-xs text-right">
-          <Button
-            disabled={!valid || !quiz.plannedStartAt || publishing}
+        {published ? (
+          <NavigationItem
+            href={APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id)}
             icon={<ArrowRight size={18} aria-hidden="true" />}
             iconPosition="right"
-            onClick={async () => {
-              setPublishing(true);
-              setPublishError('');
-              try {
-                await publishingApi.publish(quiz.id);
-                router.push(APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id));
-              } catch (cause) {
-                setPublishError(apiError(cause).message);
-                setPublishing(false);
-              }
-            }}
+            className="bg-action-primary text-action-on-primary hover:bg-action-primary-hover hover:text-action-on-primary"
           >
-            {publishing ? 'Publishing…' : 'Publish quiz'}
-          </Button>
-          {publishError && (
-            <Text role="alert" variant="caption" className="text-danger">
-              {publishError}
-            </Text>
-          )}
-        </div>
+            Back to manage quiz
+          </NavigationItem>
+        ) : (
+          <div className="space-y-space-xs text-right">
+            <Button
+              disabled={!valid || !quiz.plannedStartAt || publishing}
+              icon={<ArrowRight size={18} aria-hidden="true" />}
+              iconPosition="right"
+              onClick={async () => {
+                setPublishing(true);
+                setPublishError('');
+                try {
+                  await publishingApi.publish(quiz.id);
+                  router.push(APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id));
+                } catch (cause) {
+                  setPublishError(apiError(cause).message);
+                  setPublishing(false);
+                }
+              }}
+            >
+              {publishing ? 'Publishing…' : 'Publish quiz'}
+            </Button>
+            {publishError && (
+              <Text role="alert" variant="caption" className="text-danger">
+                {publishError}
+              </Text>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

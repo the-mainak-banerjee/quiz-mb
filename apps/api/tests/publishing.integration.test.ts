@@ -578,6 +578,7 @@ test(
       ),
     );
     assert.equal(quiz.registrationLimit, 2, 'equal to the count is allowed');
+    assert.equal(quiz.registrationCount, 2, 'the host sees the count');
 
     // A published quiz keeps at least one question.
     await data(

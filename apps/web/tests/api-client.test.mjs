@@ -225,3 +225,89 @@ test('server clients isolate cookies and reject external or escaped paths', asyn
     await assert.rejects(a.get(path), { code: 'INVALID_REQUEST' });
   assert.equal(seen.length, 2);
 });
+
+test('a busy server is retried after Retry-After (capped), then succeeds or gives up', async () => {
+  const busy = () =>
+    new Response(
+      JSON.stringify({
+        success: false,
+        error: { code: 'SERVICE_BUSY', message: 'The server is busy.' },
+      }),
+      {
+        status: 503,
+        headers: { 'Content-Type': 'application/json', 'Retry-After': '9' },
+      },
+    );
+  const waits = [];
+  let retries = 0;
+  let replies = [busy(), busy(), json({ success: true, data: { ok: 1 } })];
+  const api = createApiClient({
+    baseUrl,
+    fetcher: async () => replies.shift(),
+    sleep: async (ms) => {
+      waits.push(ms);
+    },
+  });
+  assert.deepEqual(
+    await api.post('/api/example', {}, { onBusyRetry: () => (retries += 1) }),
+    { ok: 1 },
+  );
+  assert.deepEqual(waits, [5000, 5000], 'Retry-After is capped at 5 s');
+  assert.equal(retries, 2);
+
+  replies = [busy(), busy(), busy(), json({ success: true, data: {} })];
+  await assert.rejects(api.post('/api/example', {}), (error) => {
+    assert.ok(error instanceof ApiError);
+    assert.equal(error.code, 'SERVICE_BUSY');
+    assert.equal(error.status, 503);
+    assert.match(error.message, /busy/);
+    return true;
+  });
+  assert.equal(replies.length, 1, 'two retries, then the error');
+});
+
+test('rate-limited answers explain the wait and are never retried', async () => {
+  let calls = 0;
+  const limited = (retryAfter) =>
+    createApiClient({
+      baseUrl,
+      fetcher: async () => {
+        calls += 1;
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: { code: 'RATE_LIMITED', message: 'Too many requests.' },
+          }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              ...(retryAfter ? { 'Retry-After': retryAfter } : {}),
+            },
+          },
+        );
+      },
+    });
+  const message = async (retryAfter) => {
+    try {
+      await limited(retryAfter).post('/api/auth/login', {});
+    } catch (error) {
+      assert.ok(error instanceof ApiError);
+      assert.equal(error.code, 'RATE_LIMITED');
+      return error.message;
+    }
+  };
+  assert.equal(
+    await message('840'),
+    'Too many attempts. Try again in 14 minutes.',
+  );
+  assert.equal(
+    await message('30'),
+    'Too many attempts. Try again in 30 seconds.',
+  );
+  assert.equal(
+    await message(undefined),
+    'Too many attempts. Try again shortly.',
+  );
+  assert.equal(calls, 3, 'one request each');
+});

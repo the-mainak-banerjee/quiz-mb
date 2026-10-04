@@ -1,11 +1,11 @@
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
-import { QUIZ_STATUS, type QuizDto } from '@quizmb/contracts';
+import { EDIT_SCOPE, isEditLocked, type QuizDto } from '@quizmb/contracts';
 import { APP_LINKS } from '@/config/navigation';
 import { loadApi } from '@/lib/api/server';
 import { QuizEditor } from '@/features/quiz-builder/quiz-editor';
 
-/** A completed quiz's details and questions, read only. */
+/** A live or completed quiz's details and questions, read only. */
 export default async function ViewQuizPage({
   params,
   searchParams,
@@ -16,7 +16,7 @@ export default async function ViewQuizPage({
   const { quizId } = await params;
   if (!z.uuid().safeParse(quizId).success) notFound();
   const quiz = await loadApi<QuizDto>(`/api/quizzes/${quizId}`);
-  if (quiz.status !== QUIZ_STATUS.COMPLETED)
+  if (!isEditLocked(quiz.status, EDIT_SCOPE.DETAILS))
     redirect(APP_LINKS.WORKSPACE.EDIT_QUIZ(quizId));
   const { step } = await searchParams;
   return (

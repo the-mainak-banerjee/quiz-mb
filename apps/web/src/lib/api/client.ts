@@ -1,4 +1,9 @@
-import { CONTENT_TYPE, HTTP_HEADER, HTTP_METHOD } from '@quizmb/contracts';
+import {
+  CONTENT_TYPE,
+  ERROR_CODE,
+  HTTP_HEADER,
+  HTTP_METHOD,
+} from '@quizmb/contracts';
 import { CLIENT_ERROR_CODE } from './error-codes.ts';
 import { API_PREFIX } from './routes.ts';
 
@@ -7,12 +12,15 @@ export class ApiError extends Error {
   readonly code: string;
   readonly details: Record<string, string>;
   readonly requestId: string | undefined;
+  /** Seconds the server asked to wait (`Retry-After`), when it did. */
+  readonly retryAfterSeconds: number | undefined;
   constructor(
     message: string,
     status = 0,
     code: string = CLIENT_ERROR_CODE.NETWORK_ERROR,
     details: Record<string, string> = {},
     requestId?: string,
+    retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -20,8 +28,23 @@ export class ApiError extends Error {
     this.code = code;
     this.details = details;
     this.requestId = requestId;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
+
+/** "in 45 seconds", "in 3 minutes" or "shortly" for a Retry-After value. */
+export function retryWait(seconds: number | undefined) {
+  if (!seconds) return 'shortly';
+  if (seconds < 60)
+    return `in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
+  const minutes = Math.ceil(seconds / 60);
+  return `in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+}
+
+/** Automatic retries of a SERVICE_BUSY answer (nothing was changed). */
+const BUSY_RETRIES = 2;
+/** Longest wait before a busy retry, whatever Retry-After says. */
+const BUSY_MAX_WAIT_SECONDS = 5;
 
 export function apiError(error: unknown): ApiError {
   return error instanceof ApiError
@@ -36,6 +59,8 @@ type Options = {
   signal?: AbortSignal;
   /** Only enable when authentication is checked before any mutation occurs. */
   authenticated?: boolean;
+  /** Called before each automatic retry of a busy server, e.g. for a label. */
+  onBusyRetry?: () => void;
 };
 type Config = {
   baseUrl: string;
@@ -44,6 +69,8 @@ type Config = {
   fetcher?: typeof fetch;
   /** Browser-only callback. Server clients must never rotate browser cookies. */
   refresh?: () => Promise<unknown>;
+  /** Waits before a busy retry; tests replace it. */
+  sleep?: (ms: number) => Promise<void>;
 };
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -124,20 +151,34 @@ export function createApiClient(config: Config) {
                 ),
               )
             : {};
-          throw new ApiError(
-            response.status >= 500
-              ? 'Service unavailable. Please try again.'
-              : typeof error.message === 'string'
-                ? error.message
-                : 'Request failed. Please try again.',
-            response.status,
+          const code =
             typeof error.code === 'string'
               ? error.code
-              : CLIENT_ERROR_CODE.REQUEST_FAILED,
+              : CLIENT_ERROR_CODE.REQUEST_FAILED;
+          const retryAfter = Number(
+            response.headers.get(HTTP_HEADER.RETRY_AFTER),
+          );
+          const retryAfterSeconds =
+            Number.isFinite(retryAfter) && retryAfter > 0
+              ? Math.ceil(retryAfter)
+              : undefined;
+          throw new ApiError(
+            code === ERROR_CODE.RATE_LIMITED
+              ? `Too many attempts. Try again ${retryWait(retryAfterSeconds)}.`
+              : code === ERROR_CODE.SERVICE_BUSY
+                ? 'The server is busy right now. Please try again in a moment.'
+                : response.status >= 500
+                  ? 'Service unavailable. Please try again.'
+                  : typeof error.message === 'string'
+                    ? error.message
+                    : 'Request failed. Please try again.',
+            response.status,
+            code,
             details,
             typeof error.requestId === 'string'
               ? error.requestId
               : (response.headers.get(HTTP_HEADER.REQUEST_ID) ?? undefined),
+            retryAfterSeconds,
           );
         }
         if (record(payload) && payload.success === true && 'data' in payload)
@@ -167,8 +208,32 @@ export function createApiClient(config: Config) {
         throw apiError(error);
       }
     }
+    const sleep =
+      config.sleep ??
+      ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+    /** A busy server changed nothing, so the request is safe to repeat. */
+    async function sendWhenFree(): Promise<T> {
+      for (let retry = 0; ; retry++) {
+        try {
+          return await send();
+        } catch (error) {
+          if (
+            !(error instanceof ApiError) ||
+            error.code !== ERROR_CODE.SERVICE_BUSY ||
+            retry >= BUSY_RETRIES ||
+            options.signal?.aborted
+          )
+            throw error;
+          options.onBusyRetry?.();
+          await sleep(
+            Math.min(error.retryAfterSeconds ?? 1, BUSY_MAX_WAIT_SECONDS) *
+              1000,
+          );
+        }
+      }
+    }
     try {
-      return await send();
+      return await sendWhenFree();
     } catch (error) {
       if (
         !(error instanceof ApiError) ||
@@ -191,7 +256,7 @@ export function createApiClient(config: Config) {
         await refreshing;
       }
       // Exactly one retry; never retry network failures or arbitrary mutations.
-      return send();
+      return sendWhenFree();
     }
   }
   return {
