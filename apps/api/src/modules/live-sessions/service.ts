@@ -256,7 +256,7 @@ export class LiveSessionsService {
     readonly tickets: SocketTickets,
     private events?: DomainEvents,
     private media?: Pick<MediaService, 'dto'>,
-    private logger?: Pick<Logger, 'warn' | 'error'>,
+    private logger?: Pick<Logger, 'info' | 'warn' | 'error'>,
   ) {
     this.results = new ResultsService(new ResultsRepository(repository.db));
   }
@@ -834,6 +834,7 @@ export class LiveSessionsService {
 
   async openLobby(quizId: string, hostUserId: string) {
     const id = await this.repository.openLobby(quizId, hostUserId);
+    this.logger?.info({ liveSessionId: id, quizId }, 'Live lobby opened');
     this.publishStatus(quizId, QUIZ_STATUS.LOBBY);
     return this.ref(await this.load(id), LIVE_ROLE.HOST);
   }
@@ -900,6 +901,7 @@ export class LiveSessionsService {
         replacedSocketId: null,
         newlyConnected: false,
         hostReturned,
+        firstEntry: false,
       };
     }
     if (session.state === LIVE_SESSION_STATE.COMPLETED)
@@ -921,10 +923,9 @@ export class LiveSessionsService {
     const attendance = await this.repository.recordJoin(session.id, userId);
     // Only a first entry changes the participant count (and zero-score
     // ranks); reconnects keep the cached leaderboard.
-    if (
-      attendance.firstJoinedAt.getTime() === attendance.lastJoinedAt.getTime()
-    )
-      this.cacheFor(session.id).board = undefined;
+    const firstEntry =
+      attendance.firstJoinedAt.getTime() === attendance.lastJoinedAt.getTime();
+    if (firstEntry) this.cacheFor(session.id).board = undefined;
     const replacedSocketId = await this.store.claimPresence(
       session.id,
       userId,
@@ -936,6 +937,7 @@ export class LiveSessionsService {
       replacedSocketId,
       newlyConnected: replacedSocketId === null,
       hostReturned: false,
+      firstEntry,
     };
   }
 

@@ -239,7 +239,10 @@ export function attachLiveRealtime(
             .emit(LIVE_EVENTS.snapshot, host);
           for (const { socketId, snapshot } of participants)
             nsp.to(socketId).emit(LIVE_EVENTS.snapshot, snapshot);
-          logger.info({ liveSessionId }, 'Live question ended');
+          logger.info(
+            { liveSessionId, askedQuestionId },
+            'Live question ended',
+          );
           const standings = await service.standingDeliveries(
             liveSessionId,
             askedQuestionId,
@@ -309,7 +312,13 @@ export function attachLiveRealtime(
           let response: SocketAck<Result>;
           try {
             const bucket = SOCKET_RATE_BUCKET[event];
-            if (bucket && !withinBudget(bucket))
+            const budget = bucket ? withinBudget(bucket) : null;
+            if (budget?.firstRefusal)
+              logger.warn(
+                { event, liveSessionId: socket.data.ticketSessionId, userId },
+                'Live commands rate limited',
+              );
+            if (budget && !budget.allowed)
               throw new ApiError(
                 429,
                 ERROR_CODE.RATE_LIMITED,
@@ -334,6 +343,22 @@ export function attachLiveRealtime(
             response = { ok: true, data: await handler(parsed.data) };
           } catch (error) {
             response = failure(error, logger, event) as SocketAck<Result>;
+            // Refusals are part of normal play (late answers, invalid host
+            // steps); log what was refused, never what was sent. Rate-limited
+            // commands were logged once above.
+            if (
+              error instanceof ApiError &&
+              error.code !== ERROR_CODE.RATE_LIMITED
+            )
+              logger.info(
+                {
+                  event,
+                  code: error.code,
+                  liveSessionId: socket.data.ticketSessionId,
+                  userId,
+                },
+                'Live command refused',
+              );
           }
           if (typeof ack === 'function') ack(response);
         }) as never,
@@ -374,6 +399,18 @@ export function attachLiveRealtime(
               : ROOM_AUDIENCE.PARTICIPANTS,
           ),
         ]);
+        if (result.role === LIVE_ROLE.HOST)
+          logger.info(
+            { liveSessionId, userId, returned: result.hostReturned },
+            'Live host joined',
+          );
+        else
+          logger.info(
+            { liveSessionId, userId },
+            result.firstEntry
+              ? 'Live participant joined'
+              : 'Live participant reconnected',
+          );
         if (result.hostReturned) sendHostPresence(liveSessionId, true);
         if (result.replacedSocketId) {
           nsp.to(result.replacedSocketId).emit(LIVE_EVENTS.replaced, {
@@ -436,7 +473,14 @@ export function attachLiveRealtime(
           userId,
           questionId,
         );
-        logger.info({ liveSessionId }, 'Live question started');
+        logger.info(
+          {
+            liveSessionId,
+            askedQuestionId: asked.id,
+            number: asked.sequenceNumber,
+          },
+          'Live question started',
+        );
         return broadcast(session, asked);
       },
     );
@@ -473,6 +517,15 @@ export function attachLiveRealtime(
           'Only participants can answer questions.',
         );
       const answer = await service.submit(userId, socket.id, command);
+      // Debug only: one line per answer is too much at info for big rooms.
+      logger.debug(
+        {
+          liveSessionId: command.liveSessionId,
+          askedQuestionId: command.askedQuestionId,
+          userId,
+        },
+        'Live answer accepted',
+      );
       publishProgress(command.liveSessionId, command.askedQuestionId);
       return answer;
     });
@@ -579,7 +632,17 @@ export function attachLiveRealtime(
       },
     );
 
-    socket.on(SOCKET_EVENT.DISCONNECT, () => {
+    socket.on(SOCKET_EVENT.DISCONNECT, (reason: string) => {
+      if (socket.data.role)
+        logger.info(
+          {
+            liveSessionId: socket.data.ticketSessionId,
+            userId,
+            role: socket.data.role,
+            reason,
+          },
+          'Live socket disconnected',
+        );
       release().catch(() =>
         logger.warn(
           { code: ERROR_CODE.LIVE_UNAVAILABLE },

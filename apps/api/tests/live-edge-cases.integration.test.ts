@@ -398,3 +398,79 @@ test(
     assert.equal(await connected(), 1, 'a reconnect claims presence again');
   },
 );
+
+test(
+  'live logging: lifecycle, joins, reconnects and refusals, without answer content',
+  { skip: liveSkip },
+  async (t) => {
+    const harness = await startLiveHarness(t, ['host', 'p1'] as const);
+    const { logs, openQuiz, joinAs, ok, errorCode, userIds } = harness;
+    const { liveSessionId } = await openQuiz(
+      'Logged quiz',
+      ['p1'],
+      [singleChoice('Logged question')],
+    );
+    const lines = (msg: string) =>
+      logs.filter(
+        (line) => line.msg === msg && line.liveSessionId === liveSessionId,
+      );
+
+    const host = await joinAs(liveSessionId, 'host');
+    let p1 = await joinAs(liveSessionId, 'p1');
+    p1.socket.disconnect();
+    p1 = await joinAs(liveSessionId, 'p1');
+    const view = ok(
+      await host.emit<HostLiveSnapshotDto>(LIVE_EVENTS.quizStart),
+    );
+    const asked = ok(
+      await host.emit<HostLiveSnapshotDto>(LIVE_EVENTS.questionStart, {
+        questionId: view.questions[0]!.id,
+      }),
+    ).currentQuestion!.askedQuestionId;
+    const right = view.questions[0]!.options.find(
+      (option) => option.text === 'Right',
+    )!.id;
+    const answer = { askedQuestionId: asked, selectedOptionIds: [right] };
+    ok(await p1.emit(LIVE_EVENTS.answerSubmit, answer));
+    assert.equal(
+      errorCode(await p1.emit(LIVE_EVENTS.answerSubmit, answer)),
+      ERROR_CODE.ALREADY_SUBMITTED,
+    );
+    const burst = await Promise.all(
+      Array.from({ length: SOCKET_RATE_LIMITS.sync + 5 }, () =>
+        p1.emit(LIVE_EVENTS.sync),
+      ),
+    );
+    assert.ok(burst.some((ack) => errorCode(ack) === ERROR_CODE.RATE_LIMITED));
+    ok(await host.emit(LIVE_EVENTS.quizEnd));
+
+    assert.equal(lines('Live lobby opened').length, 1);
+    assert.equal(lines('Live host joined').length, 1);
+    assert.equal(lines('Live participant joined').length, 1);
+    assert.equal(lines('Live participant reconnected').length, 1);
+    assert.ok(
+      lines('Live socket disconnected').some(
+        (line) => line.userId === userIds.p1 && line.role === 'PARTICIPANT',
+      ),
+    );
+    assert.equal(lines('Live quiz started').length, 1);
+    assert.deepEqual(
+      lines('Live question started').map((line) => line.askedQuestionId),
+      [asked],
+    );
+    assert.equal(lines('Live answer accepted').length, 1);
+    assert.deepEqual(
+      lines('Live command refused').map((line) => [line.event, line.code]),
+      [[LIVE_EVENTS.answerSubmit, ERROR_CODE.ALREADY_SUBMITTED]],
+    );
+    assert.equal(
+      lines('Live commands rate limited').length,
+      1,
+      'a flood is logged once per window',
+    );
+    assert.equal(lines('Live quiz ended').length, 1);
+    const everything = JSON.stringify(logs);
+    assert.ok(!everything.includes(right), 'no selected options in logs');
+    assert.ok(!everything.includes('Logged question'), 'no question content');
+  },
+);

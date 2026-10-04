@@ -14,11 +14,22 @@ test('socket budgets refuse commands over the limit until the window resets', ()
   let now = 1_000;
   const withinBudget = socketRateLimiter(() => now);
   for (let i = 0; i < SOCKET_RATE_LIMITS.answer; i++)
-    assert.equal(withinBudget('answer'), true);
-  assert.equal(withinBudget('answer'), false, 'over the answer budget');
-  assert.equal(withinBudget('sync'), true, 'budgets are independent');
+    assert.deepEqual(withinBudget('answer'), {
+      allowed: true,
+      firstRefusal: false,
+    });
+  assert.deepEqual(
+    withinBudget('answer'),
+    { allowed: false, firstRefusal: true },
+    'the first refusal in a window is flagged (logged once)',
+  );
+  assert.deepEqual(withinBudget('answer'), {
+    allowed: false,
+    firstRefusal: false,
+  });
+  assert.equal(withinBudget('sync').allowed, true, 'budgets are independent');
   now += SOCKET_RATE_WINDOW_MS;
-  assert.equal(withinBudget('answer'), true, 'a new window starts');
+  assert.equal(withinBudget('answer').allowed, true, 'a new window starts');
 });
 
 test('Redis limiter counts per window, hides identifiers and reports the wait', async () => {

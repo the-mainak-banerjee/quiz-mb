@@ -59,6 +59,8 @@ export async function startLiveHarness<Role extends string>(
   t: TestContext,
   roles: readonly Role[],
 ) {
+  /** Every log line the API writes (parsed JSON), for log assertions. */
+  const logs: Record<string, unknown>[] = [];
   if (process.env.NODE_ENV === 'production')
     throw new Error('Development integration tests only');
   const config = parseAuthEnv(process.env);
@@ -66,14 +68,20 @@ export async function startLiveHarness<Role extends string>(
   const redis = createRedis(process.env.REDIS_URL!);
   await redis.connect();
   const events = new DomainEvents();
+  const logger = createLogger('debug', {
+    write: (line: string) => {
+      logs.push(JSON.parse(line) as Record<string, unknown>);
+    },
+  });
   const live = new LiveSessionsService(
     new LiveSessionsRepository(db),
     new LiveStore(redis),
     new SocketTickets(config.AUTH_ACCESS_SECRET),
     events,
+    undefined,
+    logger,
   );
   const origin = 'http://localhost:3000';
-  const logger = createLogger('silent');
   const server = createServer(
     createApp({
       allowedOrigins: [origin],
@@ -275,6 +283,7 @@ export async function startLiveHarness<Role extends string>(
   }
 
   return {
+    logs,
     db,
     redis,
     live,

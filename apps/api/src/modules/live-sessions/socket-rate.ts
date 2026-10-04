@@ -6,7 +6,8 @@ import {
 
 /**
  * Fixed-window command budgets for one socket, kept in memory for the
- * socket's lifetime. Returns true while the command is within its budget.
+ * socket's lifetime. `firstRefusal` marks the first command refused in a
+ * window, so a flood is logged once rather than once per command.
  */
 export function socketRateLimiter(now: () => number = Date.now) {
   const windows = new Map<
@@ -21,6 +22,10 @@ export function socketRateLimiter(now: () => number = Date.now) {
       windows.set(bucket, window);
     }
     window.count += 1;
-    return window.count <= SOCKET_RATE_LIMITS[bucket];
+    const limit = SOCKET_RATE_LIMITS[bucket];
+    return {
+      allowed: window.count <= limit,
+      firstRefusal: window.count === limit + 1,
+    };
   };
 }
