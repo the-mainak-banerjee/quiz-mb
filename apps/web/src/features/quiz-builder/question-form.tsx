@@ -39,7 +39,12 @@ export function questionValues(q?: QuestionDto): QuestionInput {
     ],
   };
 }
-export type QuestionFormHandle = { confirm: (action: () => void) => void };
+export type QuestionFormHandle = {
+  /** Runs `action`, first asking to discard unsaved changes. */
+  confirm: (action: () => void) => void;
+  /** Runs `action` (a navigation) without the unsaved-changes prompt. */
+  leave: (action: () => void) => void;
+};
 export function QuestionForm({
   quiz,
   initial,
@@ -97,6 +102,7 @@ export function QuestionForm({
         setImage(initial?.image ?? null);
         action();
       }),
+    leave: guard.afterSave,
   }));
   const submitQuestion = (addNext: boolean) =>
     handleSubmit(async (input) => {

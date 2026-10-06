@@ -1,6 +1,7 @@
 import { ERROR_CODE, type ProjectInput } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
 import type { ProjectsRepository } from './repository.js';
+import type { MediaService } from '../media/service.js';
 type Row = NonNullable<Awaited<ReturnType<ProjectsRepository['get']>>>;
 function dto(p: Row) {
   return {
@@ -13,7 +14,10 @@ function dto(p: Row) {
   };
 }
 export class ProjectsService {
-  constructor(private repository: ProjectsRepository) {}
+  constructor(
+    private repository: ProjectsRepository,
+    private media?: Pick<MediaService, 'removeFiles'>,
+  ) {}
   async list(userId: string, cursor?: string) {
     const rows = await this.repository.list(userId, cursor);
     return {
@@ -29,6 +33,11 @@ export class ProjectsService {
   }
   async create(userId: string, input: ProjectInput) {
     return dto(await this.repository.create(userId, input));
+  }
+  /** Deletes the project and its draft quizzes (see the repository). */
+  async remove(id: string, userId: string) {
+    const files = await this.repository.remove(id, userId);
+    await this.media?.removeFiles(files);
   }
   async update(id: string, userId: string, input: ProjectInput) {
     await this.get(id, userId);

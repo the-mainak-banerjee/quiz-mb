@@ -375,7 +375,9 @@ PATCH /api/projects/:projectId
 DELETE /api/projects/:projectId
 ```
 
-MVP may reject deletion when dependent published/live/completed quizzes exist.
+Owner only. Succeeds only when every quiz in the project is a DRAFT: those draft quizzes are deleted with the project (with their questions, media records and stored files). A project with any published, lobby, live or completed quiz is refused with `409 CONFLICT`, so participants never lose a quiz they registered for or its results. Another user's project returns `404`.
+
+Success returns `204 No Content`.
 
 ---
 
@@ -484,6 +486,16 @@ correct answers
 host-only notes
 private question configuration
 ```
+
+## 8.6 Delete Quiz
+
+```http
+DELETE /api/quizzes/:quizId
+```
+
+Owner only. Only a DRAFT quiz can be deleted; any other status is refused with `409 QUIZ_LOCKED`. The quiz's questions, options, media records and stored files are deleted with it. Another user's quiz returns `404`.
+
+Success returns `204 No Content`.
 
 ---
 

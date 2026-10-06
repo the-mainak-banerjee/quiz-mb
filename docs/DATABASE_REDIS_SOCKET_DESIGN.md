@@ -1289,8 +1289,9 @@ Failed/unconfirmed objects can be cleaned later.
 
 # 34. Suggested Delete Behavior
 
-- Draft quizzes may be hard deleted.
+- Draft quizzes may be hard deleted. Only drafts can be deleted (API §8.6); their questions, media records and stored files go with them.
 - Completed quizzes should not be hard deleted through normal MVP UI.
+- A project can be deleted only while all its quizzes are drafts (API §7.5).
 - Questions may be deleted while quiz remains editable.
 - Questions cannot be deleted after live session starts.
 - Competitive answers/results should not be individually deletable through normal user actions.

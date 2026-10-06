@@ -27,6 +27,7 @@ import { APP_LINKS } from '@/config/navigation';
 import { QuizCard } from '@/features/dashboard/quiz-card';
 import type { Quiz } from '@/features/dashboard/types';
 import { ProjectForm } from '@/features/projects/project-form';
+import { DeleteDraftQuizButton } from '@/features/quiz-builder/delete-draft-quiz-button';
 import { api } from '@/lib/api/browser';
 import { apiError } from '@/lib/api/client';
 import { API_ROUTES } from '@/lib/api/routes';
@@ -366,6 +367,7 @@ export function ProjectQuizzes({
   project: ProjectDto;
   initial: QuizSummaryDto[];
 }) {
+  const router = useRouter();
   const [items, setItems] = useState(initial);
   const [filter, setFilter] = useState<QuizFilter>('all');
   const [more, setMore] = useState(initial.length === 25);
@@ -462,6 +464,22 @@ export function ProjectQuizzes({
                         ? APP_LINKS.WORKSPACE.QUIZ_RESULTS(quiz.id)
                         : APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id)
                 }
+                {...(quiz.status === QUIZ_STATUS.DRAFT
+                  ? {
+                      secondaryAction: (
+                        <DeleteDraftQuizButton
+                          quiz={quiz}
+                          onDeleted={() => {
+                            setItems((current) =>
+                              current.filter((q) => q.id !== quiz.id),
+                            );
+                            // The page header counts the project's quizzes.
+                            router.refresh();
+                          }}
+                        />
+                      ),
+                    }
+                  : {})}
               />
             );
           })}

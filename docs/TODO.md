@@ -44,4 +44,3 @@ Fix direction: enable the `relationJoins` preview feature in `packages/database/
 - Then work on the other todo items
 
 ## Extra Feature
-- Add delete quiz and delete project feature

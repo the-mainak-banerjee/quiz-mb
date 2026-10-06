@@ -18,6 +18,7 @@ import { setApiErrors } from '@/components/forms/form-errors';
 import { useUnsavedChanges } from '@/components/forms/unsaved-changes';
 import { authoringApi, putUpload } from '@/lib/api/authoring';
 import { ImageUpload } from './image-upload';
+import type { QuestionFormHandle } from './question-form';
 
 export function quizValues(q?: QuizDto): QuizInput {
   return {
@@ -55,7 +56,7 @@ export function QuizForm({
   /** `coverFailed`: the quiz saved but a cover chosen before saving did not upload. */
   onSaved: (quiz: QuizDto, next: boolean, coverFailed?: boolean) => void;
   onCancel: () => void;
-  ref?: Ref<{ confirm: (action: () => void) => void }>;
+  ref?: Ref<QuestionFormHandle>;
 }) {
   const [cover, setCover] = useState<MediaDto | null>(initial?.cover ?? null);
   /** A cover chosen before the quiz exists; uploaded after the first save. */
@@ -77,7 +78,10 @@ export function QuizForm({
     defaultValues: quizValues(initial),
   });
   const guard = useUnsavedChanges(isDirty || uploading || !!pendingCover);
-  useImperativeHandle(ref, () => ({ confirm: guard.confirm }));
+  useImperativeHandle(ref, () => ({
+    confirm: guard.confirm,
+    leave: guard.afterSave,
+  }));
   const values = useWatch({ control });
   const title = values.title;
   const description = values.description;
