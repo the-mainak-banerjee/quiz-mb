@@ -525,6 +525,7 @@ Constraints:
 UNIQUE (publicId)
 CHECK registrationLimit > 0
 CHECK defaultQuestionDurationSeconds > 0
+CHECK status = 'DRAFT' OR plannedStartAt IS NOT NULL   -- quiz_planned_start_required
 ```
 
 Relationships:

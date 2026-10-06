@@ -356,6 +356,14 @@ test(
     });
     assert.equal(stored.status, 'DRAFT');
     assert.equal(stored.publishedAt, null);
+    // The database itself refuses a non-draft quiz without a planned start.
+    await assert.rejects(
+      db.quiz.update({
+        where: { id: quiz.id },
+        data: { status: 'PUBLISHED', publishedAt: new Date() },
+      }),
+      /quiz_planned_start_required/,
+    );
     assert.equal(
       (await request(`/public/quizzes/${quiz.publicId}`)).status,
       404,
@@ -386,6 +394,13 @@ test(
         )
       ).status,
       422,
+    );
+    await assert.rejects(
+      db.quiz.update({
+        where: { id: quiz.id },
+        data: { plannedStartAt: null },
+      }),
+      /quiz_planned_start_required/,
     );
   },
 );
