@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, Circle } from 'lucide-react';
 import { Text } from '@/components/ui';
+import { MiloStage } from '@/components/milo/milo-states';
 import { Brand as Wordmark } from '@/components/brand';
 import { cn } from '@/lib/utils';
 import { APP_LINKS } from '@/config/navigation';
@@ -87,16 +88,24 @@ function Preview({ signup }: { signup: boolean }) {
         )}
       </div>
 
-      <figure className="space-y-space-sm">
-        <div className="overflow-hidden rounded-card border border-border-surface bg-surface shadow-floating">
-          <Image
-            src={shot.src}
-            width={shot.width}
-            height={shot.height}
-            alt={shot.alt}
-            sizes="(min-width: 1024px) 40vw, 100vw"
-            className="h-auto w-full"
-            priority
+      {/* Top padding leaves room for Milo above the screenshot. */}
+      <figure className="space-y-space-sm pt-space-xl md:pt-space-2xl">
+        <div className="relative">
+          <div className="overflow-hidden rounded-card border border-border-surface bg-surface shadow-floating">
+            <Image
+              src={shot.src}
+              width={shot.width}
+              height={shot.height}
+              alt={shot.alt}
+              sizes="(min-width: 1024px) 40vw, 100vw"
+              className="h-auto w-full"
+              priority
+            />
+          </div>
+          {/* Milo greets from the corner of the product screenshot. */}
+          <MiloStage
+            pose="welcome"
+            className="absolute -top-16 right-space-sm w-24 md:-top-20 md:w-28"
           />
         </div>
         <figcaption>

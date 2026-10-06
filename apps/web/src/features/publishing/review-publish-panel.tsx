@@ -60,7 +60,12 @@ export function ReviewPublishPanel({
 
   return (
     <div className="space-y-space-lg">
-      {publishing && <GlobalLoader label="Publishing your quiz…" />}
+      {publishing && (
+        <GlobalLoader
+          label="Publishing your quiz…"
+          hint="Opening registration and preparing the public page."
+        />
+      )}
       <Surface className="flex flex-col justify-between gap-space-md bg-action-secondary sm:flex-row sm:items-center">
         <div className="flex items-start gap-space-sm">
           <CheckCircle2
