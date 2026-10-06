@@ -7,7 +7,6 @@ import {
   type QuizInput,
   type QuizDto,
   type MediaDto,
-  MEDIA_PURPOSE,
   QUIZ_STATUS,
 } from '@quizmb/contracts';
 import { Button, FormField, Input, Surface, Text } from '@/components/ui';
@@ -17,7 +16,7 @@ import { CalendarClock, Clock3, Settings2, Users } from 'lucide-react';
 import { Field } from '@/components/forms/field';
 import { setApiErrors } from '@/components/forms/form-errors';
 import { useUnsavedChanges } from '@/components/forms/unsaved-changes';
-import { authoringApi, uploadImage } from '@/lib/api/authoring';
+import { authoringApi, putUpload } from '@/lib/api/authoring';
 import { ImageUpload } from './image-upload';
 
 export function quizValues(q?: QuizDto): QuizInput {
@@ -89,29 +88,33 @@ export function QuizForm({
         noValidate
         onSubmit={handleSubmit(async (input) => {
           try {
-            let saved = await authoringApi.saveQuiz(
-              projectId,
-              input,
-              initial?.id,
-            );
+            let saved: QuizDto;
             let coverFailed = false;
-            if (pendingCover) {
-              // The quiz exists now: upload the cover chosen before saving.
-              try {
-                const media = await uploadImage(
-                  saved.id,
-                  MEDIA_PURPOSE.QUIZ_COVER,
-                  pendingCover,
-                );
-                saved = await authoringApi.saveQuiz(
-                  projectId,
-                  { ...quizValues(saved), coverMediaId: media.id },
-                  saved.id,
-                );
-              } catch {
-                coverFailed = true;
+            if (initial) {
+              saved = await authoringApi.saveQuiz(projectId, input, initial.id);
+            } else {
+              // Creating also requests the cover's upload ticket; the cover
+              // is uploaded, then attached (and checked) by one update.
+              const { coverUpload, ...created } = await authoringApi.createQuiz(
+                projectId,
+                input,
+                pendingCover ?? undefined,
+              );
+              saved = created;
+              if (pendingCover) {
+                try {
+                  if (!coverUpload) throw new Error('No upload ticket.');
+                  await putUpload(coverUpload, pendingCover);
+                  saved = await authoringApi.saveQuiz(
+                    projectId,
+                    { ...quizValues(saved), coverMediaId: coverUpload.mediaId },
+                    saved.id,
+                  );
+                } catch {
+                  coverFailed = true;
+                }
+                setPendingCover(null);
               }
-              setPendingCover(null);
             }
             reset(quizValues(saved));
             guard.afterSave(() => onSaved(saved, next, coverFailed));

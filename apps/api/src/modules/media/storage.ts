@@ -43,6 +43,7 @@ export class SupabaseStorage {
    * each) and the browser would download them again under new URLs.
    */
   private signed = new Map<string, { url: string; reuseUntil: number }>();
+  private signing = new Map<string, Promise<string>>();
   /** When the bucket configuration last passed its check. */
   private bucketCheckedAt = 0;
   constructor(
@@ -127,6 +128,15 @@ export class SupabaseStorage {
   async read(path: string) {
     const cached = this.signed.get(path);
     if (cached && cached.reuseUntil > Date.now()) return cached.url;
+    // Concurrent reads of one path share a single signing request.
+    let signing = this.signing.get(path);
+    if (!signing) {
+      signing = this.sign(path).finally(() => this.signing.delete(path));
+      this.signing.set(path, signing);
+    }
+    return signing;
+  }
+  private async sign(path: string) {
     const { data, error } = await this.client
       .from(this.bucket)
       .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);

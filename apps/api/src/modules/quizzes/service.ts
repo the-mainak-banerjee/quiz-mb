@@ -1,9 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import {
   questionSchema,
   type PublicQuizDto,
+  type QuizCreateInput,
+  type QuizCreatedDto,
   type QuizInput,
   type QuizDto,
   ERROR_CODE,
+  MEDIA_PURPOSE,
   QUIZ_STATUS,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
@@ -103,11 +107,39 @@ export class QuizzesService {
       meta: { nextCursor: rows.length > 25 ? rows[24]!.id : null },
     };
   }
-  async create(projectId: string, userId: string, input: QuizInput) {
-    return this.dto(await this.repository.create(projectId, userId, input));
+  async create(
+    projectId: string,
+    userId: string,
+    input: QuizCreateInput,
+  ): Promise<QuizCreatedDto> {
+    const { cover, ...quiz } = input;
+    // The id is chosen here so the cover's upload URL can be signed while
+    // the quiz is created; an unused signed URL is harmless. Without
+    // storage the quiz is still created and the cover reports failure.
+    const id = randomUUID();
+    const asset =
+      cover && this.media.available
+        ? this.media.pendingAsset(userId, id, MEDIA_PURPOSE.QUIZ_COVER, cover)
+        : undefined;
+    const signing = asset ? this.media.ticket(asset).catch(() => null) : null;
+    const row = await this.repository.create(
+      projectId,
+      userId,
+      quiz,
+      id,
+      asset,
+    );
+    const [dto, coverUpload] = await Promise.all([this.dto(row), signing]);
+    return { ...dto, coverUpload };
   }
   async update(id: string, userId: string, input: QuizInput) {
-    return this.dto(await this.repository.update(id, userId, input));
+    const verified = await this.media.verifyPending(
+      input.coverMediaId,
+      id,
+      userId,
+      MEDIA_PURPOSE.QUIZ_COVER,
+    );
+    return this.dto(await this.repository.update(id, userId, input, verified));
   }
   async publish(id: string, userId: string) {
     const quiz = await this.repository.get(id, userId);

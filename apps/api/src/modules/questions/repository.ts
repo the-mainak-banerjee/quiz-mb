@@ -38,6 +38,7 @@ export class QuestionsRepository {
     userId: string,
     input: QuestionInput,
     questionId?: string,
+    imageVerified = false,
   ) {
     return this.db.$transaction(async (tx) => {
       await lockEditableQuiz(tx, quizId, userId, EDIT_SCOPE.QUESTIONS);
@@ -47,6 +48,7 @@ export class QuestionsRepository {
         quizId,
         userId,
         MEDIA_PURPOSE.QUESTION_IMAGE,
+        imageVerified,
       );
       const { options, ...data } = input;
       if (questionId) {

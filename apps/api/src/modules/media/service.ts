@@ -4,6 +4,9 @@ import {
   ERROR_CODE,
   MEDIA_STATUS,
   type MediaDto,
+  type MediaPurpose,
+  type UploadDto,
+  type UploadFileInput,
   type UploadInput,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
@@ -11,11 +14,24 @@ import { lockedTransaction } from '../../infrastructure/transactions.js';
 import { lockEditableQuiz, mediaEditScope } from '../quizzes/repository.js';
 import type { SupabaseStorage } from './storage.js';
 type Asset = Prisma.MediaAssetGetPayload<object>;
+const EXTENSIONS = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+} as const;
+/**
+ * Images go from the browser straight to storage. An upload is recorded as
+ * PENDING with a signed upload ticket, and becomes READY only when it is
+ * attached to a quiz or question: the stored file is checked first.
+ */
 export class MediaService {
   constructor(
     private db: PrismaClient,
     private storage: SupabaseStorage | undefined,
   ) {}
+  get available() {
+    return !!this.storage;
+  }
   private adapter() {
     if (!this.storage)
       throw new ApiError(
@@ -33,39 +49,78 @@ export class MediaService {
       url: await this.adapter().read(asset.objectPath),
     };
   }
-  async request(userId: string, input: UploadInput) {
+  /** A PENDING upload row; the caller creates it in its own transaction. */
+  pendingAsset(
+    userId: string,
+    quizId: string,
+    purpose: MediaPurpose,
+    file: UploadFileInput,
+  ) {
     const id = randomUUID();
-    const extension = {
-      'image/png': 'png',
-      'image/jpeg': 'jpg',
-      'image/webp': 'webp',
-    }[input.mimeType];
-    const path = `${userId}/${input.resource.quizId}/${id}.${extension}`;
+    return {
+      id,
+      ownerUserId: userId,
+      quizId,
+      purpose,
+      bucket: this.adapter().bucket,
+      objectPath: `${userId}/${quizId}/${id}.${EXTENSIONS[file.mimeType]}`,
+      fileName: file.fileName,
+      mimeType: file.mimeType,
+      sizeBytes: file.sizeBytes,
+    } satisfies Prisma.MediaAssetUncheckedCreateInput;
+  }
+  /** The signed URL the browser uploads this asset's file to. */
+  async ticket(asset: { id: string; objectPath: string }): Promise<UploadDto> {
+    return {
+      mediaId: asset.id,
+      upload: await this.adapter().authorize(asset.objectPath),
+    };
+  }
+  async request(userId: string, input: UploadInput) {
+    const { purpose, resource, ...file } = input;
     // Ownership and edit locks are checked before storage availability.
-    const storage = await this.db.$transaction(async (tx) => {
+    const asset = await this.db.$transaction(async (tx) => {
       await lockEditableQuiz(
         tx,
-        input.resource.quizId,
+        resource.quizId,
         userId,
-        mediaEditScope(input.purpose),
+        mediaEditScope(purpose),
       );
-      const storage = this.adapter();
-      await tx.mediaAsset.create({
-        data: {
-          id,
-          ownerUserId: userId,
-          quizId: input.resource.quizId,
-          purpose: input.purpose,
-          bucket: storage.bucket,
-          objectPath: path,
-          fileName: input.fileName,
-          mimeType: input.mimeType,
-          sizeBytes: input.sizeBytes,
-        },
+      return tx.mediaAsset.create({
+        data: this.pendingAsset(userId, resource.quizId, purpose, file),
       });
-      return storage;
     }, lockedTransaction);
-    return { mediaId: id, upload: await storage.authorize(path) };
+    return this.ticket(asset);
+  }
+  /**
+   * Before attaching an image: when it is still PENDING, check the stored
+   * file matches the declared type and size. Runs outside any transaction
+   * (it calls storage); the attach transaction then re-checks the row and
+   * marks it READY. Returns whether a PENDING upload was verified.
+   */
+  async verifyPending(
+    id: string | null,
+    quizId: string,
+    userId: string,
+    purpose: MediaPurpose,
+  ) {
+    if (!id) return false;
+    const asset = await this.db.mediaAsset.findFirst({
+      where: {
+        id,
+        quizId,
+        ownerUserId: userId,
+        purpose,
+        status: MEDIA_STATUS.PENDING,
+      },
+    });
+    // READY or unknown images are checked by the attach transaction.
+    if (!asset) return false;
+    const storage = this.adapter();
+    await storage.verify(asset.objectPath, asset.sizeBytes, asset.mimeType);
+    // The response shows the image: start signing its read URL now.
+    storage.read(asset.objectPath).catch(() => undefined);
+    return true;
   }
   private async owned(id: string, userId: string) {
     const asset = await this.db.mediaAsset.findFirst({
@@ -74,32 +129,6 @@ export class MediaService {
     if (!asset)
       throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Image not found.');
     return asset;
-  }
-  async complete(id: string, userId: string) {
-    const asset = await this.owned(id, userId);
-    const storage = this.adapter();
-    await storage.verify(asset.objectPath, asset.sizeBytes, asset.mimeType);
-    // Sign the read URL while the asset is marked ready; the response
-    // needs it and the URL is cached for later reads.
-    const signing = storage.read(asset.objectPath);
-    signing.catch(() => undefined);
-    const ready = await this.db.$transaction(async (tx) => {
-      await lockEditableQuiz(
-        tx,
-        asset.quizId,
-        userId,
-        mediaEditScope(asset.purpose),
-      );
-      const current = await tx.mediaAsset.findUniqueOrThrow({ where: { id } });
-      if (current.status === MEDIA_STATUS.DELETED)
-        throw new ApiError(409, ERROR_CODE.INVALID_MEDIA, 'Image was removed.');
-      return tx.mediaAsset.update({
-        where: { id },
-        data: { status: MEDIA_STATUS.READY, readyAt: new Date() },
-      });
-    }, lockedTransaction);
-    await signing;
-    return this.dto(ready);
   }
   async remove(id: string, userId: string) {
     const asset = await this.owned(id, userId);

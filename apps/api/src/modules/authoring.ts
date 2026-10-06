@@ -31,7 +31,11 @@ export function authoringRoutes(
     media,
     projects,
   );
-  const questions = new QuestionsService(new QuestionsRepository(db), quizzes);
+  const questions = new QuestionsService(
+    new QuestionsRepository(db),
+    quizzes,
+    media,
+  );
   const results = new ResultsService(new ResultsRepository(db));
   const registrations = new RegistrationsService(
     new RegistrationsRepository(db),
