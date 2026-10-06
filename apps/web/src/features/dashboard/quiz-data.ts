@@ -20,12 +20,9 @@ function hostQuiz(quiz: HostDashboardQuizDto): Quiz {
         : quiz.status === QUIZ_STATUS.LIVE || quiz.status === QUIZ_STATUS.LOBBY
           ? 'live'
           : 'scheduled';
-  const planned = quiz.plannedStartAt
-    ? new Date(quiz.plannedStartAt).toLocaleString(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      })
-    : `Updated ${new Date(quiz.updatedAt).toLocaleDateString()}`;
+  const planned: Quiz['timing'] = quiz.plannedStartAt
+    ? { at: quiz.plannedStartAt, format: 'dateTime' }
+    : { prefix: 'Updated', at: quiz.updatedAt, format: 'date' };
 
   return {
     id: quiz.id,
@@ -75,10 +72,7 @@ function participantQuiz(quiz: PublicQuizDto, liveSessionId?: string): Quiz {
           : 'Registered',
     title: quiz.title,
     description: `Hosted by ${quiz.host.name} · Room opens when the host starts.`,
-    timing: new Date(quiz.plannedStartAt).toLocaleString(undefined, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    }),
+    timing: { at: quiz.plannedStartAt, format: 'dateTime' },
     detail: `${quiz.registrationCount} registered`,
     action:
       status === 'completed'

@@ -10,6 +10,7 @@ import {
   ListChecks,
 } from 'lucide-react';
 import { Badge, Surface, Text } from '@/components/ui';
+import { LocalDateTime } from '@/components/local-date-time';
 import { RoleIndicator } from './indicators';
 import { PreviewButton } from '@/components/workspace/preview-actions';
 import { NavigationItem } from '@/components/workspace/navigation-item';
@@ -78,7 +79,17 @@ export function QuizCard({
             className="inline-flex items-center gap-space-xs"
           >
             <TimingIcon size={16} aria-hidden="true" />
-            {quiz.timing}
+            {typeof quiz.timing === 'string' ? (
+              quiz.timing
+            ) : (
+              <span>
+                {quiz.timing.prefix && `${quiz.timing.prefix} `}
+                <LocalDateTime
+                  value={quiz.timing.at}
+                  format={quiz.timing.format}
+                />
+              </span>
+            )}
           </Text>
           {quiz.detail && (
             <Text

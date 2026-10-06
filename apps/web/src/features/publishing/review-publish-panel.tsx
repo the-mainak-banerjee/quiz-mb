@@ -24,6 +24,7 @@ import { apiError } from '@/lib/api/client';
 import { publishingApi } from '@/lib/api/publishing';
 import { pluralize } from '@/lib/utils';
 import { PromptText } from '@/components/markdown-preview';
+import { LocalDateTime } from '@/components/local-date-time';
 
 export function ReviewPublishPanel({
   quiz,
@@ -51,12 +52,11 @@ export function ReviewPublishPanel({
       (question.durationOverrideSeconds ?? quiz.defaultQuestionDurationSeconds),
     0,
   );
-  const planned = quiz.plannedStartAt
-    ? new Date(quiz.plannedStartAt).toLocaleString(undefined, {
-        dateStyle: 'full',
-        timeStyle: 'short',
-      })
-    : 'Not scheduled';
+  const planned = quiz.plannedStartAt ? (
+    <LocalDateTime value={quiz.plannedStartAt} format="fullDateTime" />
+  ) : (
+    'Not scheduled'
+  );
 
   return (
     <div className="space-y-space-lg">

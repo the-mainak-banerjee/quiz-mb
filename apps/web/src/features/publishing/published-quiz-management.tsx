@@ -13,6 +13,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import { Badge, Button, Surface, Text } from '@/components/ui';
+import { LocalDateTime } from '@/components/local-date-time';
 import { Modal } from '@/components/ui/modal';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
@@ -234,11 +235,15 @@ export function PublishedQuizManagement({
           <QuizCover cover={quiz.cover} title={quiz.title} />
           <div className="flex flex-wrap items-center gap-space-sm rounded-card border border-border-surface bg-surface-low p-space-sm">
             <div className="flex size-control-large flex-col items-center justify-center rounded-control bg-surface shadow-card">
-              <Text as="span" variant="caption" className="text-accent">
-                {quiz.dateTileMonth}
+              <Text
+                as="span"
+                variant="caption"
+                className="text-accent uppercase"
+              >
+                <LocalDateTime value={quiz.plannedStartAt} format="month" />
               </Text>
               <Text as="span" variant="label">
-                {quiz.dateTileDay}
+                <LocalDateTime value={quiz.plannedStartAt} format="day" />
               </Text>
             </div>
             <div>
@@ -246,7 +251,8 @@ export function PublishedQuizManagement({
                 SCHEDULED EVENT TIME
               </Text>
               <Text variant="label">
-                {quiz.date} · {quiz.time}
+                <LocalDateTime value={quiz.plannedStartAt} format="longDate" />{' '}
+                · <LocalDateTime value={quiz.plannedStartAt} format="time" />
               </Text>
             </div>
           </div>

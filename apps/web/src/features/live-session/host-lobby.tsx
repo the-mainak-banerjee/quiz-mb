@@ -12,6 +12,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Badge, ProgressBar, Surface, Text } from '@/components/ui';
+import { LocalDateTime } from '@/components/local-date-time';
 import { CopyLinkButton } from '@/components/copy-link-button';
 import { APP_LINKS } from '@/config/navigation';
 import { ActionButton } from './action-button';
@@ -97,12 +98,21 @@ export function HostLobby({
             <ul className="flex flex-wrap items-center gap-x-space-sm gap-y-1 pt-1 text-body-secondary text-text-secondary">
               <li className="inline-flex items-center gap-1.5">
                 <CalendarDays size={16} aria-hidden="true" />
-                {quiz.plannedDate}
+                {quiz.plannedStartAt ? (
+                  <LocalDateTime
+                    value={quiz.plannedStartAt}
+                    format="longDate"
+                  />
+                ) : (
+                  'Date to be announced'
+                )}
               </li>
-              <li className="inline-flex items-center gap-1.5">
-                <Clock3 size={16} aria-hidden="true" />
-                {quiz.plannedTime}
-              </li>
+              {quiz.plannedStartAt && (
+                <li className="inline-flex items-center gap-1.5">
+                  <Clock3 size={16} aria-hidden="true" />
+                  <LocalDateTime value={quiz.plannedStartAt} format="time" />
+                </li>
+              )}
               <li className="inline-flex items-center gap-1.5">
                 <UsersRound size={16} aria-hidden="true" />
                 Host: {quiz.hostName}

@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { Text } from '@/components/ui';
+import { formatLocalDateTime } from '@/components/local-date-time';
 import type { PublishedQuizViewModel } from './types';
 
 export function QuizQrCode({ url }: { url: string }) {
@@ -191,8 +192,17 @@ export async function downloadQuizPoster(
   context.fillText('REGISTRATION', contentX + 540, detailsY + 44);
   context.fillStyle = colors.text;
   context.font = `600 26px ${fontFamily}`;
-  context.fillText(quiz.date, contentX + 32, detailsY + 84);
-  context.fillText(quiz.time, contentX + 32, detailsY + 122);
+  // Drawn in the browser, so these are the viewer's local date and time.
+  context.fillText(
+    formatLocalDateTime(quiz.plannedStartAt, 'longDate'),
+    contentX + 32,
+    detailsY + 84,
+  );
+  context.fillText(
+    formatLocalDateTime(quiz.plannedStartAt, 'time'),
+    contentX + 32,
+    detailsY + 122,
+  );
   context.fillText(
     `${quiz.registeredCount} registered`,
     contentX + 540,
