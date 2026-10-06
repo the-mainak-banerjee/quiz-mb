@@ -40,5 +40,12 @@ export function projectRoutes(service: ProjectsService) {
       ),
     });
   });
+  r.delete('/projects/:id', async (req, res) => {
+    await service.remove(
+      validate(z.uuid(), req.params.id),
+      res.locals.userId as string,
+    );
+    res.status(204).end();
+  });
   return r;
 }

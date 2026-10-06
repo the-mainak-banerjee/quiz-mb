@@ -153,9 +153,10 @@ export class SupabaseStorage {
     });
     return data.signedUrl;
   }
-  async remove(path: string) {
-    this.signed.delete(path);
-    const { error } = await this.client.from(this.bucket).remove([path]);
+  async remove(...paths: string[]) {
+    if (!paths.length) return;
+    for (const path of paths) this.signed.delete(path);
+    const { error } = await this.client.from(this.bucket).remove(paths);
     if (error)
       throw new ApiError(
         503,

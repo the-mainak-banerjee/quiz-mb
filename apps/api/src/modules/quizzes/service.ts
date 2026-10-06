@@ -141,6 +141,9 @@ export class QuizzesService {
     );
     return this.dto(await this.repository.update(id, userId, input, verified));
   }
+  async remove(id: string, userId: string) {
+    await this.media.removeFiles(await this.repository.remove(id, userId));
+  }
   async publish(id: string, userId: string) {
     const quiz = await this.repository.get(id, userId);
     if (!quiz) throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');

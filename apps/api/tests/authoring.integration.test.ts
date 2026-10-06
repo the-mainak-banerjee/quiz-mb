@@ -471,6 +471,139 @@ test(
         .status,
       409,
     );
+    // Deleting: only drafts, and only projects whose quizzes are all drafts.
+    assert.equal(
+      (
+        await refusal(
+          await request(`/quizzes/${quiz.id}`, 'DELETE', undefined, owner),
+          409,
+        )
+      ).code,
+      'QUIZ_LOCKED',
+    );
+    assert.equal(
+      (
+        await refusal(
+          await request(`/projects/${project.id}`, 'DELETE', undefined, owner),
+          409,
+        )
+      ).code,
+      'CONFLICT',
+    );
+    assert.ok(await db.quiz.findUnique({ where: { id: quiz.id } }));
+    const drafts = await data<ProjectDto>(
+      await request(
+        '/projects',
+        'POST',
+        { name: 'Drafts only', description: '' },
+        owner,
+      ),
+      201,
+    );
+    const draftQuiz = (title: string) =>
+      request(
+        `/projects/${drafts.id}/quizzes`,
+        'POST',
+        { ...basics, title },
+        owner,
+      ).then((response) => data<QuizDto>(response, 201));
+    const doomed = await draftQuiz('Delete me');
+    await data<QuizDto>(
+      await request(`/quizzes/${doomed.id}/questions`, 'POST', single, owner),
+      201,
+    );
+    let coverPath: string | undefined;
+    if (storage) {
+      const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF9kAAAAASUVORK5CYII=',
+        'base64',
+      );
+      const ticket = await data<UploadDto>(
+        await request(
+          '/media/upload-request',
+          'POST',
+          {
+            purpose: 'QUIZ_COVER',
+            fileName: 'doomed.png',
+            mimeType: 'image/png',
+            sizeBytes: png.length,
+            resource: { quizId: doomed.id },
+          },
+          owner,
+        ),
+        201,
+      );
+      const put = await fetch(ticket.upload.url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/png' },
+        body: png,
+      });
+      assert.ok(put.ok);
+      await data<QuizDto>(
+        await request(
+          `/quizzes/${doomed.id}`,
+          'PATCH',
+          { ...basics, title: 'Delete me', coverMediaId: ticket.mediaId },
+          owner,
+        ),
+      );
+      coverPath = ticket.upload.path;
+    }
+    assert.equal(
+      (await request(`/quizzes/${doomed.id}`, 'DELETE', undefined, other))
+        .status,
+      404,
+    );
+    assert.equal(
+      (await request(`/quizzes/${doomed.id}`, 'DELETE', undefined, owner))
+        .status,
+      204,
+    );
+    assert.equal(
+      (await request(`/quizzes/${doomed.id}`, 'GET', undefined, owner)).status,
+      404,
+    );
+    assert.equal(
+      await db.question.count({ where: { quizId: doomed.id } }),
+      0,
+      'questions are deleted with the quiz',
+    );
+    assert.equal(
+      await db.mediaAsset.count({ where: { quizId: doomed.id } }),
+      0,
+      'media rows are deleted with the quiz',
+    );
+    if (storage && coverPath) {
+      const stored = await storage.client
+        .from(storage.bucket)
+        .download(coverPath);
+      assert.ok(stored.error, 'the cover file is removed from storage');
+    }
+    assert.equal(
+      (await request(`/quizzes/${doomed.id}`, 'DELETE', undefined, owner))
+        .status,
+      404,
+    );
+    const kept = [await draftQuiz('Draft one'), await draftQuiz('Draft two')];
+    assert.equal(
+      (await request(`/projects/${drafts.id}`, 'DELETE', undefined, other))
+        .status,
+      404,
+    );
+    assert.equal(
+      (await request(`/projects/${drafts.id}`, 'DELETE', undefined, owner))
+        .status,
+      204,
+    );
+    assert.equal(
+      (await request(`/projects/${drafts.id}`, 'GET', undefined, owner)).status,
+      404,
+    );
+    assert.equal(
+      await db.quiz.count({ where: { id: { in: kept.map((q) => q.id) } } }),
+      0,
+      'draft quizzes are deleted with their project',
+    );
     const rls = await db.$queryRaw<
       Array<{ relrowsecurity: boolean }>
     >`SELECT relrowsecurity FROM pg_class WHERE oid IN ('projects'::regclass, 'quizzes'::regclass, 'questions'::regclass, 'question_options'::regclass, 'media_assets'::regclass)`;

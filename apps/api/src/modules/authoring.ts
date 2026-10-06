@@ -15,6 +15,7 @@ import type { SupabaseStorage } from './media/storage.js';
 import { RegistrationsRepository } from './registrations/repository.js';
 import { RegistrationsService } from './registrations/service.js';
 import { registrationRoutes } from './registrations/routes.js';
+import type { Logger } from 'pino';
 import type { DomainEvents } from '../infrastructure/domain-events.js';
 import { ResultsRepository } from './results/repository.js';
 import { ResultsService } from './results/service.js';
@@ -23,9 +24,10 @@ export function authoringRoutes(
   db: PrismaClient,
   storage?: SupabaseStorage,
   events?: DomainEvents,
+  logger?: Logger,
 ) {
-  const projects = new ProjectsService(new ProjectsRepository(db));
-  const media = new MediaService(db, storage);
+  const media = new MediaService(db, storage, logger);
+  const projects = new ProjectsService(new ProjectsRepository(db), media);
   const quizzes = new QuizzesService(
     new QuizzesRepository(db),
     media,

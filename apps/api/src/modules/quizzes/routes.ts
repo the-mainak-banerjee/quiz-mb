@@ -44,6 +44,13 @@ export function quizRoutes(service: QuizzesService) {
       ),
     });
   });
+  r.delete('/quizzes/:id', async (req, res) => {
+    await service.remove(
+      validate(z.uuid(), req.params.id),
+      res.locals.userId as string,
+    );
+    res.status(204).end();
+  });
   r.post('/quizzes/:id/publish', async (req, res) => {
     res.json({
       success: true,

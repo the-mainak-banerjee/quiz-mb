@@ -13,17 +13,6 @@ Fix direction to evaluate:
 - Socket.IO cannot go through such a rewrite (no WebSocket upgrade), so it must keep connecting directly to the API domain. It already uses cookie-free ticket authentication for this reason (see API_DESIGN §17).
 - Update README hosting instructions and `.env.example` files, and re-run the auth integration tests against the new setup.
 
-## Database rule requiring `plannedStartAt` on non-draft quizzes
-
-Publishing without a planned date/time is currently blocked by the quiz service, the locked publish transaction, and the request contract, but the database itself has no constraint. Add a migration so the database also rejects it:
-
-```sql
-ALTER TABLE "quizzes" ADD CONSTRAINT "quiz_planned_start_required"
-  CHECK ("status" = 'DRAFT' OR "plannedStartAt" IS NOT NULL);
-```
-
-Before applying, confirm that no existing non-draft development rows have a null `plannedStartAt`, and extend the publishing integration test to assert the constraint.
-
 ## Phase 11 — still open
 
 Done on branch `phase-11-hardening`: the rate limiting item, the Phase 10 "end during a question" item and the earlier UI issues list (all removed from this file), plus backend Segments 1–6 and their frontend work. Still open:
@@ -44,4 +33,3 @@ Fix direction: enable the `relationJoins` preview feature in `packages/database/
 - Then work on the other todo items
 
 ## Extra Feature
-- Add delete quiz and delete project feature

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient, Prisma } from '@quizmb/database';
+import type { Logger } from 'pino';
 import {
   ERROR_CODE,
   MEDIA_STATUS,
@@ -28,6 +29,7 @@ export class MediaService {
   constructor(
     private db: PrismaClient,
     private storage: SupabaseStorage | undefined,
+    private logger?: Pick<Logger, 'error'>,
   ) {}
   get available() {
     return !!this.storage;
@@ -121,6 +123,20 @@ export class MediaService {
     // The response shows the image: start signing its read URL now.
     storage.read(asset.objectPath).catch(() => undefined);
     return true;
+  }
+  /**
+   * Removes the stored files of deleted quizzes. Their rows are already gone,
+   * so a storage failure only leaves unreachable files: it is logged rather
+   * than failing the deletion.
+   */
+  async removeFiles(paths: string[]) {
+    if (!this.storage || !paths.length) return;
+    await this.storage.remove(...paths).catch((error: unknown) => {
+      this.logger?.error(
+        { err: error, files: paths.length },
+        'Deleted quiz media could not be removed from storage',
+      );
+    });
   }
   private async owned(id: string, userId: string) {
     const asset = await this.db.mediaAsset.findFirst({

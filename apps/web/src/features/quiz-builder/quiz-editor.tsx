@@ -32,6 +32,7 @@ import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
 import { VisuallyHidden } from '@/components/visually-hidden';
 import { Modal } from '@/components/ui/modal';
+import { ConfirmDeleteModal } from '@/components/confirm-delete-modal';
 import { apiError } from '@/lib/api/client';
 import { authoringApi } from '@/lib/api/authoring';
 import { cn } from '@/lib/utils';
@@ -90,6 +91,7 @@ export function QuizEditor({
   const [revision, setRevision] = useState(0);
   const [preview, setPreview] = useState(false);
   const [deleting, setDeleting] = useState<QuestionDto | null>(null);
+  const [deletingQuiz, setDeletingQuiz] = useState(false);
   const [error, setError] = useState(
     notice === EDITOR_NOTICE.COVER_FAILED
       ? 'The quiz was saved, but its cover image could not be uploaded. Please add it again.'
@@ -191,14 +193,26 @@ export function QuizEditor({
               ? 'Questions'
               : 'Review & publish'}
         </Text>
-        <Button
-          variant="secondary"
-          icon={<Eye size={18} />}
-          disabled={!quiz?.questions.length}
-          onClick={() => setPreview(true)}
-        >
-          Preview saved quiz
-        </Button>
+        <div className="flex flex-wrap gap-space-xs">
+          {quiz?.status === QUIZ_STATUS.DRAFT && !readOnly && (
+            <Button
+              variant="outline"
+              icon={<Trash2 size={18} aria-hidden="true" />}
+              className="text-danger"
+              onClick={() => setDeletingQuiz(true)}
+            >
+              Delete quiz
+            </Button>
+          )}
+          <Button
+            variant="secondary"
+            icon={<Eye size={18} />}
+            disabled={!quiz?.questions.length}
+            onClick={() => setPreview(true)}
+          >
+            Preview saved quiz
+          </Button>
+        </div>
       </div>
       <nav
         aria-label="Quiz creation steps"
@@ -545,6 +559,27 @@ export function QuizEditor({
           ))}
         </div>
       </Modal>
+      {quiz && (
+        <ConfirmDeleteModal
+          open={deletingQuiz}
+          onOpenChange={setDeletingQuiz}
+          title="Delete draft quiz?"
+          description={`“${quiz.title}” will be permanently deleted, including its questions and images. This can’t be undone.`}
+          confirmLabel="Delete quiz"
+          onConfirm={async () => {
+            await authoringApi.deleteQuiz(quiz.id);
+            // The quiz is gone, so unsaved edits are discarded silently.
+            const back = () => {
+              router.replace(APP_LINKS.WORKSPACE.PROJECT(project.id));
+              router.refresh();
+            };
+            const form = (step === 'details' ? detailsRef : questionRef)
+              .current;
+            if (form) form.leave(back);
+            else back();
+          }}
+        />
+      )}
       <Modal
         open={!!deleting}
         onOpenChange={(open) => {

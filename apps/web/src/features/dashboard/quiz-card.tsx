@@ -9,6 +9,7 @@ import {
   ChartNoAxesCombined,
   ListChecks,
 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Badge, Surface, Text } from '@/components/ui';
 import { LocalDateTime } from '@/components/local-date-time';
 import { RoleIndicator } from './indicators';
@@ -21,10 +22,13 @@ export function QuizCard({
   quiz,
   featured = false,
   actionHref,
+  secondaryAction,
 }: {
   quiz: Quiz;
   featured?: boolean;
   actionHref?: string;
+  /** An extra control beside the main action, e.g. deleting a draft. */
+  secondaryAction?: ReactNode;
 }) {
   const ActionIcon =
     quiz.status === 'live'
@@ -103,31 +107,34 @@ export function QuizCard({
             </Text>
           )}
         </div>
-        {actionHref ? (
-          <NavigationItem
-            href={actionHref}
-            icon={<ActionIcon size={16} aria-hidden="true" />}
-            iconPosition={quiz.status === 'live' ? 'right' : 'left'}
-            className={cn(
-              'h-control w-full',
-              quiz.status === 'live'
-                ? 'ds-primary-motion bg-action-primary text-action-on-primary hover:bg-action-primary-hover hover:text-action-on-primary'
-                : 'bg-action-secondary text-accent hover:bg-action-secondary-hover hover:text-accent',
-            )}
-          >
-            {quiz.action}
-          </NavigationItem>
-        ) : (
-          <PreviewButton
-            action={quiz.action}
-            variant={quiz.status === 'live' ? 'primary' : 'secondary'}
-            icon={<ActionIcon size={16} aria-hidden="true" />}
-            iconPosition={quiz.status === 'live' ? 'right' : 'left'}
-            className="w-full"
-          >
-            {quiz.action}
-          </PreviewButton>
-        )}
+        <div className="flex gap-space-xs">
+          {actionHref ? (
+            <NavigationItem
+              href={actionHref}
+              icon={<ActionIcon size={16} aria-hidden="true" />}
+              iconPosition={quiz.status === 'live' ? 'right' : 'left'}
+              className={cn(
+                'h-control w-full min-w-0 flex-1',
+                quiz.status === 'live'
+                  ? 'ds-primary-motion bg-action-primary text-action-on-primary hover:bg-action-primary-hover hover:text-action-on-primary'
+                  : 'bg-action-secondary text-accent hover:bg-action-secondary-hover hover:text-accent',
+              )}
+            >
+              {quiz.action}
+            </NavigationItem>
+          ) : (
+            <PreviewButton
+              action={quiz.action}
+              variant={quiz.status === 'live' ? 'primary' : 'secondary'}
+              icon={<ActionIcon size={16} aria-hidden="true" />}
+              iconPosition={quiz.status === 'live' ? 'right' : 'left'}
+              className="w-full"
+            >
+              {quiz.action}
+            </PreviewButton>
+          )}
+          {secondaryAction}
+        </div>
       </div>
     </Surface>
   );

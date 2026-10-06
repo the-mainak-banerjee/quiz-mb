@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ArrowRight, Search } from 'lucide-react';
 import { Button, Input, Text } from '@/components/ui';
 import { VisuallyHidden } from '@/components/visually-hidden';
@@ -9,6 +10,7 @@ import { EmptyState } from './empty-state';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import type { Quiz } from './types';
 import { APP_LINKS } from '@/config/navigation';
+import { DeleteDraftQuizButton } from '@/features/quiz-builder/delete-draft-quiz-button';
 
 export function QuizList({
   quizzes,
@@ -17,7 +19,10 @@ export function QuizList({
   quizzes: Quiz[];
   showViewAll?: boolean;
 }) {
+  const router = useRouter();
   const [filter, setFilter] = useState<'all' | 'host' | 'participant'>('all');
+  /** Deleted here; hidden until the refreshed page data arrives. */
+  const [deleted, setDeleted] = useState<string[]>([]);
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -40,6 +45,7 @@ export function QuizList({
   ] as const;
   const visible = quizzes.filter(
     (quiz) =>
+      !deleted.includes(quiz.id) &&
       (filter === 'all' || quiz.role === filter) &&
       `${quiz.title} ${quiz.project}`
         .toLowerCase()
@@ -166,6 +172,20 @@ export function QuizList({
                 key={quiz.id}
                 quiz={quiz}
                 {...(actionHref ? { actionHref } : {})}
+                {...(quiz.role === 'host' && quiz.status === 'draft'
+                  ? {
+                      secondaryAction: (
+                        <DeleteDraftQuizButton
+                          quiz={quiz}
+                          onDeleted={() => {
+                            setDeleted((current) => [...current, quiz.id]);
+                            // Counts and other sections come from the server.
+                            router.refresh();
+                          }}
+                        />
+                      ),
+                    }
+                  : {})}
               />
             );
           })}

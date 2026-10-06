@@ -34,6 +34,10 @@ export const authoringApi = {
     id
       ? api.patch<QuizDto>(`/api/questions/${id}`, data, auth)
       : api.post<QuizDto>(`/api/quizzes/${quizId}/questions`, data, auth),
+  /** Draft quizzes only. */
+  deleteQuiz: (id: string) => api.delete(`/api/quizzes/${id}`, auth),
+  /** Only when every quiz in the project is a draft; they are deleted too. */
+  deleteProject: (id: string) => api.delete(`/api/projects/${id}`, auth),
   deleteQuestion: (id: string) =>
     api.delete<QuizDto>(`/api/questions/${id}`, auth),
   reorder: (id: string, questionIds: string[]) =>

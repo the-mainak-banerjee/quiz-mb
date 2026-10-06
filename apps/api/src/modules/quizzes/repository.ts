@@ -199,6 +199,34 @@ export class QuizzesRepository {
       });
     }, lockedTransaction);
   }
+  /**
+   * Deletes a draft quiz with its questions and media rows. Only drafts can
+   * be deleted: nobody has registered for or played them. Returns the
+   * storage paths of its files, removed after the transaction commits.
+   */
+  remove(id: string, userId: string) {
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM quizzes WHERE id = ${id}::uuid FOR UPDATE`;
+      const quiz = await tx.quiz.findFirst({
+        where: { id, creatorUserId: userId, project: { ownerUserId: userId } },
+        select: { status: true },
+      });
+      if (!quiz)
+        throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');
+      if (quiz.status !== QUIZ_STATUS.DRAFT)
+        throw new ApiError(
+          409,
+          ERROR_CODE.QUIZ_LOCKED,
+          'Only draft quizzes can be deleted.',
+        );
+      const files = await tx.mediaAsset.findMany({
+        where: { quizId: id, status: { not: MEDIA_STATUS.DELETED } },
+        select: { objectPath: true },
+      });
+      await tx.quiz.delete({ where: { id } });
+      return files.map((file) => file.objectPath);
+    }, lockedTransaction);
+  }
   publish(id: string, userId: string) {
     return this.db.$transaction(async (tx) => {
       const locked = await lockEditableQuiz(tx, id, userId);
