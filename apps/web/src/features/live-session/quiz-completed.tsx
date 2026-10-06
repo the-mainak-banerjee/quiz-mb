@@ -222,7 +222,7 @@ export function HostQuizCompleted({
           rank.
         </Callout>
       ) : (
-        <Surface className="flex flex-col gap-space-sm md:flex-row md:items-center md:justify-between">
+        <Surface className="flex flex-col gap-space-md">
           <div className="flex items-start gap-space-sm">
             <span
               aria-hidden="true"
@@ -241,11 +241,12 @@ export function HostQuizCompleted({
               </Text>
             </div>
           </div>
+          {/* Actions sit under the explanation. */}
           <div className="flex flex-col gap-space-xs sm:flex-row">
             <NavigationItem
               href={resultsHref}
               icon={<Table2 size={18} aria-hidden="true" />}
-              className="bg-surface-low"
+              className="h-control min-h-0 border border-border-surface bg-surface text-text-primary hover:border-accent hover:bg-canvas"
             >
               View full results
             </NavigationItem>

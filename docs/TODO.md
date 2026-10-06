@@ -13,12 +13,6 @@ Fix direction to evaluate:
 - Socket.IO cannot go through such a rewrite (no WebSocket upgrade), so it must keep connecting directly to the API domain. It already uses cookie-free ticket authentication for this reason (see API_DESIGN §17).
 - Update README hosting instructions and `.env.example` files, and re-run the auth integration tests against the new setup.
 
-## Show planned date/time in the viewer's time zone
-
-The planned date/time on the public quiz page (`/quiz/[publicId]`) and the published-quiz management page is formatted during server rendering in `apps/web/src/features/publishing/view-model.ts` (`toLocaleDateString`/`toLocaleTimeString` with no explicit locale or time zone). The result uses the server's locale and time zone instead of the viewer's, so production viewers (server in UTC) may see a different local time than expected. The dashboard cards in `apps/web/src/features/dashboard/quiz-data.ts` share the same pattern.
-
-Fix direction: pass the ISO `plannedStartAt` to the client and format it in the browser. The hydration-safe `components/local-date-time.tsx` (added in Phase 10 for results and history) already does this and can be reused here.
-
 ## Database rule requiring `plannedStartAt` on non-draft quizzes
 
 Publishing without a planned date/time is currently blocked by the quiz service, the locked publish transaction, and the request contract, but the database itself has no constraint. Add a migration so the database also rejects it:
@@ -37,18 +31,17 @@ Done on branch `phase-11-hardening`: the rate limiting item, the Phase 10 "end d
 - Segment 7: load test of a full live quiz (target participant count to be decided). On hold.
 
 
+## Load quiz relations in one query (Prisma `relationJoins`)
+
+Every authoring response reloads the full quiz with `quizInclude` (project, cover, questions, question images, options, registration count). Prisma currently runs one database round trip per relation, so with the dev database in Seoul (~180 ms per query) a reload alone costs about 1.7–2.6 s, and it follows every question save and quiz update.
+
+Fix direction: enable the `relationJoins` preview feature in `packages/database/prisma/schema.prisma` and use `relationLoadStrategy: 'join'` for `quizInclude` reads, so each reload is a single SQL query. Regenerate the client and re-run every integration test. Hosting the production API near the database (e.g. Render Singapore for the Seoul database) matters more and should be done regardless.
+
 ## Before launch
 - Add proper rate limits to prevent abuse.
 - What to do for settings and workspace plan.
 - Loading and error screens (`loading.tsx` / `error.tsx` for the workspace, live room and public quiz page): waiting for a custom design. Including 404 page
 - Then work on the other todo items
 
-### UI bugs
-- While creating quiz after creating a project directly send them to quiz basic page
-- The text area should not be expandable by user
-- While we added image in quiz the save and add question is taking too much time
-- After saving the quiz basics it is taking some time to go to the next page that time the button and everything stays active in the quiz basic page that is bad UX
-- Add real screenshot in auth pages right section
-- There should be a confirm password field in signup
-- If from the manage page host try to start the complete quiz again then we are showing the error that this quiz is already completed. After that we can reload the page automatically.
-- After the quiz end there is view full result and final leaderboard button place them below the text rather than on the right side and the View full result button is not looking good in current UI
+## Extra Feature
+- Add delete quiz and delete project feature

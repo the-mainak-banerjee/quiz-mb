@@ -407,9 +407,16 @@ POST /api/projects/:projectId/quizzes
   "defaultQuestionDurationSeconds": 20,
   "plannedStartAt": "2026-10-10T13:30:00.000Z",
   "allowLateJoin": true,
-  "coverMediaId": null
+  "coverMediaId": null,
+  "cover": {
+    "fileName": "cover.png",
+    "mimeType": "image/png",
+    "sizeBytes": 345678
+  }
 }
 ```
+
+`coverMediaId` must be null on create. The optional `cover` requests the cover's upload in the same call: the server creates a PENDING media record for the new quiz and returns its signed upload ticket as `coverUpload` (see §13). The browser uploads the file, then attaches it with an update (§8.3).
 
 Success returns:
 
@@ -419,10 +426,16 @@ Success returns:
   "data": {
     "id": "quiz_...",
     "publicId": "k7F9xP2mR4",
-    "status": "DRAFT"
+    "status": "DRAFT",
+    "coverUpload": {
+      "mediaId": "media_...",
+      "upload": { "url": "https://...", "token": "...", "path": "..." }
+    }
   }
 }
 ```
+
+`coverUpload` is null when no cover was requested or image storage is unavailable; the quiz is created either way.
 
 ## 8.2 Get Host Quiz
 
@@ -443,6 +456,8 @@ PATCH /api/quizzes/:quizId
 Editable while pre-live.
 
 Once live starts, question content and answer keys become immutable.
+
+Setting `coverMediaId` attaches an uploaded cover (see §13.2).
 
 Create and update payloads use `plannedStartAt` for the participant-facing date/time. A draft may omit or change this field, but it must exist before publish. It is metadata only and never triggers a lifecycle transition.
 
@@ -766,7 +781,6 @@ Routes:
 
 ```text
 POST   /api/media/upload-request
-POST   /api/media/:mediaId/complete
 DELETE /api/media/:mediaId
 ```
 
@@ -817,13 +831,18 @@ Response:
 
 Never expose Supabase service-role credentials.
 
-## 13.2 Complete Upload
+A new quiz's cover can instead be requested with the quiz itself (§8.1).
 
-```http
-POST /api/media/:mediaId/complete
-```
+## 13.2 Attaching an Upload
 
-Marks media READY after verifying upload where practical.
+There is no separate completion call. An upload stays PENDING until it is attached:
+
+- a quiz cover through `coverMediaId` on quiz update (§8.3)
+- a question image through `imageMediaId` on question create or update
+
+Before attaching a PENDING upload, the server checks the stored file in storage: it must exist and match the declared size, MIME type and image signature. A missing file is refused with `UPLOAD_INCOMPLETE`, a mismatch with `INVALID_MEDIA` (both 422), and the quiz or question is not changed. On success the media becomes READY in the same transaction that attaches it. The media must belong to the same user, quiz and purpose. Only READY media is ever returned to clients.
+
+Upload flow for an existing quiz: upload request → browser upload → save the quiz or question with the media id.
 
 ---
 
@@ -1840,7 +1859,7 @@ completed result reads
 
 ```text
 upload request
-complete upload
+attach-time upload verification
 delete media
 ```
 

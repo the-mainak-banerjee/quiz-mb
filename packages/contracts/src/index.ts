@@ -231,19 +231,33 @@ export const questionSchema = z
 export const reorderSchema = z
   .object({ questionIds: z.array(z.uuid()).max(AUTHORING_LIMITS.questions) })
   .strict();
-export const uploadSchema = z
+/** The image a browser is about to upload directly to storage. */
+export const uploadFileSchema = z
   .object({
-    purpose: z.enum(MEDIA_PURPOSE),
     fileName: z.string().min(1).max(255),
     mimeType: z.enum(MEDIA_LIMITS.mimeTypes),
     sizeBytes: z.number().int().min(1).max(MEDIA_LIMITS.maxBytes),
+  })
+  .strict();
+export const uploadSchema = uploadFileSchema
+  .extend({
+    purpose: z.enum(MEDIA_PURPOSE),
     resource: z.object({ quizId: z.uuid() }).strict(),
   })
+  .strict();
+/**
+ * Creating a quiz may also request its cover upload: the response carries
+ * the upload ticket, and the cover is attached by a later quiz update.
+ */
+export const quizCreateSchema = quizSchema
+  .extend({ cover: uploadFileSchema.optional() })
   .strict();
 export type ProjectInput = z.infer<typeof projectSchema>;
 export type QuizInput = z.infer<typeof quizSchema>;
 export type QuestionInput = z.infer<typeof questionSchema>;
 export type UploadInput = z.infer<typeof uploadSchema>;
+export type UploadFileInput = z.infer<typeof uploadFileSchema>;
+export type QuizCreateInput = z.infer<typeof quizCreateSchema>;
 export type ProjectDto = ProjectInput & {
   id: string;
   createdAt: string;
@@ -281,6 +295,8 @@ export type UploadDto = {
   mediaId: string;
   upload: { url: string; token: string; path: string };
 };
+/** `coverUpload` is null when no cover was requested or storage is unavailable. */
+export type QuizCreatedDto = QuizDto & { coverUpload: UploadDto | null };
 
 export type PublicQuizDto = {
   id: string;

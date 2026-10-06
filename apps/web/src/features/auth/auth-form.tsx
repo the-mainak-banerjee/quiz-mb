@@ -18,10 +18,19 @@ import { useRouter } from 'next/navigation';
 import { authFlow } from '@/lib/auth/auth-flow';
 import { PasswordField } from './password-field';
 
-type Field = 'name' | 'email' | 'password';
+type Field = 'name' | 'email' | 'password' | 'confirm';
 const emailSchema = z.email().max(254);
 
-function fieldError(field: Field, value: string, signup: boolean): string {
+function fieldError(
+  field: Field,
+  value: string,
+  signup: boolean,
+  password = '',
+): string {
+  if (field === 'confirm') {
+    if (!value) return 'Confirm your password.';
+    return value === password ? '' : 'The passwords do not match.';
+  }
   if (field === 'name') {
     if (!value.trim()) return 'Enter your full name.';
     return value.trim().length > 100 ? 'Use 100 characters or fewer.' : '';
@@ -56,21 +65,28 @@ export function AuthForm({
   const [message, setMessage] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const [confirm, setConfirm] = useState('');
+
   function validateField(field: Field, value: string) {
     setErrors((previous) => ({
       ...previous,
-      [field]: fieldError(field, value, signup),
+      [field]: fieldError(field, value, signup, password),
     }));
   }
 
   function editField(field: Field, value: string) {
     setMessage('');
     // Keep untouched fields quiet; once validated, update on every edit.
-    setErrors((previous) =>
-      field in previous
-        ? { ...previous, [field]: fieldError(field, value, signup) }
-        : previous,
-    );
+    setErrors((previous) => {
+      const next =
+        field in previous
+          ? { ...previous, [field]: fieldError(field, value, signup, password) }
+          : previous;
+      // A changed password re-checks an already checked confirmation.
+      return field === 'password' && 'confirm' in next
+        ? { ...next, confirm: fieldError('confirm', confirm, signup, value) }
+        : next;
+    });
   }
 
   async function submit(event: SubmitEvent<HTMLFormElement>) {
@@ -84,12 +100,17 @@ export function AuthForm({
       ...(signup ? { name: data.get('name') } : {}),
     };
     const fields: Field[] = signup
-      ? ['name', 'email', 'password']
+      ? ['name', 'email', 'password', 'confirm']
       : ['email', 'password'];
     const nextErrors = Object.fromEntries(
       fields.map((field) => [
         field,
-        fieldError(field, String(data.get(field) ?? ''), signup),
+        fieldError(
+          field,
+          String(data.get(field) ?? ''),
+          signup,
+          String(data.get('password') ?? ''),
+        ),
       ]),
     );
     setErrors(nextErrors);
@@ -200,6 +221,25 @@ export function AuthForm({
               ),
             })}
       />
+      {signup && (
+        // Checked in the browser only; the API receives one password.
+        <PasswordField
+          id="confirm"
+          name="confirm"
+          label="Confirm password"
+          required
+          autoComplete="new-password"
+          value={confirm}
+          onChange={(event) => {
+            setConfirm(event.target.value);
+            editField('confirm', event.target.value);
+          }}
+          onBlur={(event) => validateField('confirm', event.target.value)}
+          disabled={pending}
+          placeholder="Re-enter your password"
+          error={errors.confirm}
+        />
+      )}
       {message && (
         <Text role="alert" variant="body-secondary" className="text-danger">
           {message}

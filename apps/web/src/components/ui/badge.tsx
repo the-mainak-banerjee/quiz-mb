@@ -1,10 +1,10 @@
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export type BadgeProps = Omit<ComponentProps<'span'>, 'children'> & {
   variant: 'live' | 'scheduled' | 'draft' | 'completed' | 'danger';
   /** Contextual wording for the existing status, e.g. Live Ready. */
-  label?: string;
+  label?: ReactNode;
   /** Leading status dot. Live and danger show a pulsing dot by default. */
   dot?: boolean;
 };

@@ -63,7 +63,10 @@ export function ImageUpload({
     onBusy(true);
     setError('');
     try {
-      onChange(await uploadImage(quizId, purpose, file));
+      const media = await uploadImage(quizId, purpose, file);
+      // Its URL is a local preview of the file; release it when replaced.
+      setPreview(media.url);
+      onChange(media);
     } catch (e) {
       setError(apiError(e).message);
     } finally {

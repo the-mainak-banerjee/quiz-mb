@@ -9,6 +9,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Avatar, Badge, Callout, Surface, Text } from '@/components/ui';
+import { LocalDateTime } from '@/components/local-date-time';
 import { cn, pluralize } from '@/lib/utils';
 import { ActionButton } from './action-button';
 import { AmbientGlow } from './live-session-shell';
@@ -125,7 +126,20 @@ export function ParticipantLobby({
             </div>
             <Badge
               variant="scheduled"
-              label={`${quiz.plannedDate} · ${quiz.plannedTime}`}
+              label={
+                quiz.plannedStartAt ? (
+                  <>
+                    <LocalDateTime
+                      value={quiz.plannedStartAt}
+                      format="longDate"
+                    />{' '}
+                    ·{' '}
+                    <LocalDateTime value={quiz.plannedStartAt} format="time" />
+                  </>
+                ) : (
+                  'Date to be announced'
+                )
+              }
             />
           </div>
 

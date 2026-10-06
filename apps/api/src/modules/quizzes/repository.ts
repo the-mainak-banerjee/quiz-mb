@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@quizmb/database';
 import { ApiError } from '../../http/api-error.js';
 import { lockedTransaction } from '../../infrastructure/transactions.js';
@@ -76,30 +76,44 @@ export const mediaEditScope = (purpose: MediaPurpose) =>
   purpose === MEDIA_PURPOSE.QUESTION_IMAGE
     ? EDIT_SCOPE.QUESTIONS
     : EDIT_SCOPE.DETAILS;
+/**
+ * The image being attached must belong to this quiz and purpose. A PENDING
+ * upload is accepted only when its stored file was just verified
+ * (`MediaService.verifyPending`), and it becomes READY here.
+ */
 export async function validateMedia(
   tx: Prisma.TransactionClient,
   id: string | null,
   quizId: string,
   userId: string,
   purpose: MediaPurpose,
+  verified = false,
 ) {
-  if (
-    id &&
-    !(await tx.mediaAsset.findFirst({
-      where: {
-        id,
-        quizId,
-        ownerUserId: userId,
-        purpose,
-        status: MEDIA_STATUS.READY,
+  if (!id) return;
+  const asset = await tx.mediaAsset.findFirst({
+    where: {
+      id,
+      quizId,
+      ownerUserId: userId,
+      purpose,
+      status: {
+        in: verified
+          ? [MEDIA_STATUS.READY, MEDIA_STATUS.PENDING]
+          : [MEDIA_STATUS.READY],
       },
-    }))
-  )
+    },
+  });
+  if (!asset)
     throw new ApiError(
       422,
       ERROR_CODE.VALIDATION_ERROR,
-      'Choose a completed image upload belonging to this quiz.',
+      'Choose an uploaded image belonging to this quiz.',
     );
+  if (asset.status === MEDIA_STATUS.PENDING)
+    await tx.mediaAsset.update({
+      where: { id },
+      data: { status: MEDIA_STATUS.READY, readyAt: new Date() },
+    });
 }
 export class QuizzesRepository {
   constructor(readonly db: PrismaClient) {}
@@ -121,7 +135,14 @@ export class QuizzesRepository {
       include: { _count: { select: { questions: true } } },
     });
   }
-  create(projectId: string, userId: string, input: QuizInput) {
+  /** `cover` is the PENDING row for a cover upload requested with it. */
+  create(
+    projectId: string,
+    userId: string,
+    input: QuizInput,
+    id: string = randomUUID(),
+    cover?: Prisma.MediaAssetUncheckedCreateInput,
+  ) {
     return this.db.$transaction(async (tx) => {
       if (
         !(await tx.project.findFirst({
@@ -135,18 +156,22 @@ export class QuizzesRepository {
           ERROR_CODE.VALIDATION_ERROR,
           'Save the quiz before uploading its cover.',
         );
-      return tx.quiz.create({
+      const quiz = await tx.quiz.create({
         data: {
           ...input,
+          id,
           projectId,
           creatorUserId: userId,
           publicId: randomBytes(12).toString('base64url'),
         },
         include: quizInclude,
       });
+      if (cover) await tx.mediaAsset.create({ data: cover });
+      return quiz;
     });
   }
-  update(id: string, userId: string, input: QuizInput) {
+  /** `coverVerified`: the cover is a PENDING upload whose file was checked. */
+  update(id: string, userId: string, input: QuizInput, coverVerified = false) {
     return this.db.$transaction(async (tx) => {
       await lockEditableQuiz(tx, id, userId);
       // Same row lock as registration, so the count cannot change meanwhile.
@@ -165,6 +190,7 @@ export class QuizzesRepository {
         id,
         userId,
         MEDIA_PURPOSE.QUIZ_COVER,
+        coverVerified,
       );
       return tx.quiz.update({
         where: { id },
