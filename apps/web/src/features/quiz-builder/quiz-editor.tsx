@@ -35,6 +35,7 @@ import { Modal } from '@/components/ui/modal';
 import { apiError } from '@/lib/api/client';
 import { authoringApi } from '@/lib/api/authoring';
 import { cn } from '@/lib/utils';
+import { PromptText } from '@/components/markdown-preview';
 import { QuizForm, quizValues } from './quiz-form';
 import {
   QuestionForm,
@@ -333,8 +334,8 @@ export function QuizEditor({
                       disabled={busy}
                       onClick={() => select(q.id)}
                     >
-                      <Text as="span" variant="label" className="line-clamp-2">
-                        {q.text}
+                      <Text as="span" variant="label">
+                        <PromptText text={q.text} compact />
                       </Text>
                     </Button>
                     <Text

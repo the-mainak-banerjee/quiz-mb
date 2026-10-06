@@ -23,6 +23,7 @@ import { APP_LINKS } from '@/config/navigation';
 import { apiError } from '@/lib/api/client';
 import { publishingApi } from '@/lib/api/publishing';
 import { pluralize } from '@/lib/utils';
+import { PromptText } from '@/components/markdown-preview';
 
 export function ReviewPublishPanel({
   quiz,
@@ -215,9 +216,11 @@ export function ReviewPublishPanel({
                       {String(index + 1).padStart(2, '0')}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <Text variant="label" className="line-clamp-2">
-                        {question.text}
-                      </Text>
+                      <PromptText
+                        text={question.text}
+                        compact
+                        className="text-label text-text-primary"
+                      />
                       <Text variant="caption" tone="secondary">
                         {QUESTION_LABELS[question.type]} ·{' '}
                         {question.type === QUESTION_TYPE.DESCRIPTIVE
