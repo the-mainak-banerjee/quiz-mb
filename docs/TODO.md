@@ -44,5 +44,10 @@ Question prompts are written in Markdown, but its behaviour is not production re
 Done on branch `phase-11-hardening`: the rate limiting item, the Phase 10 "end during a question" item and the earlier UI issues list (all removed from this file), plus backend Segments 1–6 and their frontend work. Still open:
 
 - Segment 7: load test of a full live quiz (target participant count to be decided). On hold.
+
+
+## Before launch
+- Add proper rate limits to prevent abuse.
+- What to do for settings and workspace plan.
 - Loading and error screens (`loading.tsx` / `error.tsx` for the workspace, live room and public quiz page): waiting for a custom design.
-- Mobile (375px) pass on the participant live flow.
+- Then work on the other todo items
