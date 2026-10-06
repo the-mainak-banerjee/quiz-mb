@@ -46,7 +46,7 @@ Done on branch `phase-11-hardening`: the rate limiting item, the Phase 10 "end d
 ### UI bugs
 - While creating quiz after creating a project directly send them to quiz basic page
 - The text area should not be expandable by user
-- While we added image in quiz the save and add question is taking too much time
+- While we added image in quiz the save and add question is taking too much time => Still too much time
 - After saving the quiz basics it is taking some time to go to the next page that time the button and everything stays active in the quiz basic page that is bad UX
 - Add real screenshot in auth pages right section
 - There should be a confirm password field in signup

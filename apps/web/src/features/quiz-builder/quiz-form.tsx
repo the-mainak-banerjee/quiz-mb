@@ -44,9 +44,12 @@ export function QuizForm({
   onSaved,
   onCancel,
   readOnly = false,
+  leaving = false,
   ref,
 }: {
   projectId: string;
+  /** Saved and moving to the quiz's own page: keep everything disabled. */
+  leaving?: boolean;
   initial?: QuizDto;
   /** Show the saved details with every control disabled. */
   readOnly?: boolean;
@@ -119,7 +122,7 @@ export function QuizForm({
         className="grid items-start gap-gutter lg:grid-cols-3"
       >
         <fieldset
-          disabled={isSubmitting || readOnly}
+          disabled={isSubmitting || leaving || readOnly}
           className="min-w-0 space-y-space-md lg:col-span-2"
         >
           <Surface className="space-y-space-md">
@@ -285,7 +288,7 @@ export function QuizForm({
                   disabled={uploading}
                   onClick={() => setNext(false)}
                 >
-                  {isSubmitting
+                  {(isSubmitting || leaving) && !next
                     ? 'Saving…'
                     : initial && initial.status !== QUIZ_STATUS.DRAFT
                       ? 'Save changes'
@@ -299,9 +302,11 @@ export function QuizForm({
                     else setNext(true);
                   }}
                 >
-                  {continueWithoutSaving
-                    ? 'Continue to questions'
-                    : 'Save & add questions'}
+                  {(isSubmitting || leaving) && next
+                    ? 'Saving…'
+                    : continueWithoutSaving
+                      ? 'Continue to questions'
+                      : 'Save & add questions'}
                 </Button>
               </div>
             </div>

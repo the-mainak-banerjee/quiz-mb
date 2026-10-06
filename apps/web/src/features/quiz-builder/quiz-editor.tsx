@@ -96,6 +96,7 @@ export function QuizEditor({
       : '',
   );
   const [busy, setBusy] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [saved, setSaved] = useState('');
   const [dragged, setDragged] = useState<string | null>(null);
   const detailsRef = useRef<QuestionFormHandle>(null);
@@ -251,22 +252,28 @@ export function QuizEditor({
           ref={detailsRef}
           projectId={project.id}
           readOnly={readOnly}
+          leaving={leaving}
           {...(quiz ? { initial: quiz } : {})}
           onCancel={() => router.push(`/projects/${project.id}`)}
           onSaved={(q, next, coverFailed) => {
+            if (!quiz) {
+              // A new quiz continues on its own page; until it loads, the
+              // form stays disabled rather than briefly editable again.
+              setLeaving(true);
+              router.replace(
+                `/quizzes/${q.id}/edit?step=${next ? 'questions' : 'details'}${
+                  coverFailed ? `&notice=${EDITOR_NOTICE.COVER_FAILED}` : ''
+                }`,
+              );
+              return;
+            }
             setQuiz(q);
             setSaved(
               q.status === QUIZ_STATUS.DRAFT
                 ? 'Quiz draft saved.'
                 : 'Quiz saved.',
             );
-            if (!quiz)
-              router.replace(
-                `/quizzes/${q.id}/edit?step=${next ? 'questions' : 'details'}${
-                  coverFailed ? `&notice=${EDITOR_NOTICE.COVER_FAILED}` : ''
-                }`,
-              );
-            else if (next) setStep('questions');
+            if (next) setStep('questions');
           }}
         />
       )}

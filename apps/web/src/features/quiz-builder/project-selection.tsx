@@ -1,4 +1,5 @@
 'use client';
+import { APP_LINKS } from '@/config/navigation';
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -191,7 +192,9 @@ export function ProjectSelection({
             icon={<ArrowRight size={18} />}
             iconPosition="right"
             disabled={!selected}
-            onClick={() => router.push(`/quizzes/new?projectId=${selected}`)}
+            onClick={() =>
+              router.push(APP_LINKS.WORKSPACE.NEW_PROJECT_QUIZ(selected))
+            }
           >
             Continue to Quiz Basics
           </Button>
@@ -213,7 +216,9 @@ export function ProjectSelection({
           onSaved={(project) => {
             setProjects((p) => [project, ...p]);
             setSelected(project.id);
-            setCreate(false);
+            // The new project is the one this quiz belongs to: go straight
+            // to the quiz basics instead of back to the project list.
+            router.push(APP_LINKS.WORKSPACE.NEW_PROJECT_QUIZ(project.id));
           }}
         />
       </Modal>

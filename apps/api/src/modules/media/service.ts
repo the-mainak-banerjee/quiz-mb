@@ -77,11 +77,12 @@ export class MediaService {
   }
   async complete(id: string, userId: string) {
     const asset = await this.owned(id, userId);
-    await this.adapter().verify(
-      asset.objectPath,
-      asset.sizeBytes,
-      asset.mimeType,
-    );
+    const storage = this.adapter();
+    await storage.verify(asset.objectPath, asset.sizeBytes, asset.mimeType);
+    // Sign the read URL while the asset is marked ready; the response
+    // needs it and the URL is cached for later reads.
+    const signing = storage.read(asset.objectPath);
+    signing.catch(() => undefined);
     const ready = await this.db.$transaction(async (tx) => {
       await lockEditableQuiz(
         tx,
@@ -97,6 +98,7 @@ export class MediaService {
         data: { status: MEDIA_STATUS.READY, readyAt: new Date() },
       });
     }, lockedTransaction);
+    await signing;
     return this.dto(ready);
   }
   async remove(id: string, userId: string) {
