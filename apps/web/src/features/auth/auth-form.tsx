@@ -1,15 +1,22 @@
 'use client';
 import { useState, type SubmitEvent } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Eye, EyeOff } from 'lucide-react';
-import { Button, FormField, Input, Text } from '@/components/ui';
-import { VisuallyHidden } from '@/components/visually-hidden';
+import { ArrowRight } from 'lucide-react';
+import { Button, FormField, Text } from '@/components/ui';
 import { APP_LINKS } from '@/config/navigation';
 import { api } from '@/lib/api/browser';
 import { apiError } from '@/lib/api/client';
 import { API_ROUTES } from '@/lib/api/routes';
 import { z } from 'zod';
-import { ERROR_CODE } from '@quizmb/contracts';
+import {
+  AUTH_RESULT_STATUS,
+  ERROR_CODE,
+  PASSWORD_LIMITS,
+  type AuthResultDto,
+} from '@quizmb/contracts';
+import { useRouter } from 'next/navigation';
+import { authFlow } from '@/lib/auth/auth-flow';
+import { PasswordField } from './password-field';
 
 type Field = 'name' | 'email' | 'password';
 const emailSchema = z.email().max(254);
@@ -27,7 +34,9 @@ function fieldError(field: Field, value: string, signup: boolean): string {
   }
   if (signup) {
     const length = Array.from(value).length;
-    return length < 15 || length > 128 ? 'Use 15–128 characters.' : '';
+    return length < PASSWORD_LIMITS.min || length > PASSWORD_LIMITS.max
+      ? `Use ${PASSWORD_LIMITS.min}–${PASSWORD_LIMITS.max} characters.`
+      : '';
   }
   if (!value) return 'Enter your password.';
   return value.length > 1024 ? 'Use 1024 characters or fewer.' : '';
@@ -41,7 +50,7 @@ export function AuthForm({
   returnTo: string;
 }) {
   const signup = mode === 'signup';
-  const [visible, setVisible] = useState(false);
+  const router = useRouter();
   const [pending, setPending] = useState(false);
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
@@ -92,10 +101,19 @@ export function AuthForm({
     }
     setPending(true);
     try {
-      await api.post(
+      const result = await api.post<AuthResultDto>(
         signup ? API_ROUTES.AUTH.SIGNUP : API_ROUTES.AUTH.LOGIN,
         input,
       );
+      if (result.status === AUTH_RESULT_STATUS.VERIFICATION_REQUIRED) {
+        // No session yet: the email must be verified first.
+        authFlow.setVerification({
+          challenge: result.verification,
+          returnTo,
+        });
+        router.push(APP_LINKS.AUTH.VERIFY_EMAIL);
+        return;
+      }
       // A full server navigation verifies the new session before rendering.
       window.location.assign(returnTo);
     } catch (error) {
@@ -152,75 +170,36 @@ export function AuthForm({
         onBlur={(event) => validateField('email', event.target.value)}
         disabled={pending}
       />
-      <div className="space-y-space-xs">
-        <div className="flex items-center justify-between gap-space-xs">
-          <label htmlFor="password" className="text-label">
-            Password <span className="text-danger">*</span>
-          </label>
-          {!signup && (
-            <Link
-              href={APP_LINKS.AUTH.FORGOT_PASSWORD}
-              className="ds-focus text-caption text-accent underline-offset-4 hover:text-action-primary hover:underline"
-            >
-              Forgot password?
-            </Link>
-          )}
-        </div>
-        <div className="relative">
-          <Input
-            id="password"
-            name="password"
-            type={visible ? 'text' : 'password'}
-            required
-            autoComplete={signup ? 'new-password' : 'current-password'}
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-              editField('password', event.target.value);
-            }}
-            onBlur={(event) => validateField('password', event.target.value)}
-            disabled={pending}
-            aria-invalid={Boolean(errors.password)}
-            aria-describedby={
-              signup ? 'password-hint password-error' : 'password-error'
+      <PasswordField
+        id="password"
+        name="password"
+        label="Password"
+        required
+        autoComplete={signup ? 'new-password' : 'current-password'}
+        value={password}
+        onChange={(event) => {
+          setPassword(event.target.value);
+          editField('password', event.target.value);
+        }}
+        onBlur={(event) => validateField('password', event.target.value)}
+        disabled={pending}
+        placeholder={signup ? 'Create a secure password' : '••••••••••••'}
+        error={errors.password}
+        {...(signup
+          ? {
+              hint: `Use ${PASSWORD_LIMITS.min}–${PASSWORD_LIMITS.max} characters. Spaces and Unicode are welcome.`,
             }
-            className="pr-space-2xl"
-            placeholder={signup ? 'Create a secure password' : '••••••••••••'}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            icon={
-              visible ? (
-                <EyeOff aria-hidden="true" size={16} />
-              ) : (
-                <Eye aria-hidden="true" size={16} />
-              )
-            }
-            aria-label={visible ? 'Hide password' : 'Show password'}
-            aria-pressed={visible}
-            onClick={() => setVisible(!visible)}
-            className="absolute right-space-xs top-1/2 -translate-y-1/2 px-space-xs text-caption"
-          >
-            <VisuallyHidden>
-              {visible ? 'Hide password' : 'Show password'}
-            </VisuallyHidden>
-          </Button>
-        </div>
-        <Text
-          id="password-error"
-          role={errors.password ? 'alert' : undefined}
-          variant="body-secondary"
-          className="text-danger"
-        >
-          {errors.password}
-        </Text>
-      </div>
-      {signup && (
-        <Text id="password-hint" variant="caption" tone="secondary">
-          Use 15–128 characters. Spaces and Unicode are welcome.
-        </Text>
-      )}
+          : {
+              labelAction: (
+                <Link
+                  href={APP_LINKS.AUTH.FORGOT_PASSWORD}
+                  className="ds-focus text-caption text-accent underline-offset-4 hover:text-action-primary hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              ),
+            })}
+      />
       {message && (
         <Text role="alert" variant="body-secondary" className="text-danger">
           {message}

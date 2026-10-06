@@ -5,6 +5,10 @@ export const APP_LINKS = {
     SIGNUP: '/signup',
     SESSION: '/session',
     FORGOT_PASSWORD: '/forgot-password',
+    VERIFY_EMAIL: '/verify-email',
+    RESET_CODE: '/forgot-password/verify',
+    NEW_PASSWORD: '/forgot-password/new-password',
+    RESET_DONE: '/forgot-password/done',
   },
   WORKSPACE: {
     DASHBOARD: '/dashboard',
