@@ -13,9 +13,11 @@
     transform-origin: 110px 112px;
     animation: milo-blink 4.2s infinite;
   }
+  /* A pendulum between the two ends of the wave: it eases only where the
+   * hand turns around, never part-way through the swing. */
   .milo-wave {
     transform-origin: 66px 140px;
-    animation: milo-wave 1.3s ease-in-out infinite;
+    animation: milo-wave 0.65s ease-in-out infinite alternate;
   }
   .milo-spark {
     animation: milo-spark 1.3s ease-in-out infinite;
@@ -104,15 +106,11 @@
   }
 }
 @keyframes milo-wave {
-  0%,
-  100% {
-    transform: rotate(0);
-  }
-  30% {
-    transform: rotate(-20deg);
-  }
-  70% {
+  from {
     transform: rotate(10deg);
+  }
+  to {
+    transform: rotate(-20deg);
   }
 }
 @keyframes milo-spark {
