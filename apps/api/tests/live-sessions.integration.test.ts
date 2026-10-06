@@ -23,6 +23,8 @@ import {
   type SocketTicketDto,
 } from '@quizmb/contracts';
 import { createApp } from '../src/app.js';
+import { MemoryMailbox } from '../src/infrastructure/email.js';
+import { signUpVerified } from './auth-helper.js';
 import { createLogger } from '../src/infrastructure/logger.js';
 import { createRedis } from '../src/infrastructure/redis.js';
 import { DomainEvents } from '../src/infrastructure/domain-events.js';
@@ -71,6 +73,7 @@ test(
       config.DATABASE_URL,
       config.DATABASE_SSL_CA_BASE64,
     );
+    const mailbox = new MemoryMailbox();
     const redis = createRedis(process.env.REDIS_URL!);
     await redis.connect();
     const events = new DomainEvents();
@@ -86,7 +89,7 @@ test(
       createApp({
         allowedOrigins: [origin],
         logger,
-        auth: new AuthService(new AuthRepository(db), config),
+        auth: new AuthService(new AuthRepository(db), config, mailbox),
         users: new UsersService(db),
         database: db,
         live,
@@ -152,12 +155,12 @@ test(
 
     const cookies: Record<(typeof roles)[number], string> = {} as never;
     for (const [index, role] of roles.entries()) {
-      const response = await request('/auth/signup', 'POST', {
+      const response = await signUpVerified(request, mailbox, {
         name: `Live ${role}`,
-        email: emails[index],
+        email: emails[index]!,
         password: 'a strong live session test password',
       });
-      assert.equal(response.status, 201);
+      assert.equal(response.status, 200);
       cookies[role] = response.headers
         .getSetCookie()
         .map((value) => value.split(';')[0])

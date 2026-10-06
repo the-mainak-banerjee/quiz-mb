@@ -8,6 +8,7 @@ import type {
   LiveSessionState,
   MediaPurpose,
   MediaStatus,
+  OtpPurpose,
   QuestionType,
   QuizStatus,
   RegistrationStatus,
@@ -21,6 +22,9 @@ type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Assert<T extends true> = T;
 
 export type EnumSyncChecks = [
+  Assert<
+    Same<OtpPurpose, Field<Row<PrismaClient['verificationCode']>, 'purpose'>>
+  >,
   Assert<Same<QuizStatus, Field<Row<PrismaClient['quiz']>, 'status'>>>,
   Assert<
     Same<LiveSessionState, Field<Row<PrismaClient['liveQuizSession']>, 'state'>>

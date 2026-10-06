@@ -5,6 +5,7 @@ import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { createDatabase } from '@quizmb/database';
 import { createApp } from '../src/app.js';
+import { MemoryMailbox } from '../src/infrastructure/email.js';
 import { createLogger } from '../src/infrastructure/logger.js';
 import { AuthRepository } from '../src/modules/auth/repository.js';
 import { AuthService } from '../src/modules/auth/service.js';
@@ -25,7 +26,8 @@ test(
       config.DATABASE_URL,
       config.DATABASE_SSL_CA_BASE64,
     );
-    const service = new AuthService(new AuthRepository(db), config);
+    const mailbox = new MemoryMailbox();
+    const service = new AuthService(new AuthRepository(db), config, mailbox);
     const origin = 'http://localhost:3000';
     const app = createApp({
       allowedOrigins: [origin],
@@ -92,14 +94,40 @@ test(
       email: email.toUpperCase(),
     });
     assert.equal(signup.status, 201);
-    const initial = cookies(signup);
+    assert.deepEqual(signup.headers.getSetCookie(), [], 'no session yet');
     const signupBody = (await signup.json()) as {
+      data: { status: string; verification: { ticket: string; email: string } };
+    };
+    assert.equal(signupBody.data.status, 'VERIFICATION_REQUIRED');
+    assert.equal(
+      signupBody.data.verification.email,
+      `a***${email.split('@')[0]!.slice(-2)}@example.invalid`,
+    );
+    assert.equal(JSON.stringify(signupBody).includes('password'), false);
+    // The verification ticket is not a session credential.
+    assert.equal(
+      (
+        await request(
+          '/api/me',
+          'GET',
+          undefined,
+          `quizmb-access=${signupBody.data.verification.ticket}`,
+        )
+      ).status,
+      401,
+    );
+    const verified = await request('/api/auth/verify-email', 'POST', {
+      ticket: signupBody.data.verification.ticket,
+      code: await mailbox.codeFor(email),
+    });
+    assert.equal(verified.status, 200);
+    const initial = cookies(verified);
+    const verifiedBody = (await verified.json()) as {
       data: { user: { email: string } };
     };
-    assert.equal(signupBody.data.user.email, email);
-    assert.equal(JSON.stringify(signupBody).includes('password'), false);
-    assert.equal(JSON.stringify(signupBody).includes('refresh'), false);
-    for (const cookie of signup.headers.getSetCookie()) {
+    assert.equal(verifiedBody.data.user.email, email);
+    assert.equal(JSON.stringify(verifiedBody).includes('refresh'), false);
+    for (const cookie of verified.headers.getSetCookie()) {
       assert.match(cookie, /HttpOnly/);
       assert.match(cookie, /SameSite=Lax/);
       assert.match(cookie, /Path=\//);

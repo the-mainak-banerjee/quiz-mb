@@ -24,6 +24,8 @@ test('production requires explicit origins', () => {
       NODE_ENV: 'production',
       ALLOWED_ORIGINS: 'https://app.quizmb.com',
       REDIS_URL: 'rediss://default:secret@example.upstash.io:6379',
+      RESEND_API_KEY: 're_test',
+      EMAIL_FROM: 'QuizMB <no-reply@quizmb.test>',
     }).ALLOWED_ORIGINS,
     ['https://app.quizmb.com'],
   );
@@ -41,5 +43,17 @@ test('production requires a Redis URL for live sessions', () => {
   assert.throws(
     () => parseEnv({ REDIS_URL: 'https://example.upstash.io' }),
     /REDIS_URL/,
+  );
+});
+
+test('production requires email delivery for verification codes', () => {
+  assert.throws(
+    () =>
+      parseEnv({
+        NODE_ENV: 'production',
+        ALLOWED_ORIGINS: 'https://app.quizmb.com',
+        REDIS_URL: 'rediss://default:secret@example.upstash.io:6379',
+      }),
+    /RESEND_API_KEY and EMAIL_FROM/,
   );
 });

@@ -118,6 +118,8 @@ Browser requests go directly to Express using the global [API client](apps/web/s
 - `SUPABASE_SERVICE_ROLE_KEY` — server-only Storage credential. Never expose it to the web application.
 - `SUPABASE_STORAGE_BUCKET` — private image bucket, default `quizmb-media`.
 - `REDIS_URL` — Upstash Redis TCP URL (`rediss://…`) for live-session presence, active-device tracking and locks. Required in production and for live sessions locally; without it the API serves REST only and logs that live sessions are disabled.
+- `RESEND_API_KEY`, `EMAIL_FROM` — Resend credentials and sender for email verification and password reset codes (`EMAIL_FROM` must use a domain verified in Resend). Required in production; without them locally, signup cannot send codes.
+- `SUPPORT_EMAIL` (optional) — shown in code emails as the address people can contact; the sending address is not monitored.
 - `DATABASE_POOL_MAX` — connections in the API's database pool (default `10`). Requests that cannot get a connection in time get `503 SERVICE_BUSY` with `Retry-After` and are safe to retry.
 - `TRUST_PROXY_HOPS` — proxies in front of the API whose `X-Forwarded-For` entry is trusted for the client IP used by rate limits: `0` locally, `1` on Render. Rate limits use Redis counters, so they are off when `REDIS_URL` is unset.
 

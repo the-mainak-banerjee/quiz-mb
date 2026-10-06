@@ -11,6 +11,8 @@ import type {
   MediaDto,
 } from '@quizmb/contracts';
 import { createApp } from '../src/app.js';
+import { MemoryMailbox } from '../src/infrastructure/email.js';
+import { signUpVerified } from './auth-helper.js';
 import { createLogger } from '../src/infrastructure/logger.js';
 import { AuthRepository } from '../src/modules/auth/repository.js';
 import { AuthService } from '../src/modules/auth/service.js';
@@ -29,7 +31,8 @@ test(
       config.DATABASE_URL,
       config.DATABASE_SSL_CA_BASE64,
     );
-    const auth = new AuthService(new AuthRepository(db), config);
+    const mailbox = new MemoryMailbox();
+    const auth = new AuthService(new AuthRepository(db), config, mailbox);
     const storage = createStorage(process.env);
     const origin = 'http://localhost:3000';
     const server = createApp({
@@ -86,12 +89,12 @@ test(
     });
     const cookies: string[] = [];
     for (const email of emails) {
-      const r = await request('/auth/signup', 'POST', {
+      const r = await signUpVerified(request, mailbox, {
         name: 'Authoring test',
         email,
         password: 'a strong authoring test password',
       });
-      assert.equal(r.status, 201);
+      assert.equal(r.status, 200);
       cookies.push(
         r.headers
           .getSetCookie()

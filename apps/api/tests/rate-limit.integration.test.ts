@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { createDatabase } from '@quizmb/database';
 import { ERROR_CODE, HTTP_HEADER } from '@quizmb/contracts';
 import { createApp } from '../src/app.js';
+import { MemoryMailbox } from '../src/infrastructure/email.js';
 import { createLogger } from '../src/infrastructure/logger.js';
 import { createRedis } from '../src/infrastructure/redis.js';
 import { RateLimiter } from '../src/infrastructure/rate-limiter.js';
@@ -26,6 +27,7 @@ test(
       config.DATABASE_URL,
       config.DATABASE_SSL_CA_BASE64,
     );
+    const mailbox = new MemoryMailbox();
     const redis = createRedis(process.env.REDIS_URL!);
     await redis.connect();
     const logger = createLogger('silent');
@@ -42,7 +44,7 @@ test(
     const server = createApp({
       allowedOrigins: [origin],
       logger,
-      auth: new AuthService(new AuthRepository(db), config),
+      auth: new AuthService(new AuthRepository(db), config, mailbox),
       users: new UsersService(db),
       database: db,
       rateLimiter: limiter,
@@ -126,7 +128,16 @@ test(
     );
 
     // Per signed-in user, counted before the route itself runs.
-    const cookie = first.headers
+    // Signup does not sign in: verify the first account to get a session.
+    const firstBody = (await first.json()) as {
+      data: { verification: { ticket: string } };
+    };
+    const verified = await post('/auth/verify-email', {
+      ticket: firstBody.data.verification.ticket,
+      code: await mailbox.codeFor(emails[0]!),
+    });
+    assert.equal(verified.status, 200);
+    const cookie = verified.headers
       .getSetCookie()
       .map((value) => value.split(';')[0])
       .join('; ');

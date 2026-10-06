@@ -21,7 +21,10 @@ export function authCookies(production: boolean, accessDomain?: string) {
       const values = parseCookie(req.get(HTTP_HEADER.COOKIE) ?? '');
       return { access: values[names.access], refresh: values[names.refresh] };
     },
-    set(res: Response, credentials: Awaited<ReturnType<AuthService['login']>>) {
+    set(
+      res: Response,
+      credentials: Awaited<ReturnType<AuthService['refresh']>>,
+    ) {
       res.cookie(names.access, credentials.access, {
         ...accessOptions,
         // Retain the expired JWT as a renewal hint for server-rendered pages.

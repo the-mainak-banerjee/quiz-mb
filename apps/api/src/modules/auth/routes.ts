@@ -1,5 +1,13 @@
 import { Router } from 'express';
-import { HTTP_HEADER } from '@quizmb/contracts';
+import {
+  AUTH_RESULT_STATUS,
+  HTTP_HEADER,
+  passwordResetCompleteSchema,
+  passwordResetRequestSchema,
+  passwordResetVerifySchema,
+  resendVerificationSchema,
+  verifyEmailSchema,
+} from '@quizmb/contracts';
 import { BEARER_PREFIX, CACHE_NO_STORE } from '../../config/constants.js';
 import type { AuthService } from './service.js';
 import type { UsersService } from '../users/service.js';
@@ -25,23 +33,62 @@ export function authRoutes(
     next();
   });
   router.use(csrf(origins));
-  // Signup, login and refresh are rate limited before this router
-  // (http/rate-limit.ts).
+  // Every route here is rate limited before this router (http/rate-limit.ts).
+  // Signup never signs in: the email is verified first.
   router.post('/auth/signup', async (req, res) => {
-    const credentials = await auth.signup(
-      validate(signupSchema, req.body),
-      req.get(HTTP_HEADER.USER_AGENT),
-    );
-    cookies.set(res, credentials);
-    res.status(201).json({ success: true, data: { user: credentials.user } });
+    const result = await auth.signup(validate(signupSchema, req.body));
+    res.status(201).json({ success: true, data: result });
   });
   router.post('/auth/login', async (req, res) => {
-    const credentials = await auth.login(
+    const result = await auth.login(
       validate(loginSchema, req.body),
       req.get(HTTP_HEADER.USER_AGENT),
     );
+    if (result.status === AUTH_RESULT_STATUS.VERIFICATION_REQUIRED) {
+      res.json({ success: true, data: result });
+      return;
+    }
+    cookies.set(res, result.credentials);
+    res.json({
+      success: true,
+      data: { status: result.status, user: result.credentials.user },
+    });
+  });
+  router.post('/auth/verify-email', async (req, res) => {
+    const { ticket, code } = validate(verifyEmailSchema, req.body);
+    const credentials = await auth.verifyEmail(
+      ticket,
+      code,
+      req.get(HTTP_HEADER.USER_AGENT),
+    );
     cookies.set(res, credentials);
-    res.json({ success: true, data: { user: credentials.user } });
+    res.json({
+      success: true,
+      data: {
+        status: AUTH_RESULT_STATUS.AUTHENTICATED,
+        user: credentials.user,
+      },
+    });
+  });
+  router.post('/auth/verify-email/resend', async (req, res) => {
+    const { ticket } = validate(resendVerificationSchema, req.body);
+    res.json({ success: true, data: await auth.resendVerification(ticket) });
+  });
+  router.post('/auth/password-reset', (req, res) => {
+    const { email } = validate(passwordResetRequestSchema, req.body);
+    res.json({ success: true, data: auth.requestPasswordReset(email) });
+  });
+  router.post('/auth/password-reset/verify', async (req, res) => {
+    const { email, code } = validate(passwordResetVerifySchema, req.body);
+    res.json({ success: true, data: await auth.verifyResetCode(email, code) });
+  });
+  router.post('/auth/password-reset/complete', async (req, res) => {
+    const { resetToken, password } = validate(
+      passwordResetCompleteSchema,
+      req.body,
+    );
+    await auth.completePasswordReset(resetToken, password);
+    res.json({ success: true, data: {} });
   });
   router.post('/auth/refresh', async (req, res) => {
     try {

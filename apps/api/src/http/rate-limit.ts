@@ -46,6 +46,27 @@ export function authRateLimits(limiter: RateLimiter, rules: RateLimits) {
   );
   router.post('/auth/signup', limit(limiter, [rules.signupIp, BY.ip]));
   router.post('/auth/refresh', limit(limiter, [rules.refreshIp, BY.ip]));
+  router.post('/auth/verify-email', limit(limiter, [rules.codeCheckIp, BY.ip]));
+  router.post(
+    '/auth/verify-email/resend',
+    limit(limiter, [rules.resendIp, BY.ip]),
+  );
+  router.post(
+    '/auth/password-reset',
+    limit(
+      limiter,
+      [rules.passwordResetIp, BY.ip],
+      [rules.passwordResetAccount, BY.email],
+    ),
+  );
+  router.post(
+    '/auth/password-reset/verify',
+    limit(limiter, [rules.codeCheckIp, BY.ip]),
+  );
+  router.post(
+    '/auth/password-reset/complete',
+    limit(limiter, [rules.passwordResetCompleteIp, BY.ip]),
+  );
   return router;
 }
 
