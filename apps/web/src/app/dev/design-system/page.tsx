@@ -8,6 +8,8 @@ import {
   Surface,
   Text,
 } from '@/components/ui';
+import { Milo } from '@/components/milo/milo';
+import { NavigationItem } from '@/components/workspace/navigation-item';
 
 const colors = [
   ['Canvas', 'bg-canvas'],
@@ -145,6 +147,27 @@ export default function DesignSystemPage() {
           </div>
         </Surface>
       </section>
+      <Surface
+        as="section"
+        aria-labelledby="milo-title"
+        className="flex flex-wrap items-center gap-space-md"
+      >
+        <Milo pose="welcome" className="w-20" />
+        <div className="flex-1 space-y-space-xs">
+          <Text as="h2" variant="section-heading" id="milo-title">
+            Milo, the mascot
+          </Text>
+          <Text variant="body-secondary" tone="secondary">
+            Every pose, size and Milo screen has its own reference page.
+          </Text>
+        </div>
+        <NavigationItem
+          href="/dev/milo"
+          className="bg-action-secondary text-accent hover:bg-action-secondary-hover"
+        >
+          Open the Milo gallery
+        </NavigationItem>
+      </Surface>
       <section aria-labelledby="palette-title" className="space-y-space-md">
         <Text as="h2" variant="section-heading" id="palette-title">
           Semantic palette

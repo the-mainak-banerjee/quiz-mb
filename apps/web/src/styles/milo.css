@@ -1,0 +1,213 @@
+/* Milo, the QuizMB mascot (components/milo). Every part moves only when the
+ * viewer allows motion; otherwise Milo is a still illustration. Transform
+ * origins are in the SVG's view box (220 x 230). */
+.milo * {
+  transform-box: view-box;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .milo-bob {
+    animation: milo-bob 2.6s ease-in-out infinite;
+  }
+  .milo-blink {
+    transform-origin: 110px 112px;
+    animation: milo-blink 4.2s infinite;
+  }
+  .milo-wave {
+    transform-origin: 66px 140px;
+    animation: milo-wave 1.3s ease-in-out infinite;
+  }
+  .milo-spark {
+    animation: milo-spark 1.3s ease-in-out infinite;
+  }
+  .milo-sway {
+    transform-origin: 110px 200px;
+    animation: milo-sway 3.2s ease-in-out infinite;
+  }
+  .milo-dot {
+    opacity: 0;
+    animation: milo-dot 1.8s ease-out infinite;
+  }
+  .milo-dot:nth-child(2) {
+    animation-delay: 0.3s;
+  }
+  .milo-dot:nth-child(3) {
+    animation-delay: 0.6s;
+  }
+  .milo-shrug {
+    animation: milo-shrug 1.8s ease-in-out infinite;
+  }
+  .milo-shake-left {
+    transform-origin: 56px 136px;
+    animation: milo-shake 1.8s ease-in-out infinite;
+  }
+  .milo-shake-right {
+    transform-origin: 164px 136px;
+    animation: milo-shake 1.8s ease-in-out infinite reverse;
+  }
+  .milo-jump {
+    transform-origin: 110px 200px;
+    animation: milo-jump 1.2s cubic-bezier(0.3, 0.7, 0.4, 1) infinite;
+  }
+  .milo-ground {
+    transform-origin: 110px 214px;
+    animation: milo-ground 1.2s cubic-bezier(0.3, 0.7, 0.4, 1) infinite;
+  }
+  .milo-cheer-left {
+    transform-origin: 66px 132px;
+    animation: milo-cheer 0.6s ease-in-out infinite alternate;
+  }
+  .milo-cheer-right {
+    transform-origin: 154px 132px;
+    animation: milo-cheer 0.6s ease-in-out infinite alternate-reverse;
+  }
+  .milo-confetti > * {
+    opacity: 0;
+    animation: milo-fall 2s linear infinite;
+  }
+  .milo-confetti > :nth-child(2) {
+    animation-delay: 0.35s;
+  }
+  .milo-confetti > :nth-child(3) {
+    animation-delay: 0.7s;
+  }
+  .milo-confetti > :nth-child(4) {
+    animation-delay: 1.05s;
+  }
+  .milo-confetti > :nth-child(5) {
+    animation-delay: 1.4s;
+  }
+  .milo-confetti > :nth-child(6) {
+    animation-delay: 1.75s;
+  }
+  .milo-progress {
+    animation: milo-progress 1.6s ease-in-out infinite;
+  }
+  .milo-enter {
+    animation: milo-enter 0.45s cubic-bezier(0.3, 0.7, 0.4, 1) both;
+  }
+}
+
+@keyframes milo-bob {
+  50% {
+    transform: translateY(-5px);
+  }
+}
+@keyframes milo-blink {
+  0%,
+  91%,
+  100% {
+    transform: scaleY(1);
+  }
+  94% {
+    transform: scaleY(0.1);
+  }
+}
+@keyframes milo-wave {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  30% {
+    transform: rotate(-20deg);
+  }
+  70% {
+    transform: rotate(10deg);
+  }
+}
+@keyframes milo-spark {
+  50% {
+    opacity: 0.2;
+  }
+}
+@keyframes milo-sway {
+  0%,
+  100% {
+    transform: rotate(-2deg);
+  }
+  50% {
+    transform: rotate(2deg);
+  }
+}
+@keyframes milo-dot {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  30%,
+  75% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes milo-shrug {
+  50% {
+    transform: translateY(-4px);
+  }
+}
+@keyframes milo-shake {
+  50% {
+    transform: rotate(-9deg);
+  }
+}
+@keyframes milo-jump {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+  12% {
+    transform: translateY(0) scaleY(0.94);
+  }
+  45% {
+    transform: translateY(-16px) scaleY(1.02);
+  }
+  80% {
+    transform: translateY(0) scaleY(1);
+  }
+}
+@keyframes milo-ground {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  45% {
+    transform: scaleX(0.72);
+    opacity: 0.5;
+  }
+}
+@keyframes milo-cheer {
+  to {
+    transform: rotate(-12deg);
+  }
+}
+@keyframes milo-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) rotate(0);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(80px) rotate(200deg);
+  }
+}
+@keyframes milo-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+@keyframes milo-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}

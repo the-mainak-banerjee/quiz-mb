@@ -1,22 +1,16 @@
-import { LoaderCircle } from 'lucide-react';
-import { Text } from './text';
+import { MiloLoading } from '@/components/milo/milo-states';
 
-export function GlobalLoader({ label = 'Loading…' }: { label?: string }) {
+/** Covers the page while a blocking action runs (e.g. publishing). */
+export function GlobalLoader({
+  label = 'Loading…',
+  hint,
+}: {
+  label?: string;
+  hint?: string;
+}) {
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      aria-label={label}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-canvas/90 p-gutter backdrop-blur-(--overlay-blur)"
-    >
-      <div className="flex flex-col items-center gap-space-sm rounded-card border border-border-surface bg-surface p-space-lg shadow-floating">
-        <LoaderCircle
-          size={32}
-          aria-hidden="true"
-          className="animate-spin text-accent motion-reduce:animate-none"
-        />
-        <Text variant="label">{label}</Text>
-      </div>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-canvas/85 p-gutter backdrop-blur-md">
+      <MiloLoading label={label} {...(hint ? { hint } : {})} />
     </div>
   );
 }

@@ -1,4 +1,9 @@
 'use client';
+import { RotateCcw } from 'lucide-react';
+import { Button, Text } from '@/components/ui';
+import { MiloMessage } from '@/components/milo/milo-states';
+import { NavigationItem } from '@/components/workspace/navigation-item';
+import { APP_LINKS } from '@/config/navigation';
 
 export default function ErrorPage({
   error,
@@ -10,26 +15,36 @@ export default function ErrorPage({
   const isDevelopment = process.env.NODE_ENV === 'development';
 
   return (
-    <section className="space-y-4">
-      <h1 className="text-3xl font-bold">Something went wrong</h1>
-      <p>Please try again.</p>
-
+    <MiloMessage
+      pose="error"
+      eyebrow="Something went wrong"
+      title="Milo hit a snag"
+      description="This page didn’t load properly. Try again, and if it keeps happening, come back in a moment."
+    >
+      <div className="flex flex-col gap-space-xs sm:flex-row">
+        <Button
+          icon={<RotateCcw size={18} aria-hidden="true" />}
+          onClick={reset}
+        >
+          Try again
+        </Button>
+        <NavigationItem
+          href={APP_LINKS.HOME}
+          className="bg-action-secondary text-accent hover:bg-action-secondary-hover"
+        >
+          Go home
+        </NavigationItem>
+      </div>
       {isDevelopment && (
-        <pre className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+        <pre className="w-full overflow-x-auto rounded-control bg-danger-surface p-space-sm text-left text-caption text-danger-on-surface">
           {error.message}
         </pre>
       )}
-
-      {error.digest ? (
-        <p className="text-sm text-slate-500">Error ID: {error.digest}</p>
-      ) : null}
-
-      <button
-        onClick={reset}
-        className="rounded-lg bg-teal-800 px-4 py-2 text-white"
-      >
-        Try again
-      </button>
-    </section>
+      {error.digest && (
+        <Text variant="caption" tone="secondary">
+          Error ID: {error.digest}
+        </Text>
+      )}
+    </MiloMessage>
   );
 }

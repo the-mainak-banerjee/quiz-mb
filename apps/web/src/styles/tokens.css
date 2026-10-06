@@ -53,6 +53,15 @@
   --color-status-neutral-text: #606662;
   --color-placeholder: rgb(92 102 95 / 60%);
   --color-scrim: rgb(19 27 21 / 30%);
+  /* Milo, the QuizMB mascot. Limbs and ink reuse the brand greens. */
+  --color-milo-body: #fbf8f0;
+  --color-milo-body-shade: #e4dccb;
+  --color-milo-limb: var(--color-action-primary);
+  --color-milo-limb-light: var(--color-accent);
+  --color-milo-bobble: #a9c09b;
+  --color-milo-bobble-shade: #7f9a72;
+  --color-milo-ink: var(--color-text-primary);
+  --color-milo-spark: #8fa882;
 
   --text-display: 40px;
   --text-display--line-height: 48px;
