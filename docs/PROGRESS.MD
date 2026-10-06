@@ -2,9 +2,29 @@
 
 ## Current status
 
-Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data, including live quizzes and history. Phase 5 (lobby and live-session foundation), Phases 6–8 (live questions, submission, scoring, personal rank and live distribution) and Phase 9 (host presentation controls and leaderboard) and Phase 10 (end quiz, final results and history) are implemented end to end. Phase 11 (reliability and hardening) is implemented except the load test, which waits for email verification and per-account project/quiz limits. No deployment has been performed.
+Phases 0–4 are implemented: foundation, authentication, dashboard, project/quiz authoring, and publishing/registration. Dashboards load real data, including live quizzes and history. Phase 5 (lobby and live-session foundation), Phases 6–8 (live questions, submission, scoring, personal rank and live distribution) and Phase 9 (host presentation controls and leaderboard) and Phase 10 (end quiz, final results and history) are implemented end to end. Phase 11 (reliability and hardening) is implemented except the load test, which waits for per-account project/quiz limits. Phase 12 (email verification and password reset) is implemented. No deployment has been performed.
 
 This document records implementation progress, verification results, limitations, and approved scope adjustments. Project setup and usage instructions belong in the root README.
+
+## Question Markdown — October 6, 2026
+
+Branch `fix/question-markdown` (from `develop`).
+
+- The question prompt editor is a WYSIWYG Tiptap editor (bold, italic, strikethrough, inline code, lists, quote, code block, undo/redo and keyboard shortcuts); formatting shows as you type instead of Markdown symbols. Prompts are still stored as Markdown, so existing questions and the API are unchanged.
+- Every prompt display renders the formatting from the same schema: builder, review step, participant screen, host question queue, host preview and the live question. Lists use a compact two-line form. `react-markdown` was removed.
+- Allowed syntax: bold, italic, strikethrough, code, lists, quotes and code blocks. Headings render as paragraphs; links, images and raw HTML are shown as plain text.
+- Checks: format, lint, typecheck, web unit tests (including the new prompt Markdown tests) and build passed; the editor and host console were checked in the browser.
+
+## Phase 12 — Email verification and password reset — October 6, 2026
+
+Branch `phase-12-email-auth`, merged to `develop` (PR #10).
+
+- Signup creates an unverified account and emails a 6-digit code (Resend); the session starts only after the code is accepted. Login with an unverified account sends a fresh code instead of signing in.
+- Codes are HMAC-hashed, one per user and purpose (a new code replaces and deletes the old one), valid 10 minutes, 5 tries, 60-second resend cooldown; used, expired and exhausted codes are deleted. Verification and reset codes cannot be used for each other.
+- Forgot password answers the same whether or not the email has an account; a correct code gives a 15-minute single-use reset token. A reset signs out every session and marks the email verified. Wording never confirms that an account exists.
+- Rate limits for code checks, resends, reset requests and completions; the limits are shown on the code screens. Email templates follow the Stitch designs with the QuizMB logo inline.
+- Migration `20261006000000_email_verification`; production needs `RESEND_API_KEY` and `EMAIL_FROM` (`SUPPORT_EMAIL` optional).
+- Checks: format, lint, typecheck, unit tests, build and every integration test passed, including the new Phase 12 test; a real Resend send was verified.
 
 ## Phase 11 — Reliability and hardening — October 4, 2026
 

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Badge, Callout, ProgressBar, Surface, Text } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { PromptText } from '@/components/markdown-preview';
 import { percentOf, questionTypeLabels } from './format';
 import { OptionLetter, QuestionChip, TimerPill } from './question-parts';
 import type { DescriptiveResponse, OptionResult, QueueQuestion } from './types';
@@ -259,9 +260,12 @@ export function HostActiveQuestion(props: ActiveQuestionProps) {
           >
             {ended ? 'Completed question' : 'Live prompt'}
           </Text>
-          <Text as="h2" variant="page-title">
-            {question.text}
-          </Text>
+          <div role="heading" aria-level={2}>
+            <PromptText
+              text={question.text}
+              className="text-page-title text-text-primary"
+            />
+          </div>
         </div>
 
         <div className="flex flex-col gap-1.5 rounded-control bg-surface-low p-3">

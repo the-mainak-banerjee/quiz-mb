@@ -11,6 +11,7 @@ import { Eye, Info, ListChecks, Send, Timer } from 'lucide-react';
 import { Badge, Button, Callout, Surface, Text } from '@/components/ui';
 import { PreviewButton } from '@/components/workspace/preview-actions';
 import { cn } from '@/lib/utils';
+import { PromptText } from '@/components/markdown-preview';
 import { questionTypeLabels } from './format';
 import { HostConsoleLayout } from './host-console-layout';
 import { OptionLetter, QuestionChip } from './question-parts';
@@ -61,7 +62,10 @@ function SelectedQuestionPreview({
       </div>
 
       <div className="rounded-control border border-border-surface bg-surface-low p-space-sm">
-        <Text variant="card-title">{question.text}</Text>
+        <PromptText
+          text={question.text}
+          className="text-card-title text-text-primary"
+        />
       </div>
 
       {descriptive ? (

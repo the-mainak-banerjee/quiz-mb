@@ -30,15 +30,6 @@ ALTER TABLE "quizzes" ADD CONSTRAINT "quiz_planned_start_required"
 
 Before applying, confirm that no existing non-draft development rows have a null `plannedStartAt`, and extend the publishing integration test to assert the constraint.
 
-## Make question Markdown production ready
-
-Question prompts are written in Markdown, but its behaviour is not production ready yet. Review and finish it before release:
-
-- Consistent rendering everywhere a prompt appears: the builder preview and the participant live screen render Markdown (`components/markdown-preview.tsx`), while the host console (question queue, preview and live question) and the review screen still show the raw text.
-- Decide the supported syntax (headings, lists, code, links, images are currently disallowed) and how large elements such as headings look inside a prompt on each screen and on phones.
-- Confirm sanitization and link handling are safe for participant-facing content, and that long or complex prompts stay readable.
-- Improve the editor experience (toolbar, preview, character limits) as needed.
-
 ## Phase 11 — still open
 
 Done on branch `phase-11-hardening`: the rate limiting item, the Phase 10 "end during a question" item and the earlier UI issues list (all removed from this file), plus backend Segments 1–6 and their frontend work. Still open:
@@ -49,5 +40,15 @@ Done on branch `phase-11-hardening`: the rate limiting item, the Phase 10 "end d
 ## Before launch
 - Add proper rate limits to prevent abuse.
 - What to do for settings and workspace plan.
-- Loading and error screens (`loading.tsx` / `error.tsx` for the workspace, live room and public quiz page): waiting for a custom design.
+- Loading and error screens (`loading.tsx` / `error.tsx` for the workspace, live room and public quiz page): waiting for a custom design. Including 404 page
 - Then work on the other todo items
+
+### UI bugs
+- While creating quiz after creating a project directly send them to quiz basic page
+- The text area should not be expandable by user
+- While we added image in quiz the save and add question is taking too much time
+- After saving the quiz basics it is taking some time to go to the next page that time the button and everything stays active in the quiz basic page that is bad UX
+- Add real screenshot in auth pages right section
+- There should be a confirm password field in signup
+- If from the manage page host try to start the complete quiz again then we are showing the error that this quiz is already completed. After that we can reload the page automatically.
+- After the quiz end there is view full result and final leaderboard button place them below the text rather than on the right side and the View full result button is not looking good in current UI
