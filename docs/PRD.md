@@ -118,7 +118,9 @@ A participant can:
 Support:
 
 - Email signup
+- Email verification with a 6-digit code (Phase 12)
 - Email login
+- Forgot password and password reset with a 6-digit code (Phase 12)
 - Logout
 - Basic user profile
 - Real name
@@ -1644,7 +1646,259 @@ Make the MVP safe enough for real usage.
 
 ---
 
-# PHASE 12 — MVP QA and Release
+# PHASE 12 — Email Verification, Forgot Password and Auth Hardening
+
+## Goal
+
+Add secure email ownership verification and password recovery before MVP launch.
+
+## Build
+
+- Email verification with 6-digit OTP
+- Require email verification after signup
+- Prevent unverified users from accessing authenticated app features
+- Resend verification OTP
+- OTP expiry
+- OTP attempt limits
+- OTP resend cooldown
+- Forgot password flow
+- Password reset with 6-digit OTP
+- New password creation
+- Password reset success flow
+- Separate OTP purposes:
+  - EMAIL_VERIFICATION
+  - PASSWORD_RESET
+- Store OTPs securely as hashes
+- Persist email verification timestamp
+- Rate limit auth-sensitive endpoints
+- Neutral forgot-password responses to prevent account enumeration
+- Transactional email provider integration
+- Reuse existing auth UI and validation patterns
+
+## Email Verification Flow
+
+Signup:
+
+User submits:
+
+- name
+- email
+- password
+
+Then:
+
+```text
+Signup
+→ create unverified account
+→ generate verification OTP
+→ send OTP to email
+→ Verify Email screen
+→ valid OTP
+→ mark email verified
+→ create/continue authenticated session
+→ enter app
+```
+
+Until email verification succeeds, the user must not be able to access normal authenticated QuizMB functionality.
+
+### Verification OTP Rules
+
+- 6-digit code
+- short expiry window
+- one-time use
+- code stored as a hash, never plaintext
+- limited failed verification attempts
+- resend generates a new valid code
+- previous code should no longer remain usable after replacement where practical
+- resend must be rate limited
+- UI should show resend cooldown
+- expired code must be rejected
+
+## Forgot Password Flow
+
+```text
+Login
+→ Forgot password
+→ enter email
+→ Send reset code
+→ verify 6-digit OTP
+→ create new password
+→ password reset succeeds
+→ return to login
+```
+
+### Forgot Password Security
+
+The forgot-password request must not reveal whether an account exists.
+
+Use a neutral response such as:
+
+"If an account exists for this email, we've sent a reset code."
+
+Do not return different public responses for:
+
+- registered email
+- unknown email
+
+## Password Reset OTP Rules
+
+- 6-digit code
+- short expiry window
+- one-time use
+- stored as a hash
+- limited failed attempts
+- resend cooldown
+- resend rate limiting
+- PASSWORD_RESET OTP cannot be used for EMAIL_VERIFICATION
+- EMAIL_VERIFICATION OTP cannot be used for PASSWORD_RESET
+
+After successful password reset:
+
+- invalidate the reset OTP
+- save the new password using the existing secure password hashing mechanism
+- invalidate existing authentication sessions if required by the approved auth security model
+
+## Data Model
+
+Add or support an OTP / verification record concept such as:
+
+`VerificationCode`
+
+Fields may include:
+
+- id
+- userId or email
+- purpose
+- codeHash
+- expiresAt
+- consumedAt
+- attempts
+- createdAt
+
+Supported purposes:
+
+- EMAIL_VERIFICATION
+- PASSWORD_RESET
+
+User should include a verification timestamp such as:
+
+- emailVerifiedAt
+
+Prefer a timestamp over only a boolean so verification state is auditable.
+
+## API / Auth Actions
+
+Support flows equivalent to:
+
+- signup
+- verify email
+- resend verification code
+- forgot password
+- verify reset code
+- reset password
+
+Exact endpoint naming follows API design conventions.
+
+All validation and authorization rules must be enforced server-side.
+
+## Rate Limiting
+
+Rate limit at minimum:
+
+- signup
+- login
+- verify email
+- resend verification
+- forgot password
+- verify reset code
+- reset password
+- refresh session
+
+OTP send/resend should be limited by:
+
+- email/account
+- IP where appropriate
+
+OTP verification should have:
+
+- failed-attempt limits
+- expiry validation
+- one-time-use enforcement
+
+## UI Screens
+
+Add:
+
+1. Verify Email
+2. Verify Email — invalid / expired code state
+3. Forgot Password
+4. Verify Password Reset Code
+5. Create New Password
+6. Password Reset Success
+
+Reuse:
+
+- existing Login / Signup visual language
+- shared OTP component
+- shared Input / Button / Text primitives
+- existing validation patterns
+
+Do not create a separate design system for these screens.
+
+## Email Delivery
+
+Use a transactional email provider behind a small abstraction.
+
+For development:
+
+- allow development/test sender configuration
+
+For production:
+
+- use a verified sender/domain before sending authentication emails to real users
+
+Do not expose provider credentials to the frontend.
+
+## Acceptance Criteria
+
+- New signup cannot access the authenticated app before email verification.
+- Signup sends a valid verification OTP.
+- Correct verification OTP verifies the account.
+- Incorrect OTP is rejected.
+- Expired OTP is rejected.
+- Used OTP cannot be reused.
+- Verification OTP can be resent with cooldown/rate limiting.
+- Refreshing during verification does not lose the verification flow.
+- Forgot password does not reveal whether an email is registered.
+- Password reset OTP is sent for eligible accounts.
+- Valid reset OTP allows the user to set a new password.
+- Invalid, expired or consumed reset OTP is rejected.
+- Verification OTP cannot reset a password.
+- Password-reset OTP cannot verify an email.
+- Password mismatch / password-policy errors are validated properly.
+- After successful password reset, the user can log in with the new password.
+- Old password no longer works.
+- Auth email endpoints are rate limited.
+- OTP values are never stored in plaintext.
+- OTP/provider secrets are never exposed to the browser.
+
+## Do Not Build Yet
+
+- Google login
+- Google signup
+- social authentication
+- magic-link login
+- phone OTP
+- SMS verification
+- MFA / authenticator apps
+- backup recovery codes
+- marketing emails
+- newsletter subscriptions
+- advanced notification preferences
+
+---
+
+# PHASE 13 — MVP QA and Release
 
 ## Goal
 
@@ -1653,7 +1907,7 @@ Validate the complete product as a real live quiz.
 ## Required End-to-End Test
 
 ```text
-1. User signs up.
+1. User signs up and verifies their email.
 2. User creates project.
 3. User creates quiz.
 4. User adds MCQ, multi-answer and descriptive questions.
@@ -1696,7 +1950,8 @@ Phase 8  Live Distribution / Result Screen
 Phase 9  Leaderboard / Host Controls
 Phase 10 Final Results / History
 Phase 11 Reliability / Edge Cases
-Phase 12 QA / Release
+Phase 12 Email Verification / Password Reset
+Phase 13 QA / Release
 ```
 
 ---

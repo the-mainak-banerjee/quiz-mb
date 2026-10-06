@@ -14,6 +14,104 @@ import {
 export * from './constants.js';
 
 // Central authoring limits: design text counters plus protective API bounds.
+/** Password policy shared by signup and password reset. */
+export const PASSWORD_LIMITS = { min: 15, max: 128 } as const;
+const passwordLength = (value: string) => Array.from(value).length;
+export const newPasswordSchema = z
+  .string()
+  .refine(
+    (value) =>
+      passwordLength(value) >= PASSWORD_LIMITS.min &&
+      passwordLength(value) <= PASSWORD_LIMITS.max,
+    `Use ${PASSWORD_LIMITS.min}–${PASSWORD_LIMITS.max} characters.`,
+  );
+
+/** One-time codes for email verification and password reset. */
+export const OTP_PURPOSE = {
+  EMAIL_VERIFICATION: 'EMAIL_VERIFICATION',
+  PASSWORD_RESET: 'PASSWORD_RESET',
+} as const;
+export type OtpPurpose = (typeof OTP_PURPOSE)[keyof typeof OTP_PURPOSE];
+export const OTP_RULES = {
+  length: 6,
+  ttlSeconds: 10 * 60,
+  maxAttempts: 5,
+  resendCooldownSeconds: 60,
+  /** Codes entered from one network (verify email and reset code). */
+  checksPerWindow: 15,
+  checkWindowSeconds: 15 * 60,
+  /** Reset codes one email address can be sent per hour. */
+  resetRequestsPerHour: 5,
+} as const;
+const otpCode = z
+  .string()
+  .regex(
+    new RegExp(String.raw`^\d{${OTP_RULES.length}}$`),
+    'Enter the 6-digit code.',
+  );
+const authEmail = z.string().trim().pipe(z.email().max(254));
+
+/**
+ * A pending email verification. The ticket identifies it (no session exists
+ * until the code is accepted); the browser keeps it for this tab only.
+ */
+export type VerificationChallengeDto = {
+  ticket: string;
+  /** Masked for display, e.g. m***@example.com. */
+  email: string;
+  expiresAt: string;
+  resendAvailableAt: string;
+};
+
+/** Signup and login either sign the user in or ask for email verification. */
+export type AuthResultDto =
+  | {
+      status: 'AUTHENTICATED';
+      user: { id: string; name: string; email: string };
+    }
+  | { status: 'VERIFICATION_REQUIRED'; verification: VerificationChallengeDto };
+export const AUTH_RESULT_STATUS = {
+  AUTHENTICATED: 'AUTHENTICATED',
+  VERIFICATION_REQUIRED: 'VERIFICATION_REQUIRED',
+} as const;
+
+export const verifyEmailSchema = z
+  .object({ ticket: z.string().min(1).max(512), code: otpCode })
+  .strict();
+export const resendVerificationSchema = z
+  .object({ ticket: z.string().min(1).max(512) })
+  .strict();
+export const passwordResetRequestSchema = z
+  .object({ email: authEmail })
+  .strict();
+export const passwordResetVerifySchema = z
+  .object({ email: authEmail, code: otpCode })
+  .strict();
+export const passwordResetCompleteSchema = z
+  .object({
+    resetToken: z.string().min(1).max(512),
+    password: newPasswordSchema,
+  })
+  .strict();
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+export type PasswordResetRequestInput = z.infer<
+  typeof passwordResetRequestSchema
+>;
+export type PasswordResetVerifyInput = z.infer<
+  typeof passwordResetVerifySchema
+>;
+export type PasswordResetCompleteInput = z.infer<
+  typeof passwordResetCompleteSchema
+>;
+
+/**
+ * The same answer whether or not the email has an account, so the response
+ * never reveals which emails are registered.
+ */
+export type PasswordResetRequestDto = { resendAvailableAt: string };
+/** Single-use proof that the reset code was correct. */
+export type PasswordResetTokenDto = { resetToken: string; expiresAt: string };
+
 export const AUTHORING_LIMITS = {
   projectName: 60,
   projectDescription: 240,

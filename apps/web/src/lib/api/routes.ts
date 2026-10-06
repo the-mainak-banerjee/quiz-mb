@@ -7,6 +7,11 @@ export const API_ROUTES = {
     SIGNUP: `${API_PREFIX}/auth/signup`,
     REFRESH: `${API_PREFIX}/auth/refresh`,
     LOGOUT: `${API_PREFIX}/auth/logout`,
+    VERIFY_EMAIL: `${API_PREFIX}/auth/verify-email`,
+    RESEND_VERIFICATION: `${API_PREFIX}/auth/verify-email/resend`,
+    PASSWORD_RESET: `${API_PREFIX}/auth/password-reset`,
+    PASSWORD_RESET_VERIFY: `${API_PREFIX}/auth/password-reset/verify`,
+    PASSWORD_RESET_COMPLETE: `${API_PREFIX}/auth/password-reset/complete`,
     ME: `${API_PREFIX}/me`,
   },
   PROJECTS: {

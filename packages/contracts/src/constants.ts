@@ -117,6 +117,15 @@ export const ERROR_CODE = {
   UNAUTHENTICATED: 'UNAUTHENTICATED',
   TOKEN_EXPIRED: 'TOKEN_EXPIRED',
   INVALID_REFRESH_TOKEN: 'INVALID_REFRESH_TOKEN',
+  // Email verification and password reset (Phase 12)
+  /** The code is wrong; `details.attemptsLeft` says how many tries remain. */
+  INVALID_CODE: 'INVALID_CODE',
+  /** The code expired, was replaced, was used, or ran out of attempts. */
+  CODE_EXPIRED: 'CODE_EXPIRED',
+  /** A new code was requested before the resend cooldown ended. */
+  RESEND_COOLDOWN: 'RESEND_COOLDOWN',
+  /** The verification or reset ticket expired; start the step again. */
+  AUTH_FLOW_EXPIRED: 'AUTH_FLOW_EXPIRED',
   // Authoring and media
   QUIZ_LOCKED: 'QUIZ_LOCKED',
   INVALID_QUIZ_STATE: 'INVALID_QUIZ_STATE',

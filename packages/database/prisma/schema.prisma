@@ -14,9 +14,12 @@ model User {
   name                String               @db.VarChar(100)
   email               String               @unique @db.VarChar(254)
   passwordHash        String
+  /// Null until the email address is verified with a one-time code.
+  emailVerifiedAt     DateTime?            @db.Timestamptz(3)
   createdAt           DateTime             @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime             @updatedAt @db.Timestamptz(3)
   sessions            AuthSession[]
+  verificationCodes   VerificationCode[]
   projects            Project[]
   quizzes             Quiz[]
   media               MediaAsset[]
@@ -46,6 +49,27 @@ model AuthSession {
   @@index([expiresAt])
   @@index([familyId])
   @@map("auth_sessions")
+}
+
+enum OtpPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+/// One live code per user and purpose; replaced on resend, deleted once used.
+model VerificationCode {
+  id        String     @id @default(uuid()) @db.Uuid
+  userId    String     @db.Uuid
+  purpose   OtpPurpose
+  codeHash  String     @db.VarChar(64)
+  expiresAt DateTime   @db.Timestamptz(3)
+  attempts  Int        @default(0)
+  createdAt DateTime   @default(now()) @db.Timestamptz(3)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, purpose])
+  @@index([expiresAt])
+  @@map("verification_codes")
 }
 
 enum QuizStatus {

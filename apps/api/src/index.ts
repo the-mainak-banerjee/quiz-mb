@@ -16,6 +16,7 @@ import { LiveStore } from './modules/live-sessions/live-store.js';
 import { SocketTickets } from './modules/live-sessions/tickets.js';
 import { NODE_ENV } from './config/constants.js';
 import { RateLimiter } from './infrastructure/rate-limiter.js';
+import { ResendEmailSender } from './infrastructure/email.js';
 
 const env = parseEnv(process.env);
 const authConfig = parseAuthEnv(process.env);
@@ -42,7 +43,14 @@ export const live = redis
 export default createApp({
   allowedOrigins: env.ALLOWED_ORIGINS,
   logger,
-  auth: new AuthService(new AuthRepository(database), authConfig),
+  auth: new AuthService(
+    new AuthRepository(database),
+    authConfig,
+    env.RESEND_API_KEY && env.EMAIL_FROM
+      ? new ResendEmailSender(env.RESEND_API_KEY, env.EMAIL_FROM, logger)
+      : undefined,
+    { supportEmail: env.SUPPORT_EMAIL, logger },
+  ),
   users: new UsersService(database),
   production: env.NODE_ENV === NODE_ENV.PRODUCTION,
   database,
