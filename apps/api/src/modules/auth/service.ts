@@ -17,6 +17,7 @@ import type { Logger } from 'pino';
 import type { EmailSender } from '../../infrastructure/email.js';
 import {
   existingAccountEmail,
+  passwordChangedEmail,
   passwordResetEmail,
   verificationEmail,
 } from './emails.js';
@@ -461,7 +462,13 @@ export class AuthService {
     return { resetToken: token, expiresAt: expiresAt.toISOString() };
   }
 
-  /** Sets the new password and signs out every session. */
+  /**
+   * Sets the new password and ends every sign-in: all sessions and refresh
+   * families are revoked, their open sockets disconnected (even during a
+   * live quiz: it stops someone inside a compromised account), and the
+   * owner is emailed that the password changed. Logging in again is
+   * required.
+   */
   async completePasswordReset(resetToken: string, password: string) {
     const userId = await this.flow.resetUser(resetToken, async (id) => {
       const user = await this.repository.findById(id);
@@ -469,12 +476,43 @@ export class AuthService {
     });
     // The current password is accepted on purpose: refusing only that one
     // would confirm it to whoever holds the reset token.
-    await this.repository.resetPassword(userId, await hashPassword(password));
+    const { user, revokedFamilyIds } = await this.repository.resetPassword(
+      userId,
+      await hashPassword(password),
+    );
+    if (revokedFamilyIds.length)
+      this.guards.events?.emit(DOMAIN_EVENT.authSessionsRevoked, {
+        familyIds: revokedFamilyIds,
+      });
     // The owner proved access to the inbox: a wrong-password pause someone
     // else caused must not keep them out.
-    const user = await this.repository.findById(userId);
-    if (user)
-      await this.guards.loginThrottle?.clear(user.email, { endPause: true });
+    await this.guards.loginThrottle?.clear(user.email, { endPause: true });
+    await this.passwordChanged(user);
+  }
+
+  /**
+   * The "Your QuizMB password was changed" security email. A failure is
+   * logged, never reported: the password has already changed.
+   */
+  private async passwordChanged(user: Pick<User, 'id' | 'name' | 'email'>) {
+    try {
+      if (!this.email) throw new Error('Email delivery is not configured');
+      // A security notice is essential: sent even past the 90% budget.
+      if (this.budget && !(await this.budget.allows(true))) return;
+      await this.email.send(
+        passwordChangedEmail(user.email, {
+          name: user.name,
+          supportEmail: this.mail.supportEmail,
+          changedAt: new Date(),
+        }),
+      );
+      await this.repository.recordSend(user.id, OTP_PURPOSE.PASSWORD_RESET);
+    } catch (error) {
+      this.mail.logger?.error(
+        { err: error },
+        'Password changed email could not be sent',
+      );
+    }
   }
 
   async refresh(token?: string) {

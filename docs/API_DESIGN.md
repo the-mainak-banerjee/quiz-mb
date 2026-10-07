@@ -270,6 +270,16 @@ Apply to email verification and password reset codes (per account and purpose):
 
 On signup and login the step is returned even when a limit stops the email; `resendAvailableAt` then says when a new code can be requested.
 
+## 6.1.2 Password reset
+
+```http
+POST /api/auth/password-reset            { email }
+POST /api/auth/password-reset/verify     { email, code }
+POST /api/auth/password-reset/complete   { resetToken, password }
+```
+
+The request always answers the same, whether or not the email has an account. A correct code returns a reset authorization (`resetToken`) that is valid for 5 minutes, works once and only allows setting a new password. Completing the reset revokes every session and refresh-token family, disconnects all of the user's sockets (they receive `session:removed` with `UNAUTHENTICATED`, even during a live quiz), ends any wrong-password pause, emails a "Your QuizMB password was changed" security notice, and requires logging in again.
+
 ## 6.2 Login
 
 ```http

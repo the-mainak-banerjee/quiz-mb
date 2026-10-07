@@ -234,3 +234,50 @@ test(
     assert.ok(hostTicket.ticket);
   },
 );
+
+test(
+  'a password reset disconnects every socket of that user',
+  { skip: liveSkip },
+  async (t) => {
+    const harness = await startLiveHarness(t, ['host', 'player'] as const);
+    const { liveSessionId } = await harness.openQuiz('Reset sockets', [
+      'player',
+    ]);
+    const { socket } = await harness.joinAs(liveSessionId, 'player');
+    const removed = harness.nextEvent<{ code: string }>(
+      socket,
+      LIVE_EVENTS.removed,
+    );
+    const disconnected = harness.nextEvent<string>(socket, 'disconnect');
+    const email = harness.emailOf('player');
+    const sent = harness.mailbox.countFor(email);
+    await harness.request('/auth/password-reset', 'POST', { email });
+    const code = await harness.mailbox.codeFor(email, sent);
+    const { resetToken } = await harness.data<{ resetToken: string }>(
+      await harness.request('/auth/password-reset/verify', 'POST', {
+        email,
+        code,
+      }),
+    );
+    await harness.data(
+      await harness.request('/auth/password-reset/complete', 'POST', {
+        resetToken,
+        password: 'a brand new long password for reset',
+      }),
+    );
+    assert.equal((await removed).code, ERROR_CODE.UNAUTHENTICATED);
+    assert.equal(await disconnected, 'io server disconnect');
+    assert.equal(
+      (
+        await harness.request(
+          `/live-sessions/${liveSessionId}/socket-ticket`,
+          'POST',
+          {},
+          harness.cookies.player,
+        )
+      ).status,
+      401,
+      'the old sign-in can no longer get socket tickets',
+    );
+  },
+);

@@ -171,6 +171,31 @@ export function passwordResetEmail(to: string, content: Content): EmailMessage {
 }
 
 /**
+ * The security notice after a successful password reset: every device was
+ * signed out, and what to do if the owner did not make the change.
+ */
+export function passwordChangedEmail(
+  to: string,
+  content: Omit<Content, 'code'> & { changedAt: Date },
+): EmailMessage {
+  const when = `${content.changedAt.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+  return {
+    to,
+    subject: 'Your QuizMB password was changed',
+    ...render(content, {
+      heading: 'Your password was changed',
+      preview: 'The password for your QuizMB account was just changed.',
+      intro: `The password for your QuizMB account was changed on ${when}.`,
+      notes: [
+        'For your security, every device that was signed in has been signed out, including any live quiz in progress. Sign in again with your new password.',
+      ],
+      ignore:
+        'If you didn\'t change your password, reset it again right away with "Forgot password" on the sign-in page, and contact us.',
+    }),
+  };
+}
+
+/**
  * Sent instead of a code when someone signs up with an address that already
  * has a verified account, so signup never reveals that it exists.
  */

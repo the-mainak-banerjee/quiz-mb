@@ -260,21 +260,31 @@ export class AuthRepository {
    */
   async resetPassword(userId: string, passwordHash: string) {
     const now = new Date();
-    await this.db.$transaction([
-      this.db.user.update({
+    return this.db.$transaction(async (tx) => {
+      // Families still signed in: their sockets are disconnected afterwards.
+      const active = await tx.authSession.findMany({
+        where: { userId, revokedAt: null },
+        select: { familyId: true },
+        distinct: ['familyId'],
+      });
+      const user = await tx.user.update({
         where: { id: userId },
         data: { passwordHash },
-      }),
-      this.db.user.updateMany({
+      });
+      await tx.user.updateMany({
         where: { id: userId, emailVerifiedAt: null },
         data: { emailVerifiedAt: now },
-      }),
-      this.db.authSession.updateMany({
+      });
+      await tx.authSession.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: now },
-      }),
-      this.db.verificationCode.deleteMany({ where: { userId } }),
-    ]);
+      });
+      await tx.verificationCode.deleteMany({ where: { userId } });
+      return {
+        user,
+        revokedFamilyIds: active.map((session) => session.familyId),
+      };
+    });
   }
   async createAccount(
     input: { name: string; email: string; passwordHash: string },

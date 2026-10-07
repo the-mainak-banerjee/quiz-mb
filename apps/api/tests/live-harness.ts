@@ -294,6 +294,9 @@ export async function startLiveHarness<Role extends string>(
 
   return {
     logs,
+    mailbox,
+    /** Each role's email address (index matches `roles`). */
+    emailOf: (role: Role) => emails[roles.indexOf(role)]!,
     db,
     redis,
     live,

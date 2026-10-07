@@ -117,7 +117,7 @@ All limits are proposed starting values, not measured capacity. Review them afte
 | Use a verification code here                            | Separate `EMAIL_VERIFICATION` and `PASSWORD_RESET` purposes                         | **Implemented**                                                        |
 | Skip the code and call the set-password API              | Requires a server-issued, short-lived, single-use reset authorization               | **Implemented**                                                        |
 | Reuse a code or reset authorization                     | Both single use, consumed atomically                                                | **Implemented**                                                        |
-| Keep using a stolen session after the owner resets | A successful reset revokes every session and refresh-token family and disconnects all of that user's sockets | **Partial** — every session is revoked; open sockets stay connected |
+| Keep using a stolen session after the owner resets | A successful reset revokes every session and refresh-token family and disconnects all of that user's sockets | **Implemented** — every session and refresh-token family is revoked and all of the user's sockets are disconnected (the live page is told why) |
 
 **Limits**
 
@@ -128,8 +128,8 @@ All limits are proposed starting values, not measured capacity. Review them afte
 | Reset emails per address       | 5 per hour and 10 per rolling 24 hours                                   | Implemented |
 | Wrong attempts                 | 5 per code, then invalid                                                 | Implemented                   |
 | Failures across resends        | 10 per email and purpose in a rolling 30 minutes                         | Implemented |
-| Reset authorization            | Valid 5 minutes, single use, only allows setting a new password          | Partial (valid 15 minutes)    |
-| After a successful reset | Revoke all sessions, invalidate refresh-token families, disconnect all sockets, send a "Your QuizMB password was changed" security email, require login again | Partial (sessions and refresh tokens revoked, login required; sockets and security email to build) |
+| Reset authorization            | Valid 5 minutes, single use, only allows setting a new password          | Implemented |
+| After a successful reset | Revoke all sessions, invalidate refresh-token families, disconnect all sockets, send a "Your QuizMB password was changed" security email, require login again | Implemented |
 
 Revoking sockets can interrupt a live quiz for that account. That is accepted: it stops someone already inside a compromised account from keeping access.
 

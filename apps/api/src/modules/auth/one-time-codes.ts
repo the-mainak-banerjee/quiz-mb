@@ -12,7 +12,7 @@ import { TOKEN_ISSUER } from '../../config/constants.js';
 /** How long a signup or login may take to enter the emailed code. */
 export const VERIFICATION_TICKET_TTL_SECONDS = 30 * 60;
 /** How long after a correct reset code the new password may be set. */
-export const RESET_TOKEN_TTL_SECONDS = 15 * 60;
+export const RESET_TOKEN_TTL_SECONDS = 5 * 60;
 
 const UUID = /^[0-9a-f-]{36}$/;
 
