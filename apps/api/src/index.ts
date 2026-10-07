@@ -17,6 +17,7 @@ import { SocketTickets } from './modules/live-sessions/tickets.js';
 import { NODE_ENV } from './config/constants.js';
 import { RateLimiter } from './infrastructure/rate-limiter.js';
 import { ResendEmailSender } from './infrastructure/email.js';
+import { LoginThrottle } from './modules/auth/login-throttle.js';
 
 const env = parseEnv(process.env);
 const authConfig = parseAuthEnv(process.env);
@@ -54,6 +55,11 @@ export default createApp({
       supportEmail: env.SUPPORT_EMAIL,
       logger,
       dailyEmailLimit: env.EMAIL_DAILY_LIMIT,
+    },
+    {
+      // The wrong-password pause lives in Redis, like the rate limits.
+      loginThrottle: redis ? new LoginThrottle(redis, logger) : undefined,
+      events,
     },
   ),
   users: new UsersService(database),

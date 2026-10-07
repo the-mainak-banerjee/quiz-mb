@@ -299,12 +299,21 @@ export class AuthRepository {
       include: { user: true },
     });
   }
+  /**
+   * Exchanges a refresh token for the next one in its family. A reused
+   * (already rotated) token revokes the whole family: `revokedFamilyId` says
+   * which, so its open sockets can be disconnected.
+   */
   async rotate(hash: string, nextHash: string, now: Date) {
+    const refused = (revokedFamilyId: string | null = null) => ({
+      session: null,
+      revokedFamilyId,
+    });
     return this.db.$transaction(async (tx) => {
       const current = await tx.authSession.findUnique({
         where: { refreshTokenHash: hash },
       });
-      if (!current) return null;
+      if (!current) return refused();
       // Serialize rotations, logout and replay revocation on the family's root.
       await tx.$queryRaw`SELECT id FROM auth_sessions WHERE id = ${current.familyId}::uuid FOR UPDATE`;
       const row = await tx.authSession.findUniqueOrThrow({
@@ -315,14 +324,15 @@ export class AuthRepository {
           where: { familyId: row.familyId, revokedAt: null },
           data: { revokedAt: now },
         });
-        return null; // Commit revocation before reporting the invalid credential.
+        // Commit revocation before reporting the invalid credential.
+        return refused(row.familyId);
       }
-      if (row.expiresAt <= now) return null;
+      if (row.expiresAt <= now) return refused();
       await tx.authSession.update({
         where: { id: row.id },
         data: { revokedAt: now, lastUsedAt: now },
       });
-      return tx.authSession.create({
+      const session = await tx.authSession.create({
         data: {
           userId: row.userId,
           familyId: row.familyId,
@@ -332,19 +342,22 @@ export class AuthRepository {
         },
         include: { user: true },
       });
+      return { session, revokedFamilyId: null };
     });
   }
+  /** Revokes the refresh token's family; returns its id (null if unknown). */
   async revokeFamily(hash: string) {
-    await this.db.$transaction(async (tx) => {
+    return this.db.$transaction(async (tx) => {
       const row = await tx.authSession.findUnique({
         where: { refreshTokenHash: hash },
       });
-      if (!row) return;
+      if (!row) return null;
       await tx.$queryRaw`SELECT id FROM auth_sessions WHERE id = ${row.familyId}::uuid FOR UPDATE`;
       await tx.authSession.updateMany({
         where: { familyId: row.familyId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+      return row.familyId;
     });
   }
   activeSession(id: string, userId: string) {

@@ -16,6 +16,12 @@ export const liveRoom = (liveSessionId: string, audience?: RoomAudience) =>
 export const statusRoom = (quizId: string) => `status:${quizId}`;
 
 /**
+ * Room (in every namespace) of the sockets opened with one sign-in session
+ * family; revoking the family (logout, token replay) disconnects them.
+ */
+export const authFamilyRoom = (familyId: string) => `auth-family:${familyId}`;
+
+/**
  * How long the host may be disconnected before participants are told; a
  * page refresh or brief network drop stays invisible to them.
  */

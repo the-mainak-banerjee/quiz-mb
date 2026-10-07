@@ -17,7 +17,7 @@ import { parseAuthEnv } from '../src/modules/auth/config.js';
 import { UsersService } from '../src/modules/users/service.js';
 
 test(
-  'REST rate limits: per account, per client IP behind a proxy, per user, and window reset',
+  'REST rate limits: per client IP behind a proxy, per user, and window reset',
   { skip: !process.env.DATABASE_URL || !process.env.REDIS_URL },
   async (t) => {
     if (process.env.NODE_ENV === 'production')
@@ -36,7 +36,6 @@ test(
     const run = randomUUID();
     const rules = {
       ...RATE_LIMITS,
-      loginAccount: { scope: `test-login-${run}`, limit: 2, windowSeconds: 60 },
       signupIp: { scope: `test-signup-${run}`, limit: 1, windowSeconds: 60 },
       register: { scope: `test-register-${run}`, limit: 1, windowSeconds: 60 },
     };
@@ -83,30 +82,6 @@ test(
       const wait = Number(response.headers.get(HTTP_HEADER.RETRY_AFTER));
       assert.ok(wait >= 1 && wait <= 60, `${label}: Retry-After ${wait}`);
     };
-
-    // Per account: attempts count against that email whatever its case or
-    // surrounding spaces; other accounts keep their own budget.
-    const target = `rate-${run}@example.invalid`;
-    for (const email of [target, ` ${target.toUpperCase()} `])
-      assert.equal(
-        (await post('/auth/login', { email, password: 'wrong password!' }))
-          .status,
-        401,
-      );
-    await assertLimited(
-      await post('/auth/login', { email: target, password: 'wrong password!' }),
-      'third login for one account',
-    );
-    assert.equal(
-      (
-        await post('/auth/login', {
-          email: `other-${run}@example.invalid`,
-          password: 'wrong password!',
-        })
-      ).status,
-      401,
-      'other accounts are unaffected',
-    );
 
     // Per client IP, read from the trusted proxy hop (X-Forwarded-For).
     const signup = (ip: string) => {

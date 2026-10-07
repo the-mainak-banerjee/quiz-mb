@@ -277,9 +277,9 @@ export class LiveSessionsService {
   }
 
   /** Watch tickets reveal only public status, so any signed-in user qualifies. */
-  async issueWatchTicket(quizId: string, userId: string) {
+  async issueWatchTicket(quizId: string, userId: string, authFamilyId: string) {
     await this.quizStatus(quizId);
-    return this.tickets.issueWatch(userId, quizId);
+    return this.tickets.issueWatch(userId, quizId, authFamilyId);
   }
 
   private async load(liveSessionId: string) {
@@ -867,10 +867,14 @@ export class LiveSessionsService {
     };
   }
 
-  async issueTicket(liveSessionId: string, userId: string) {
+  async issueTicket(
+    liveSessionId: string,
+    userId: string,
+    authFamilyId: string,
+  ) {
     const session = await this.load(liveSessionId);
     await this.roleFor(session, userId);
-    return this.tickets.issue(userId, liveSessionId);
+    return this.tickets.issue(userId, liveSessionId, authFamilyId);
   }
 
   private ref(session: LiveSessionRow, role: LiveRole): LiveSessionRefDto {

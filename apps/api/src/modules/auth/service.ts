@@ -21,6 +21,11 @@ import {
   verificationEmail,
 } from './emails.js';
 import { EmailBudget } from './email-budget.js';
+import type { LoginThrottle } from './login-throttle.js';
+import {
+  DOMAIN_EVENT,
+  type DomainEvents,
+} from '../../infrastructure/domain-events.js';
 import {
   CodeHasher,
   FlowTokens,
@@ -82,6 +87,13 @@ const flowExpired = () =>
     'This step has expired. Please start again.',
   );
 
+const wrongCredentials = () =>
+  new ApiError(
+    401,
+    ERROR_CODE.UNAUTHENTICATED,
+    'Email or password is incorrect.',
+  );
+
 const inSeconds = (seconds: number) => new Date(Date.now() + seconds * 1000);
 
 /** Midnight UTC tomorrow, when the daily email budget starts again. */
@@ -98,6 +110,14 @@ export type AuthMailOptions = {
   logger?: Pick<Logger, 'error' | 'warn'> | undefined;
   /** The provider's daily allowance; without it no budget is enforced. */
   dailyEmailLimit?: number | undefined;
+};
+
+/** Sign-in protections that need other infrastructure (Redis, sockets). */
+export type AuthGuards = {
+  /** The wrong-password pause; without it (no Redis) logins are not paused. */
+  loginThrottle?: LoginThrottle | undefined;
+  /** Notified when session families are revoked, to close their sockets. */
+  events?: DomainEvents | undefined;
 };
 
 /**
@@ -129,6 +149,7 @@ export class AuthService {
     readonly config: AuthConfig,
     private email?: EmailSender,
     private mail: AuthMailOptions = {},
+    private guards: AuthGuards = {},
   ) {
     this.tokens = new Tokens(config);
     this.flow = new FlowTokens(config.AUTH_ACCESS_SECRET);
@@ -292,16 +313,28 @@ export class AuthService {
 
   /**
    * Signs in a verified account. A correct password for an unverified
-   * account sends a fresh code (respecting the cooldown) instead.
+   * account sends a fresh code (respecting the cooldown) instead. Wrong
+   * passwords are paused per address (LOGIN_PAUSE): during a pause the
+   * password is not checked at all, so the pause cannot be extended, and the
+   * answer is the same whether or not the address has an account.
    */
   async login(input: { email: string; password: string }, userAgent?: string) {
-    const user = await this.repository.findByEmail(input.email);
-    if (!(await verifyPassword(input.password, user?.passwordHash)) || !user)
+    const throttle = this.guards.loginThrottle;
+    const paused = await throttle?.pausedFor(input.email);
+    if (paused) {
       throw new ApiError(
-        401,
-        ERROR_CODE.UNAUTHENTICATED,
-        'Email or password is incorrect.',
+        429,
+        ERROR_CODE.RATE_LIMITED,
+        `Too many incorrect passwords. Try again ${waitText(paused)}, or reset your password.`,
+        { retryAfterSeconds: String(paused) },
       );
+    }
+    const user = await this.repository.findByEmail(input.email);
+    if (!(await verifyPassword(input.password, user?.passwordHash)) || !user) {
+      await throttle?.recordFailure(input.email);
+      throw wrongCredentials();
+    }
+    await throttle?.clear(input.email);
     if (!user.emailVerifiedAt)
       return this.verificationChallenge(user, { essential: true });
     const refresh = newRefresh();
@@ -437,6 +470,11 @@ export class AuthService {
     // The current password is accepted on purpose: refusing only that one
     // would confirm it to whoever holds the reset token.
     await this.repository.resetPassword(userId, await hashPassword(password));
+    // The owner proved access to the inbox: a wrong-password pause someone
+    // else caused must not keep them out.
+    const user = await this.repository.findById(userId);
+    if (user)
+      await this.guards.loginThrottle?.clear(user.email, { endPause: true });
   }
 
   async refresh(token?: string) {
@@ -447,11 +485,13 @@ export class AuthService {
         'Please sign in again.',
       );
     const next = newRefresh();
-    const session = await this.repository.rotate(
+    const { session, revokedFamilyId } = await this.repository.rotate(
       hashRefresh(token),
       hashRefresh(next),
       new Date(),
     );
+    // A replayed token revoked its family: close that family's sockets too.
+    if (revokedFamilyId) this.revoked(revokedFamilyId);
     if (!session)
       throw new ApiError(
         401,
@@ -460,7 +500,20 @@ export class AuthService {
       );
     return this.credentials(session.user, session.id, next, session.expiresAt);
   }
+  /** Tells the socket layer to disconnect a revoked family's sockets. */
+  private revoked(familyId: string) {
+    this.guards.events?.emit(DOMAIN_EVENT.authSessionsRevoked, {
+      familyIds: [familyId],
+    });
+  }
   async authenticate(access?: string) {
+    return (await this.authenticateSession(access)).user;
+  }
+  /**
+   * The signed-in user and their session family; sockets opened with this
+   * sign-in are tied to the family, so revoking it disconnects them.
+   */
+  async authenticateSession(access?: string) {
     if (!access)
       throw new ApiError(
         401,
@@ -476,9 +529,11 @@ export class AuthService {
         ERROR_CODE.UNAUTHENTICATED,
         'Please sign in to continue.',
       );
-    return publicUser(session.user);
+    return { user: publicUser(session.user), familyId: session.familyId };
   }
   async logout(refresh?: string) {
-    if (refresh) await this.repository.revokeFamily(hashRefresh(refresh));
+    if (!refresh) return;
+    const familyId = await this.repository.revokeFamily(hashRefresh(refresh));
+    if (familyId) this.revoked(familyId);
   }
 }

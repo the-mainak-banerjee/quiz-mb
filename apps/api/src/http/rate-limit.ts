@@ -40,10 +40,8 @@ function limit(limiter: RateLimiter, ...checks: [RateRule, Identify][]) {
 /** Sign-in endpoints, before authentication (by IP and account). */
 export function authRateLimits(limiter: RateLimiter, rules: RateLimits) {
   const router = Router();
-  router.post(
-    '/auth/login',
-    limit(limiter, [rules.loginIp, BY.ip], [rules.loginAccount, BY.email]),
-  );
+  // Wrong passwords per account are paused by the auth service.
+  router.post('/auth/login', limit(limiter, [rules.loginIp, BY.ip]));
   router.post('/auth/signup', limit(limiter, [rules.signupIp, BY.ip]));
   router.post('/auth/refresh', limit(limiter, [rules.refreshIp, BY.ip]));
   router.post('/auth/verify-email', limit(limiter, [rules.codeCheckIp, BY.ip]));

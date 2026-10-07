@@ -6,13 +6,22 @@ import { Tokens } from '../src/modules/auth/tokens.js';
 import type { AuthConfig } from '../src/modules/auth/config.js';
 
 const secret = 'a'.repeat(48);
+const authFamilyId = randomUUID();
 
-test('socket tickets round-trip the user and live session', async () => {
+test('socket tickets round-trip the user, live session and sign-in family', async () => {
   const tickets = new SocketTickets(secret);
   const userId = randomUUID();
   const liveSessionId = randomUUID();
-  const { ticket, expiresAt } = await tickets.issue(userId, liveSessionId);
-  assert.deepEqual(await tickets.verify(ticket), { userId, liveSessionId });
+  const { ticket, expiresAt } = await tickets.issue(
+    userId,
+    liveSessionId,
+    authFamilyId,
+  );
+  assert.deepEqual(await tickets.verify(ticket), {
+    userId,
+    liveSessionId,
+    authFamilyId,
+  });
   assert.ok(Date.parse(expiresAt) > Date.now());
 });
 
@@ -23,13 +32,14 @@ test('socket tickets reject expiry, tampering, other secrets and access tokens',
   const expired = await tickets.issue(
     userId,
     liveSessionId,
+    authFamilyId,
     Date.now() - 120_000,
   );
   await assert.rejects(tickets.verify(expired.ticket), {
     code: 'UNAUTHENTICATED',
   });
 
-  const { ticket } = await tickets.issue(userId, liveSessionId);
+  const { ticket } = await tickets.issue(userId, liveSessionId, authFamilyId);
   await assert.rejects(tickets.verify(`${ticket}x`), {
     code: 'UNAUTHENTICATED',
   });
@@ -50,12 +60,16 @@ test('watch tickets and live tickets are not interchangeable', async () => {
   const tickets = new SocketTickets(secret);
   const userId = randomUUID();
   const quizId = randomUUID();
-  const watch = await tickets.issueWatch(userId, quizId);
-  assert.deepEqual(await tickets.verifyWatch(watch.ticket), { userId, quizId });
+  const watch = await tickets.issueWatch(userId, quizId, authFamilyId);
+  assert.deepEqual(await tickets.verifyWatch(watch.ticket), {
+    userId,
+    quizId,
+    authFamilyId,
+  });
   await assert.rejects(tickets.verify(watch.ticket), {
     code: 'UNAUTHENTICATED',
   });
-  const live = await tickets.issue(userId, randomUUID());
+  const live = await tickets.issue(userId, randomUUID(), authFamilyId);
   await assert.rejects(tickets.verifyWatch(live.ticket), {
     code: 'UNAUTHENTICATED',
   });

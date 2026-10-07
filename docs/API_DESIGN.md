@@ -287,6 +287,8 @@ Request:
 
 Do not reveal whether an email exists.
 
+Wrong passwords are paused per email address (whether or not it has an account): 5 wrong passwords in a rolling 15 minutes pause password login for that address for 15 minutes. During the pause every login for the address is refused with `429 RATE_LIMITED` and a `Retry-After` header, without checking the password, so the pause cannot be extended. A successful login clears the count; a completed password reset also ends the pause. Existing sessions keep working.
+
 ## 6.3 Refresh
 
 ```http
@@ -302,6 +304,8 @@ POST /api/auth/logout
 ```
 
 Invalidate current refresh session.
+
+Logout revokes the whole session family. Sockets opened with that sign-in (their tickets carry the family) are sent `session:removed` with `UNAUTHENTICATED` and disconnected, and new socket tickets are refused. A replayed refresh token revokes its family the same way.
 
 ## 6.5 Current User
 

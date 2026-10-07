@@ -13,8 +13,8 @@ export type RateRule = {
 };
 
 export const RATE_LIMITS = {
-  loginIp: { scope: 'login-ip', limit: 100, windowSeconds: 15 * 60 },
-  loginAccount: { scope: 'login-account', limit: 10, windowSeconds: 15 * 60 },
+  /** Wrong passwords are limited per account by LOGIN_PAUSE instead. */
+  loginIp: { scope: 'login-ip', limit: 100, windowSeconds: 60 },
   signupIp: { scope: 'signup-ip', limit: 20, windowSeconds: 60 * 60 },
   refreshIp: { scope: 'refresh-ip', limit: 600, windowSeconds: 15 * 60 },
   /** Entering emailed codes: verify email and verify reset code. */
@@ -43,3 +43,16 @@ export const RATE_LIMITS = {
 } as const satisfies Record<string, RateRule>;
 
 export type RateLimits = Record<keyof typeof RATE_LIMITS, RateRule>;
+
+/**
+ * Wrong passwords per email address (whether or not it has an account, so
+ * the pause never reveals one): this many in a rolling window pause password
+ * login for that address. Requests during the pause are refused without
+ * checking the password and do not extend it; a successful login or password
+ * reset clears the count. Existing sessions and password reset keep working.
+ */
+export const LOGIN_PAUSE = {
+  failures: 5,
+  windowSeconds: 15 * 60,
+  pauseSeconds: 15 * 60,
+} as const;

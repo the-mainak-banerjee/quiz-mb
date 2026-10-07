@@ -85,24 +85,24 @@ All limits are proposed starting values, not measured capacity. Review them afte
 
 | Abuse                                              | Protection                                                                                         | Status                                                                                       |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Guess one account's password                       | 5 wrong passwords in 15 minutes pause password login for that account for 15 minutes               | **Partial** — the account limit counts all login requests (10 per 15 min), not wrong passwords, and is a sliding window rather than a fixed pause |
-| Try stolen passwords across many accounts          | Per-IP throttling; bot challenge if automated abuse appears                                        | **Partial** — 100 per IP per 15 minutes instead of 100 per minute; no bot challenge          |
+| Guess one account's password                       | 5 wrong passwords in 15 minutes pause password login for that account for 15 minutes               | **Implemented** — per email address (also for unknown ones, so the pause reveals nothing); Redis-backed and fails open like the rate limits |
+| Try stolen passwords across many accounts          | Per-IP throttling; bot challenge if automated abuse appears                                        | **Implemented** — 100 per IP per minute; the bot challenge is deferred until automated abuse appears, as agreed |
 | Discover registered emails from error messages     | Same "Email or password is incorrect" for unknown email and wrong password, with equal timing       | **Implemented** (dummy hash keeps timing equal)                                              |
-| Lock a real user out on purpose                    | Short pause that requests during the pause do not extend; password reset and existing sessions keep working | **Partial** — existing sessions keep working; pause rules as above                   |
+| Lock a real user out on purpose                    | Short pause that requests during the pause do not extend; password reset and existing sessions keep working | **Implemented** — fixed 15-minute pause that refused requests do not extend; existing sessions keep working; a completed password reset ends the pause |
 | Skip verification by calling login directly        | Correct credentials for an unverified account only start verification                              | **Implemented**                                                                              |
 | Steal and replay a refresh token                   | Rotate on every refresh; reuse of an old token revokes the whole session family                    | **Implemented**                                                                              |
-| Keep using a session after logout                  | Logout revokes the session family; access is re-checked against the session on every request       | **Implemented** for REST                                                                     |
-| Open socket stays connected after logout           | Revocation also disconnects that session's sockets and refuses new socket tickets                  | **Partial** — new tickets are refused; already-open sockets stay connected                   |
+| Keep using a session after logout                  | Logout revokes the session family; access is re-checked against the session on every request       | **Implemented** — REST and sockets |
+| Open socket stays connected after logout           | Revocation also disconnects that session's sockets and refuses new socket tickets                  | **Implemented** — socket tickets carry the sign-in family; logout or refresh-token replay disconnects its sockets (the live page is told why) and new tickets are refused |
 | Cross-site request forgery with cookies            | Origin check on every state-changing request; explicit trusted origins; HTTPS                      | **Implemented**                                                                              |
 
 **Limits**
 
 | Control                         | Agreed rule                                                                     | Current                   |
 | ------------------------------- | ------------------------------------------------------------------------------- | ------------------------- |
-| Wrong passwords per account     | 5 in 15 minutes → 15-minute pause of password login                              | Partial (see above)       |
-| During the pause                | Rejected requests do not extend the pause                                        | To build                  |
-| Requests per IP                 | 100 per minute                                                                   | Partial (100 per 15 min)  |
-| Successful login                | Resets the account's failure count; broader abuse counters remain               | To build                  |
+| Wrong passwords per account     | 5 in 15 minutes → 15-minute pause of password login                              | Implemented |
+| During the pause                | Rejected requests do not extend the pause                                        | Implemented |
+| Requests per IP                 | 100 per minute                                                                   | Implemented |
+| Successful login                | Resets the account's failure count; broader abuse counters remain               | Implemented |
 | Existing sessions               | Stay active when someone triggers the failure limit                              | Implemented               |
 
 ## 1.3 Forgot password

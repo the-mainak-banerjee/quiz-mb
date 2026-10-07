@@ -89,7 +89,14 @@ export async function startLiveHarness<Role extends string>(
     createApp({
       allowedOrigins: [origin],
       logger,
-      auth: new AuthService(new AuthRepository(db), config, mailbox),
+      // Events let logout disconnect the sign-in's sockets.
+      auth: new AuthService(
+        new AuthRepository(db),
+        config,
+        mailbox,
+        {},
+        { events },
+      ),
       users: new UsersService(db),
       database: db,
       live,

@@ -1757,6 +1757,13 @@ rate:register:user:...
 
 Use counters with TTL.
 
+The wrong-password pause uses two keys per email address (hashed, never plain text):
+
+```text
+login-fail:{emailHash}    sorted set of wrong-password times, rolling 15 minutes
+login-pause:{emailHash}   set for 15 minutes when the 5th wrong password arrives
+```
+
 Exact quotas belong in Security Design.
 
 ---

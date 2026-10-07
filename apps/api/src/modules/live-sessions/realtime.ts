@@ -30,6 +30,7 @@ import {
   ROOM_AUDIENCE,
   SOCKET_EVENT,
   SOCKET_RATE_BUCKET,
+  authFamilyRoom,
   liveRoom,
 } from './constants.js';
 import { socketRateLimiter } from './socket-rate.js';
@@ -38,6 +39,8 @@ type SocketData = {
   userId: string;
   /** Session the handshake ticket was issued for. */
   ticketSessionId: string;
+  /** Sign-in session family the ticket was issued under. */
+  authFamilyId: string;
   role?: LiveRole | undefined;
 };
 type LiveSocket = Socket<
@@ -128,8 +131,12 @@ export function attachLiveRealtime(
   nsp.use((socket, next) => {
     const auth = socket.handshake.auth as { ticket?: unknown } | undefined;
     service.tickets.verify(auth?.ticket).then(
-      ({ userId, liveSessionId }) => {
-        socket.data = { userId, ticketSessionId: liveSessionId };
+      ({ userId, liveSessionId, authFamilyId }) => {
+        socket.data = {
+          userId,
+          ticketSessionId: liveSessionId,
+          authFamilyId,
+        };
         next();
       },
       (error: ApiError) => {
@@ -225,6 +232,22 @@ export function attachLiveRealtime(
     },
   );
 
+  // Logout or a replayed refresh token ends the sign-in: its sockets go too.
+  // Told first (like other removals), so the page shows why instead of
+  // trying to reconnect.
+  events?.on(DOMAIN_EVENT.authSessionsRevoked, ({ familyIds }) => {
+    const signedOut: LiveRemovedDto = {
+      code: ERROR_CODE.UNAUTHENTICATED,
+      message:
+        'You were signed out, so you left this live quiz. Sign in again to rejoin.',
+    };
+    for (const familyId of familyIds) {
+      const room = authFamilyRoom(familyId);
+      nsp.to(room).emit(LIVE_EVENTS.removed, signedOut);
+      nsp.in(room).disconnectSockets(true);
+    }
+  });
+
   // A question closed (timer, recovery path or end): the host gets the new
   // snapshot and each connected participant a personal one with their own
   // answer and the shared reveal; recalculated standings follow.
@@ -296,6 +319,7 @@ export function attachLiveRealtime(
   nsp.on('connection', (raw) => {
     const socket = raw as unknown as LiveSocket;
     const { userId } = socket.data;
+    void socket.join(authFamilyRoom(socket.data.authFamilyId));
     const withinBudget = socketRateLimiter();
 
     function on<Schema extends z.ZodType, Result>(
