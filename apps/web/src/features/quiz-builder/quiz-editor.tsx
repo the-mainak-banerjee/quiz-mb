@@ -16,6 +16,7 @@ import {
   Folder,
 } from 'lucide-react';
 import {
+  AUTHORING_LIMITS,
   type ProjectDto,
   QUESTION_TYPE,
   EDIT_SCOPE,
@@ -38,6 +39,7 @@ import { authoringApi } from '@/lib/api/authoring';
 import { cn } from '@/lib/utils';
 import { PromptText } from '@/components/markdown-preview';
 import { QuizForm, quizValues } from './quiz-form';
+import { EDITOR_NOTICE_TEXT, type EditorNotice } from './editor-notice';
 import {
   QuestionForm,
   questionValues,
@@ -49,9 +51,7 @@ import { ReviewPublishPanel } from '@/features/publishing/review-publish-panel';
 const MarkdownPreview = dynamic(() => import('@/components/markdown-preview'));
 type Step = 'details' | 'questions' | 'review';
 
-/** Notices passed to the editor in the URL after the quiz is created. */
-export const EDITOR_NOTICE = { COVER_FAILED: 'cover-upload-failed' } as const;
-export type EditorNotice = (typeof EDITOR_NOTICE)[keyof typeof EDITOR_NOTICE];
+export { EDITOR_NOTICE, type EditorNotice } from './editor-notice';
 function StatusBadge({ status }: { status: QuizStatus | undefined }) {
   switch (status) {
     case QUIZ_STATUS.PUBLISHED:
@@ -92,11 +92,7 @@ export function QuizEditor({
   const [preview, setPreview] = useState(false);
   const [deleting, setDeleting] = useState<QuestionDto | null>(null);
   const [deletingQuiz, setDeletingQuiz] = useState(false);
-  const [error, setError] = useState(
-    notice === EDITOR_NOTICE.COVER_FAILED
-      ? 'The quiz was saved, but its cover image could not be uploaded. Please add it again.'
-      : '',
-  );
+  const [error, setError] = useState(notice ? EDITOR_NOTICE_TEXT[notice] : '');
   const [busy, setBusy] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [saved, setSaved] = useState('');
@@ -158,6 +154,9 @@ export function QuizEditor({
   const questionsLocked =
     readOnly || isEditLocked(status, EDIT_SCOPE.QUESTIONS);
   // A published quiz keeps at least one question (the API enforces it).
+  // The API enforces the question limit; the editor explains it up front.
+  const atQuestionLimit =
+    (quiz?.questions.length ?? 0) >= AUTHORING_LIMITS.questions;
   const keepsLastQuestion =
     status !== QUIZ_STATUS.DRAFT && (quiz?.questions.length ?? 0) <= 1;
   const steps = readOnly
@@ -269,14 +268,14 @@ export function QuizEditor({
           leaving={leaving}
           {...(quiz ? { initial: quiz } : {})}
           onCancel={() => router.push(`/projects/${project.id}`)}
-          onSaved={(q, next, coverFailed) => {
+          onSaved={(q, next, coverNotice) => {
             if (!quiz) {
               // A new quiz continues on its own page; until it loads, the
               // form stays disabled rather than briefly editable again.
               setLeaving(true);
               router.replace(
                 `/quizzes/${q.id}/edit?step=${next ? 'questions' : 'details'}${
-                  coverFailed ? `&notice=${EDITOR_NOTICE.COVER_FAILED}` : ''
+                  coverNotice ? `&notice=${coverNotice}` : ''
                 }`,
               );
               return;
@@ -297,14 +296,15 @@ export function QuizEditor({
             <Surface className="space-y-space-md">
               <div className="flex items-center justify-between">
                 <Text as="h2" variant="card-title">
-                  Questions ({quiz.questions.length})
+                  Questions ({quiz.questions.length} of{' '}
+                  {AUTHORING_LIMITS.questions})
                 </Text>
                 {!questionsLocked && (
                   <Button
                     variant="ghost"
                     className="px-space-xs"
                     icon={<Plus size={18} />}
-                    disabled={busy}
+                    disabled={busy || atQuestionLimit}
                     onClick={() => select(null)}
                   >
                     <VisuallyHidden>Add question</VisuallyHidden>
@@ -446,11 +446,16 @@ export function QuizEditor({
                   variant="secondary"
                   className="w-full"
                   icon={<Plus size={18} />}
-                  disabled={busy}
+                  disabled={busy || atQuestionLimit}
                   onClick={() => select(null)}
                 >
                   Add question
                 </Button>
+              )}
+              {!questionsLocked && atQuestionLimit && (
+                <Text variant="caption" tone="secondary">
+                  A quiz can have up to {AUTHORING_LIMITS.questions} questions.
+                </Text>
               )}
             </Surface>
             {!questionsLocked && (

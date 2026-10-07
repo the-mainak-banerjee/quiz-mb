@@ -471,7 +471,9 @@ Success returns:
 }
 ```
 
-`coverUpload` is null when no cover was requested or image storage is unavailable; the quiz is created either way.
+`coverUpload` is null when no cover was requested, image storage is unavailable or the cover was refused by the account's image limits; the quiz is created either way. `coverRefusal` then carries the refusal message (for example storage full), otherwise null.
+
+Creation limits (per account, security design 1.5): 5 quiz creations per minute (`429 RATE_LIMITED`) and 100 per rolling 24 hours (`429 LIMIT_REACHED` with `Retry-After`). Deleting a quiz never gives a creation back. A quiz holds at most 25 questions (`422 VALIDATION_ERROR` when adding more).
 
 ## 8.2 Get Host Quiz
 
@@ -854,10 +856,17 @@ Server validates:
 
 - authentication
 - MIME type
-- maximum size
+- maximum size (250 KB: images are optimized in the browser first, see below)
 - resource ownership
 - quiz editability
 - media purpose
+- the account's limits, under a lock on the account: 50 successful uploads per rolling 24 hours (`429 LIMIT_REACHED`) and 5 MB of stored images including pending uploads (`409 LIMIT_REACHED`, with a usage message)
+- platform storage: from 800 MB in total (pending included) new uploads are refused (`503 STORAGE_UNAVAILABLE`)
+- 5 upload requests per minute per account (`429 RATE_LIMITED`)
+
+Before uploading, the web app optimizes the picked image (at most 20 MB and 40 megapixels): it scales it to at most 1,600 px on the longest side, re-encodes it as WebP (JPEG fallback), lowering quality until it is 250 KB or less, which also drops all metadata. The original is never uploaded or stored.
+
+An image a save detaches (replaced or removed cover or question image, deleted question) is deleted right away and its quota freed. Uploads never attached are deleted after 24 hours.
 
 Response:
 

@@ -18,6 +18,7 @@ import { setApiErrors } from '@/components/forms/form-errors';
 import { useUnsavedChanges } from '@/components/forms/unsaved-changes';
 import { authoringApi, putUpload } from '@/lib/api/authoring';
 import { ImageUpload } from './image-upload';
+import { EDITOR_NOTICE, type EditorNotice } from './editor-notice';
 import type { QuestionFormHandle } from './question-form';
 
 export function quizValues(q?: QuizDto): QuizInput {
@@ -53,8 +54,8 @@ export function QuizForm({
   initial?: QuizDto;
   /** Show the saved details with every control disabled. */
   readOnly?: boolean;
-  /** `coverFailed`: the quiz saved but a cover chosen before saving did not upload. */
-  onSaved: (quiz: QuizDto, next: boolean, coverFailed?: boolean) => void;
+  /** `coverNotice`: the quiz saved but a cover chosen before saving was not added. */
+  onSaved: (quiz: QuizDto, next: boolean, coverNotice?: EditorNotice) => void;
   onCancel: () => void;
   ref?: Ref<QuestionFormHandle>;
 }) {
@@ -93,19 +94,22 @@ export function QuizForm({
         onSubmit={handleSubmit(async (input) => {
           try {
             let saved: QuizDto;
-            let coverFailed = false;
+            let coverNotice: EditorNotice | undefined;
             if (initial) {
               saved = await authoringApi.saveQuiz(projectId, input, initial.id);
             } else {
               // Creating also requests the cover's upload ticket; the cover
               // is uploaded, then attached (and checked) by one update.
-              const { coverUpload, ...created } = await authoringApi.createQuiz(
-                projectId,
-                input,
-                pendingCover ?? undefined,
-              );
+              const { coverUpload, coverRefusal, ...created } =
+                await authoringApi.createQuiz(
+                  projectId,
+                  input,
+                  pendingCover ?? undefined,
+                );
               saved = created;
-              if (pendingCover) {
+              if (pendingCover && coverRefusal)
+                coverNotice = EDITOR_NOTICE.COVER_REFUSED;
+              else if (pendingCover) {
                 try {
                   if (!coverUpload) throw new Error('No upload ticket.');
                   await putUpload(coverUpload, pendingCover);
@@ -115,13 +119,13 @@ export function QuizForm({
                     saved.id,
                   );
                 } catch {
-                  coverFailed = true;
+                  coverNotice = EDITOR_NOTICE.COVER_FAILED;
                 }
-                setPendingCover(null);
               }
+              setPendingCover(null);
             }
             reset(quizValues(saved));
-            guard.afterSave(() => onSaved(saved, next, coverFailed));
+            guard.afterSave(() => onSaved(saved, next, coverNotice));
           } catch (e) {
             setApiErrors(e, setError);
           }

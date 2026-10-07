@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { PrismaClient, Prisma } from '@quizmb/database';
 import type { Logger } from 'pino';
 import {
+  ACCOUNT_LIMITS,
   ERROR_CODE,
   MEDIA_STATUS,
   type MediaDto,
@@ -13,12 +14,40 @@ import {
 import { ApiError } from '../../http/api-error.js';
 import { lockedTransaction } from '../../infrastructure/transactions.js';
 import { lockEditableQuiz, mediaEditScope } from '../quizzes/repository.js';
+import { limitsFor } from '../../config/account-limits.js';
+import { lockAccount, requireAllowance } from '../usage/allowances.js';
+import { DAY_MS } from '../../infrastructure/rolling-window.js';
 import type { SupabaseStorage } from './storage.js';
 type Asset = Prisma.MediaAssetGetPayload<object>;
 const EXTENSIONS = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
+} as const;
+
+const MB = 1024 * 1024;
+/**
+ * Platform-wide stored media (pending reservations included) against the
+ * storage plan (1 GB): a warning is logged from 600 MB and new uploads are
+ * paused from 800 MB.
+ */
+export const PLATFORM_STORAGE = { warnBytes: 600 * MB, pauseBytes: 800 * MB };
+/** Uploads never attached to anything are removed after this long. */
+export const PENDING_UPLOAD_TTL_MS = DAY_MS;
+
+/** "1.2 MB", "350 KB". */
+const size = (bytes: number) =>
+  bytes >= MB
+    ? `${(bytes / MB).toFixed(1).replace(/\.0$/, '')} MB`
+    : `${Math.ceil(bytes / 1024)} KB`;
+
+/** Stored images that still count: pending reservations and ready files. */
+const counted = { status: { not: MEDIA_STATUS.DELETED } } as const;
+/** A ready image that no quiz cover or question uses any more. */
+const detached = {
+  status: MEDIA_STATUS.READY,
+  covers: { none: {} },
+  images: { none: {} },
 } as const;
 /**
  * Images go from the browser straight to storage. An upload is recorded as
@@ -29,8 +58,9 @@ export class MediaService {
   constructor(
     private db: PrismaClient,
     private storage: SupabaseStorage | undefined,
-    private logger?: Pick<Logger, 'error'>,
+    private logger?: Pick<Logger, 'error' | 'warn'>,
   ) {}
+  private warnedDay = '';
   get available() {
     return !!this.storage;
   }
@@ -80,6 +110,7 @@ export class MediaService {
   }
   async request(userId: string, input: UploadInput) {
     const { purpose, resource, ...file } = input;
+    const limits = await limitsFor(userId);
     // Ownership and edit locks are checked before storage availability.
     const asset = await this.db.$transaction(async (tx) => {
       await lockEditableQuiz(
@@ -88,11 +119,117 @@ export class MediaService {
         userId,
         mediaEditScope(purpose),
       );
-      return tx.mediaAsset.create({
-        data: this.pendingAsset(userId, resource.quizId, purpose, file),
-      });
+      const data = this.pendingAsset(userId, resource.quizId, purpose, file);
+      await this.reserve(tx, userId, file.sizeBytes, limits);
+      return tx.mediaAsset.create({ data });
     }, lockedTransaction);
     return this.ticket(asset);
+  }
+
+  /**
+   * Reserves room for one upload before its ticket is issued, under a lock
+   * on the account (the pending row created in the same transaction is the
+   * reservation): the daily upload allowance, the account's stored-media
+   * quota and the platform storage pause. Refusals are clear messages.
+   */
+  async reserve(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    sizeBytes: number,
+    limits: Pick<typeof ACCOUNT_LIMITS, 'mediaBytes' | 'uploadsPerDay'>,
+  ) {
+    await lockAccount(tx, userId);
+    await requireAllowance(
+      tx,
+      userId,
+      'MEDIA_UPLOADED',
+      limits.uploadsPerDay,
+      (wait) =>
+        `You can upload up to ${limits.uploadsPerDay} images a day. You can upload another ${wait}.`,
+    );
+    const used =
+      (
+        await tx.mediaAsset.aggregate({
+          where: { ownerUserId: userId, ...counted },
+          _sum: { sizeBytes: true },
+        })
+      )._sum.sizeBytes ?? 0;
+    if (used + sizeBytes > limits.mediaBytes)
+      throw new ApiError(
+        409,
+        ERROR_CODE.LIMIT_REACHED,
+        `Your images use ${size(used)} of ${size(limits.mediaBytes)}. Remove an image from a quiz to upload a new one.`,
+      );
+    const total =
+      (
+        await tx.mediaAsset.aggregate({
+          where: counted,
+          _sum: { sizeBytes: true },
+        })
+      )._sum.sizeBytes ?? 0;
+    if (total + sizeBytes > PLATFORM_STORAGE.pauseBytes) {
+      this.logger?.error(
+        { totalBytes: total },
+        'Platform media storage at 800 MB: new uploads paused',
+      );
+      throw new ApiError(
+        503,
+        ERROR_CODE.STORAGE_UNAVAILABLE,
+        'Image uploads are paused for now. You can keep editing text; please try adding images later.',
+      );
+    }
+    const day = new Date().toISOString().slice(0, 10);
+    if (
+      total + sizeBytes >= PLATFORM_STORAGE.warnBytes &&
+      this.warnedDay !== day
+    ) {
+      this.warnedDay = day;
+      this.logger?.warn(
+        { totalBytes: total },
+        'Platform media storage passed 600 MB',
+      );
+    }
+  }
+
+  /**
+   * Deletes this quiz's images that a save just detached (replaced or
+   * removed), freeing their quota. The file goes first; the row is marked
+   * deleted only once it is gone, so quota is never released for a file
+   * still in storage. A failure is left for the hourly cleanup.
+   */
+  async releaseDetached(quizId: string) {
+    try {
+      await this.release({ quizId, ...detached });
+    } catch (error) {
+      this.logger?.error({ err: error }, 'Detached images not released yet');
+    }
+  }
+
+  private async release(where: Prisma.MediaAssetWhereInput) {
+    const assets = await this.db.mediaAsset.findMany({
+      where,
+      select: { id: true, objectPath: true },
+    });
+    if (!assets.length || !this.storage) return 0;
+    await this.storage.remove(...assets.map((asset) => asset.objectPath));
+    const { count } = await this.db.mediaAsset.updateMany({
+      where: { id: { in: assets.map((asset) => asset.id) }, ...where },
+      data: { status: MEDIA_STATUS.DELETED },
+    });
+    return count;
+  }
+
+  /**
+   * Hourly: uploads never attached within 24 hours (abandoned forms) and
+   * any detached image a save could not release are deleted.
+   */
+  async cleanUp(now = Date.now()) {
+    const abandoned = await this.release({
+      status: MEDIA_STATUS.PENDING,
+      createdAt: { lt: new Date(now - PENDING_UPLOAD_TTL_MS) },
+    });
+    const orphaned = await this.release(detached);
+    return { abandoned, orphaned };
   }
   /**
    * Before attaching an image: when it is still PENDING, check the stored

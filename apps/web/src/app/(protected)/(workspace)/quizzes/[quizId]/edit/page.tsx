@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { EDIT_SCOPE, isEditLocked, type QuizDto } from '@quizmb/contracts';
 import { APP_LINKS } from '@/config/navigation';
 import { loadApi } from '@/lib/api/server';
-import { EDITOR_NOTICE, QuizEditor } from '@/features/quiz-builder/quiz-editor';
+import { QuizEditor } from '@/features/quiz-builder/quiz-editor';
+import { editorNotice } from '@/features/quiz-builder/editor-notice';
 export default async function EditQuizPage({
   params,
   searchParams,
@@ -23,11 +24,7 @@ export default async function EditQuizPage({
       project={{ id: quiz.projectId, name: quiz.projectName }}
       initial={quiz}
       initialStep={step === 'questions' || step === 'review' ? step : 'details'}
-      notice={
-        notice === EDITOR_NOTICE.COVER_FAILED
-          ? EDITOR_NOTICE.COVER_FAILED
-          : undefined
-      }
+      notice={editorNotice(notice)}
     />
   );
 }

@@ -17,6 +17,7 @@ import type {
   QuizRow,
 } from './repository.js';
 import type { MediaService } from '../media/service.js';
+import { limitsFor } from '../../config/account-limits.js';
 import type { ProjectsService } from '../projects/service.js';
 export class QuizzesService {
   constructor(
@@ -117,20 +118,33 @@ export class QuizzesService {
     // the quiz is created; an unused signed URL is harmless. Without
     // storage the quiz is still created and the cover reports failure.
     const id = randomUUID();
+    const limits = await limitsFor(userId);
     const asset =
       cover && this.media.available
         ? this.media.pendingAsset(userId, id, MEDIA_PURPOSE.QUIZ_COVER, cover)
         : undefined;
     const signing = asset ? this.media.ticket(asset).catch(() => null) : null;
-    const row = await this.repository.create(
+    const { quiz: row, coverRefusal } = await this.repository.create(
       projectId,
       userId,
       quiz,
-      id,
-      asset,
+      {
+        id,
+        creationsPerDay: limits.quizCreationsPerDay,
+        cover: asset && {
+          data: asset,
+          reserve: (tx) =>
+            this.media.reserve(tx, userId, asset.sizeBytes, limits),
+        },
+      },
     );
-    const [dto, coverUpload] = await Promise.all([this.dto(row), signing]);
-    return { ...dto, coverUpload };
+    const [dto, ticket] = await Promise.all([this.dto(row), signing]);
+    // A refused cover's signed URL is simply never used.
+    return {
+      ...dto,
+      coverUpload: coverRefusal ? null : ticket,
+      coverRefusal,
+    };
   }
   async update(id: string, userId: string, input: QuizInput) {
     const verified = await this.media.verifyPending(
@@ -139,7 +153,10 @@ export class QuizzesService {
       userId,
       MEDIA_PURPOSE.QUIZ_COVER,
     );
-    return this.dto(await this.repository.update(id, userId, input, verified));
+    const row = await this.repository.update(id, userId, input, verified);
+    // A replaced or removed cover frees its quota right away.
+    await this.media.releaseDetached(id);
+    return this.dto(row);
   }
   async remove(id: string, userId: string) {
     await this.media.removeFiles(await this.repository.remove(id, userId));

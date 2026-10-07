@@ -420,6 +420,24 @@ INDEX (userId, purpose, kind, createdAt)
 INDEX (kind, createdAt)
 ```
 
+## 7.2 UsageEvent
+
+One row per quiz created (`QUIZ_CREATED`) and per upload verified and attached (`MEDIA_UPLOADED`), counted over a rolling 24 hours for the creation and upload allowances (security design 1.5). Rows outlive what they count, so deleting a quiz or image never gives the allowance back. Counted under a lock on the user's row; deleted after two days by the hourly maintenance job.
+
+```text
+UsageEvent
+
+id
+userId → User.id (cascade)
+kind (QUIZ_CREATED | MEDIA_UPLOADED)
+createdAt
+
+INDEX (userId, kind, createdAt)
+INDEX (createdAt)
+```
+
+Stored media per account (5 MB) and platform-wide (warning at 600 MB, uploads paused at 800 MB) are sums of `MediaAsset.sizeBytes` over rows that are not `DELETED`, so pending uploads count as reservations. A media row is marked `DELETED` only after its file is removed from storage.
+
 ---
 
 # 8. Project

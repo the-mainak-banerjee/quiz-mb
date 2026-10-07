@@ -29,18 +29,26 @@ export async function cleanUpAuth(
   return { accounts, emailEvents };
 }
 
-/** Runs the cleanup now and every hour; returns a function that stops it. */
-export function startAuthCleanup(
-  repository: Parameters<typeof cleanUpAuth>[0],
+/**
+ * Runs maintenance tasks now and every hour; each task's failure is logged
+ * without stopping the others. Returns a function that stops it.
+ */
+export function startMaintenance(
+  tasks: Record<string, () => Promise<Record<string, number>>>,
   logger: Pick<Logger, 'info' | 'error'>,
 ) {
   const run = async () => {
-    try {
-      const removed = await cleanUpAuth(repository);
-      if (removed.accounts || removed.emailEvents)
-        logger.info(removed, 'Auth cleanup removed stale records');
-    } catch (error) {
-      logger.error({ err: error }, 'Auth cleanup failed');
+    for (const [name, task] of Object.entries(tasks)) {
+      try {
+        const removed = await task();
+        if (Object.values(removed).some(Boolean))
+          logger.info(
+            { task: name, ...removed },
+            'Maintenance removed stale records',
+          );
+      } catch (error) {
+        logger.error({ err: error, task: name }, 'Maintenance task failed');
+      }
     }
   };
   void run();

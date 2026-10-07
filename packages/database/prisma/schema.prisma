@@ -21,6 +21,7 @@ model User {
   sessions            AuthSession[]
   verificationCodes   VerificationCode[]
   authEmailEvents     AuthEmailEvent[]
+  usageEvents         UsageEvent[]
   projects            Project[]
   quizzes             Quiz[]
   media               MediaAsset[]
@@ -55,6 +56,13 @@ model AuthSession {
 enum OtpPurpose {
   EMAIL_VERIFICATION
   PASSWORD_RESET
+}
+
+enum UsageEventKind {
+  /// A quiz was created (counts even after it is deleted).
+  QUIZ_CREATED
+  /// An uploaded image was verified and attached.
+  MEDIA_UPLOADED
 }
 
 enum AuthEmailEventKind {
@@ -396,4 +404,19 @@ model QuizResult {
   @@index([liveSessionId, rank])
   @@index([userId, finalizedAt])
   @@map("quiz_results")
+}
+
+/// Account usage counted over rolling windows for the creation and upload
+/// allowances. Rows outlive what they count, so deleting a quiz or image
+/// never gives the allowance back. Kept for two days.
+model UsageEvent {
+  id        String         @id @default(uuid()) @db.Uuid
+  userId    String         @db.Uuid
+  kind      UsageEventKind
+  createdAt DateTime       @default(now()) @db.Timestamptz(3)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, createdAt])
+  @@index([createdAt])
+  @@map("usage_events")
 }

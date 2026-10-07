@@ -49,12 +49,15 @@ export const authoringApi = {
 };
 // Binary uploads are separate from our JSON factory: signed URL, no app cookies,
 // no broad storage keys and no automatic retries of a non-idempotent upload.
-/** Why this file cannot be uploaded as an image, or null when it can. */
+/**
+ * Why this (already optimized, see lib/media/optimize-image) file cannot be
+ * uploaded, or null when it can. The server and bucket enforce the same.
+ */
 export function imageProblem(file: File) {
   return !(MEDIA_LIMITS.mimeTypes as readonly string[]).includes(file.type) ||
     file.size > MEDIA_LIMITS.maxBytes ||
     !file.size
-    ? 'Choose a PNG, JPEG or WebP image up to 10 MB.'
+    ? 'This image could not be prepared for upload. Try another image.'
     : null;
 }
 

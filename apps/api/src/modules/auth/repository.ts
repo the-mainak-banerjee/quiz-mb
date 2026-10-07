@@ -2,6 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@quizmb/database';
 import { OTP_RULES, type OtpPurpose } from '@quizmb/contracts';
 import type { CodeHasher } from './one-time-codes.js';
+import {
+  DAY_MS,
+  HOUR_MS,
+  windowReopens,
+} from '../../infrastructure/rolling-window.js';
 
 /** Result of checking a one-time code. */
 export type CodeCheck =
@@ -11,18 +16,6 @@ export type CodeCheck =
   /** Too many wrong codes recently (across resends); retry at `retryAt`. */
   | { ok: false; reason: 'locked'; retryAt: Date };
 
-const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
-
-/**
- * When a rolling-window limit allows the next event: null when it already
- * does. `times` are the window's events, oldest first.
- */
-function windowReopens(times: Date[], limit: number, windowMs: number) {
-  if (times.length < limit) return null;
-  // The oldest event that must age out before one more fits.
-  return new Date(times[times.length - limit]!.getTime() + windowMs);
-}
 export type SessionInput = {
   id: string;
   familyId: string;
@@ -30,6 +23,7 @@ export type SessionInput = {
   expiresAt: Date;
   userAgent: string | null;
 };
+
 export class AuthRepository {
   constructor(readonly db: PrismaClient) {}
   findByEmail(email: string) {

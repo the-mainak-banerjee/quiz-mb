@@ -3,13 +3,32 @@ import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { Upload } from 'lucide-react';
 import {
+  MEDIA_LIMITS,
   MEDIA_PURPOSE,
   type MediaDto,
   type MediaPurpose,
 } from '@quizmb/contracts';
 import { Button, Input, Text } from '@/components/ui';
-import { imageProblem, uploadImage } from '@/lib/api/authoring';
+import { uploadImage } from '@/lib/api/authoring';
 import { apiError } from '@/lib/api/client';
+import {
+  ImageOptimizationError,
+  optimizeImage,
+} from '@/lib/media/optimize-image';
+
+/** The picked image, resized and compressed; or a message for the user. */
+async function prepare(file: File) {
+  try {
+    return { file: await optimizeImage(file) };
+  } catch (error) {
+    return {
+      error:
+        error instanceof ImageOptimizationError
+          ? error.message
+          : 'This image could not be prepared. Try another image.',
+    };
+  }
+}
 export function ImageUpload({
   quizId,
   purpose,
@@ -33,6 +52,8 @@ export function ImageUpload({
   onDefer?: (file: File | null) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  /** Resizing and compressing the picked image before it is kept or sent. */
+  const [optimizing, setOptimizing] = useState(false);
   const [error, setError] = useState('');
   const deferring = !quizId && !!onDefer;
   const [deferred, setDeferred] = useState<File | null>(null);
@@ -44,25 +65,39 @@ export function ImageUpload({
     },
     [preview],
   );
-  function keep(file: File | null) {
+  async function keep(picked: File | null) {
     setError('');
-    if (file) {
-      const problem = imageProblem(file);
-      if (problem) {
-        setError(problem);
+    let file: File | null = null;
+    if (picked) {
+      setOptimizing(true);
+      onBusy(true);
+      const prepared = await prepare(picked);
+      setOptimizing(false);
+      onBusy(false);
+      if ('error' in prepared) {
+        setError(prepared.error ?? '');
         return;
       }
+      file = prepared.file;
     }
     setDeferred(file);
     setPreview(file ? URL.createObjectURL(file) : null);
     onDefer?.(file);
   }
-  async function upload(file: File | undefined) {
-    if (!file || !quizId) return;
+  async function upload(picked: File | undefined) {
+    if (!picked || !quizId) return;
     setBusy(true);
     onBusy(true);
     setError('');
     try {
+      setOptimizing(true);
+      const prepared = await prepare(picked);
+      setOptimizing(false);
+      if ('error' in prepared) {
+        setError(prepared.error ?? '');
+        return;
+      }
+      const file = prepared.file;
       const media = await uploadImage(quizId, purpose, file);
       // Its URL is a local preview of the file; release it when replaced.
       setPreview(media.url);
@@ -70,6 +105,7 @@ export function ImageUpload({
     } catch (e) {
       setError(apiError(e).message);
     } finally {
+      setOptimizing(false);
       setBusy(false);
       onBusy(false);
     }
@@ -87,8 +123,8 @@ export function ImageUpload({
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
-          if (busy) return;
-          if (deferring) keep(e.dataTransfer.files[0] ?? null);
+          if (busy || optimizing) return;
+          if (deferring) void keep(e.dataTransfer.files[0] ?? null);
           else void upload(e.dataTransfer.files[0]);
         }}
       >
@@ -126,7 +162,7 @@ export function ImageUpload({
             <Text variant="caption" className="break-all">
               {deferred.name} · uploads when you save the quiz
             </Text>
-            <Button variant="ghost" onClick={() => keep(null)}>
+            <Button variant="ghost" onClick={() => void keep(null)}>
               Remove image
             </Button>
           </>
@@ -152,22 +188,27 @@ export function ImageUpload({
               htmlFor={`upload-${purpose}`}
             >
               <Upload size={18} />
-              {busy ? 'Uploading…' : 'Drop an image here or browse files'}
+              {optimizing
+                ? 'Optimizing image…'
+                : busy
+                  ? 'Uploading…'
+                  : 'Drop an image here or browse files'}
             </label>
             <Input
               id={`upload-${purpose}`}
               type="file"
               accept="image/png,image/jpeg,image/webp"
-              disabled={(!quizId && !deferring) || busy}
+              disabled={(!quizId && !deferring) || busy || optimizing}
               className="h-auto py-space-xs"
               onChange={(e) => {
-                if (deferring) keep(e.target.files?.[0] ?? null);
+                if (deferring) void keep(e.target.files?.[0] ?? null);
                 else void upload(e.target.files?.[0]);
                 e.target.value = '';
               }}
             />
             <Text variant="caption" tone="secondary">
-              PNG, JPEG or WebP · Up to 10 MB
+              PNG, JPEG or WebP · Resized to {MEDIA_LIMITS.maxDimension} px and{' '}
+              {MEDIA_LIMITS.maxBytes / 1024} KB or less automatically
               {!quizId && !deferring
                 ? ' · Save the quiz basics once to enable uploads.'
                 : ''}

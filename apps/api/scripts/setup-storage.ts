@@ -25,6 +25,16 @@ if (!bucket) {
   JSON.stringify([...(bucket.allowed_mime_types ?? [])].sort()) !==
     JSON.stringify([...MEDIA_LIMITS.mimeTypes].sort())
 ) {
-  throw new Error('Existing bucket settings differ; no changes made');
+  // Brings an existing bucket to the current rules (e.g. the 250 KB limit
+  // for optimized images). Stored files are not touched.
+  const result = await storage.client.updateBucket(storage.bucket, {
+    public: false,
+    fileSizeLimit: MEDIA_LIMITS.maxBytes,
+    allowedMimeTypes: [...MEDIA_LIMITS.mimeTypes],
+  });
+  if (result.error) throw new Error('Unable to update the media bucket');
+  console.log('Media bucket updated to the current settings.');
 }
-console.log('Private media bucket verified: PNG/JPEG/WebP, 10 MiB maximum.');
+console.log(
+  `Private media bucket verified: PNG/JPEG/WebP, ${MEDIA_LIMITS.maxBytes / 1024} KB maximum.`,
+);

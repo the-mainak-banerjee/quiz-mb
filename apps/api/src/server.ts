@@ -2,13 +2,15 @@ import { createServer } from 'node:http';
 import type { Server } from 'socket.io';
 import app, {
   authRepository,
+  mediaMaintenance,
   database,
   events,
   live,
   logger,
   redis,
 } from './index.js';
-import { startAuthCleanup } from './modules/auth/cleanup.js';
+import { cleanUpAuth, startMaintenance } from './modules/auth/cleanup.js';
+import { trimUsageEvents } from './modules/usage/allowances.js';
 import { parseEnv } from './config/env.js';
 import {
   attachLiveRealtime,
@@ -21,7 +23,7 @@ import { attachQuizStatusRealtime } from './modules/live-sessions/status-realtim
 const env = parseEnv(process.env);
 const server = createServer(app);
 let io: Server | undefined;
-let stopAuthCleanup: (() => void) | undefined;
+let stopMaintenance: (() => void) | undefined;
 
 async function start() {
   if (live && redis) {
@@ -39,8 +41,16 @@ async function start() {
   } else {
     logger.warn('REDIS_URL is not set; live sessions are disabled');
   }
-  // Never-verified accounts after 7 days, and expired email events.
-  stopAuthCleanup = startAuthCleanup(authRepository, logger);
+  // Hourly: never-verified accounts after 7 days, expired email and usage
+  // events, abandoned uploads after 24 hours and orphaned images.
+  stopMaintenance = startMaintenance(
+    {
+      auth: () => cleanUpAuth(authRepository),
+      media: () => mediaMaintenance.cleanUp(),
+      usage: () => trimUsageEvents(database),
+    },
+    logger,
+  );
   server.listen(env.PORT, env.HOST, () =>
     logger.info({ port: env.PORT, host: env.HOST }, 'API listening'),
   );
@@ -57,7 +67,7 @@ start().catch(() => {
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     logger.info({ signal }, 'Stopping API');
-    stopAuthCleanup?.();
+    stopMaintenance?.();
     void io?.close();
     server.close(() => {
       void Promise.allSettled([database.$disconnect(), redis?.quit()]).finally(

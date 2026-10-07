@@ -30,6 +30,8 @@ export const events = new DomainEvents();
 export const authRepository = new AuthRepository(database);
 export const logger = createLogger(env.LOG_LEVEL);
 const storage = createStorage(process.env);
+/** Media service for background maintenance (abandoned and orphaned images). */
+export const mediaMaintenance = new MediaService(database, storage, logger);
 // Live sessions need Redis; without REDIS_URL the REST-only API still runs.
 export const redis = env.REDIS_URL ? createRedis(env.REDIS_URL) : undefined;
 export const live = redis

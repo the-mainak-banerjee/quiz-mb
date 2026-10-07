@@ -129,7 +129,8 @@ export const AUTHORING_LIMITS = {
   prompt: 10000,
   option: 1000,
   options: 20,
-  questions: 200,
+  /** Questions per quiz, checked under the quiz lock when adding. */
+  questions: 25,
   duration: 3600,
   participants: 10000,
 } as const;
@@ -140,12 +141,24 @@ export const AUTHORING_LIMITS = {
 export const ACCOUNT_LIMITS = {
   /** Projects an account can own at once; deleting one frees a slot. */
   projects: 3,
+  /** Quizzes created per rolling 24 hours; deleting one never gives it back. */
+  quizCreationsPerDay: 100,
+  /** Stored images (pending uploads included), across projects and quizzes. */
+  mediaBytes: 5 * 1024 * 1024,
+  /** Successful image uploads per rolling 24 hours. */
+  uploadsPerDay: 50,
 } as const;
 /** Protective bound for a descriptive answer; not a product rule. */
 export const ANSWER_LIMITS = { text: 2000 } as const;
 export const MEDIA_LIMITS = {
-  maxBytes: 10 * 1024 * 1024,
+  /** A stored image: optimized in the browser to this size or less. */
+  maxBytes: 250 * 1024,
   mimeTypes: ['image/png', 'image/jpeg', 'image/webp'] as const,
+  /** Longest side of a stored image; larger ones are scaled down. */
+  maxDimension: 1600,
+  /** What may be picked before optimization (guards against image bombs). */
+  maxSelectedBytes: 20 * 1024 * 1024,
+  maxSelectedPixels: 40_000_000,
 };
 export const projectSchema = z
   .object({
@@ -312,8 +325,15 @@ export type UploadDto = {
   mediaId: string;
   upload: { url: string; token: string; path: string };
 };
-/** `coverUpload` is null when no cover was requested or storage is unavailable. */
-export type QuizCreatedDto = QuizDto & { coverUpload: UploadDto | null };
+/**
+ * `coverUpload` is null when no cover was requested or it was refused;
+ * `coverRefusal` then says why when it is the user's limit (e.g. storage
+ * full), so the quiz page can show it.
+ */
+export type QuizCreatedDto = QuizDto & {
+  coverUpload: UploadDto | null;
+  coverRefusal: string | null;
+};
 
 export type PublicQuizDto = {
   id: string;
