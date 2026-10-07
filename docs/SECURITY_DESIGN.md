@@ -301,15 +301,15 @@ Starting values, to validate under load. Participant limits are per account and 
 
 | Operation                                   | Agreed rule                       | Current                                                       | Status        |
 | ------------------------------------------- | --------------------------------- | ------------------------------------------------------------- | ------------- |
-| Register / unregister                       | 10 per minute per account         | 20 per minute (register only)                                  | **Partial**   |
-| Socket tickets                              | 20 per minute per account         | 30 per minute                                                  | **Partial**   |
-| Participant sync                            | 30 per minute per account/session | 20 per 10 s per socket                                        | **Partial**   |
-| Answer submissions, including retries       | 10 per minute per account/session | 10 per 10 s per socket                                        | **Partial**   |
-| Host commands                               | 60 per minute per host/session    | 30 per 10 s per socket                                        | **Partial**   |
-| One incoming socket message                 | 16 KB maximum                     | Socket.IO default (1 MB)                                       | **To build**  |
+| Register / unregister                       | 10 per minute per account         | 10 per minute per account, shared | **Implemented** |
+| Socket tickets                              | 20 per minute per account         | 20 per minute per account | **Implemented** |
+| Participant sync                            | 30 per minute per account/session | 30 per minute per account and session | **Implemented** |
+| Answer submissions, including retries       | 10 per minute per account/session | 10 per minute per account and session | **Implemented** |
+| Host commands                               | 60 per minute per host/session    | 60 per minute per host and session | **Implemented** |
+| One incoming socket message                 | 16 KB maximum                     | 16 KB (`maxHttpBufferSize`); larger closes the connection | **Implemented** |
 | Descriptive answer                          | 2,000 characters                  | 2,000                                                         | **Implemented** |
-| Counters survive reconnects                 | Yes                               | Counted per socket; reconnects are bounded by the ticket limit | **Partial**   |
-| Repeated flooding | Disconnect a connection that repeatedly exceeds its limits | Commands are refused, the connection stays | **To build** |
+| Counters survive reconnects                 | Yes                               | Counted per account and session, shared by its sockets | **Implemented** |
+| Repeated flooding | Disconnect a connection that repeatedly exceeds its limits | 30 refused commands in a minute close the connection | **Implemented** |
 | Infrastructure heartbeats                   | Never count against command limits | Not counted                                                  | **Implemented** |
 
 

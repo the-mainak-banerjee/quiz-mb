@@ -37,11 +37,12 @@ export const RATE_LIMITS = {
   },
   createProject: { scope: 'create-project', limit: 5, windowSeconds: 60 },
   createQuiz: { scope: 'create-quiz', limit: 5, windowSeconds: 60 },
-  register: { scope: 'register', limit: 20, windowSeconds: 60 },
+  /** Register and unregister share one budget per account. */
+  register: { scope: 'register', limit: 10, windowSeconds: 60 },
   uploadRequest: { scope: 'upload-request', limit: 5, windowSeconds: 60 },
   openLobby: { scope: 'open-lobby', limit: 10, windowSeconds: 60 },
   /** Live and watch socket tickets share one budget per user. */
-  socketTicket: { scope: 'socket-ticket', limit: 30, windowSeconds: 60 },
+  socketTicket: { scope: 'socket-ticket', limit: 20, windowSeconds: 60 },
 } as const satisfies Record<string, RateRule>;
 
 export type RateLimits = Record<keyof typeof RATE_LIMITS, RateRule>;

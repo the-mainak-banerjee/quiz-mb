@@ -75,6 +75,7 @@ export function userRateLimits(limiter: RateLimiter, rules: RateLimits) {
   router.post('/projects', byUser(rules.createProject));
   router.post('/projects/:id/quizzes', byUser(rules.createQuiz));
   router.post('/quizzes/:id/register', byUser(rules.register));
+  router.delete('/quizzes/:id/register', byUser(rules.register));
   router.post('/media/upload-request', byUser(rules.uploadRequest));
   router.post('/quizzes/:id/live-session', byUser(rules.openLobby));
   router.post('/quizzes/:id/watch-ticket', byUser(rules.socketTicket));

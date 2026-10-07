@@ -29,11 +29,13 @@ import {
   HOST_AWAY_GRACE_MS,
   ROOM_AUDIENCE,
   SOCKET_EVENT,
+  SOCKET_FLOOD_REFUSALS,
+  SOCKET_MAX_MESSAGE_BYTES,
   SOCKET_RATE_BUCKET,
   authFamilyRoom,
   liveRoom,
 } from './constants.js';
-import { socketRateLimiter } from './socket-rate.js';
+import { floodCounter, socketRateLimiter } from './socket-rate.js';
 
 type SocketData = {
   userId: string;
@@ -108,6 +110,8 @@ export function createSocketServer(
   return new Server(server, {
     cors: { origin: [...allowedOrigins] },
     serveClient: false,
+    // Larger messages close the connection (no command needs more).
+    maxHttpBufferSize: SOCKET_MAX_MESSAGE_BYTES,
     allowRequest: (request, callback) => {
       const origin = request.headers.origin;
       callback(null, origin === undefined || allowedOrigins.includes(origin));
@@ -350,11 +354,15 @@ export function attachLiveRealtime(
     },
   );
 
+  // Command budgets per account and session, shared by its sockets.
+  const withinBudget = socketRateLimiter();
+
   nsp.on('connection', (raw) => {
     const socket = raw as unknown as LiveSocket;
     const { userId } = socket.data;
     void socket.join(authFamilyRoom(socket.data.authFamilyId));
-    const withinBudget = socketRateLimiter();
+    const budgetKey = `${socket.data.ticketSessionId}:${userId}`;
+    const flooding = floodCounter(SOCKET_FLOOD_REFUSALS);
 
     function on<Schema extends z.ZodType, Result>(
       event: string,
@@ -370,12 +378,20 @@ export function attachLiveRealtime(
           let response: SocketAck<Result>;
           try {
             const bucket = SOCKET_RATE_BUCKET[event];
-            const budget = bucket ? withinBudget(bucket) : null;
+            const budget = bucket ? withinBudget(budgetKey, bucket) : null;
             if (budget?.firstRefusal)
               logger.warn(
                 { event, liveSessionId: socket.data.ticketSessionId, userId },
                 'Live commands rate limited',
               );
+            if (budget && !budget.allowed && flooding()) {
+              // Keeps sending far past its budget: close the connection.
+              logger.warn(
+                { liveSessionId: socket.data.ticketSessionId, userId },
+                'Live socket disconnected for flooding',
+              );
+              socket.disconnect(true);
+            }
             if (budget && !budget.allowed)
               throw new ApiError(
                 429,

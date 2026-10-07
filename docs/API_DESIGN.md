@@ -1700,7 +1700,9 @@ host:question-start
 host:quiz-end
 ```
 
-Use Redis counters.
+Use Redis counters for REST.
+
+Live socket commands are counted per account and live session (shared by all of that account's sockets, so reconnecting never resets them), in memory on the API process. A connection that keeps sending far past its budget is disconnected, and any socket message over 16 KB closes the connection.
 
 Exact numeric limits belong in Security Design.
 
