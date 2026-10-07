@@ -52,6 +52,9 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
           String(BUSY_RETRY_AFTER_SECONDS),
         );
       }
+      // Limits raised by services carry their wait in the details.
+      if (error.status === 429 && error.details?.retryAfterSeconds)
+        res.setHeader(HTTP_HEADER.RETRY_AFTER, error.details.retryAfterSeconds);
       res.status(error.status).json({
         success: false,
         error: {

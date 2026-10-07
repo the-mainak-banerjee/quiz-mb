@@ -7,7 +7,22 @@ import type { CodeHasher } from './one-time-codes.js';
 export type CodeCheck =
   | { ok: true }
   | { ok: false; reason: 'missing' | 'expired' | 'exhausted' }
-  | { ok: false; reason: 'wrong'; attemptsLeft: number };
+  | { ok: false; reason: 'wrong'; attemptsLeft: number }
+  /** Too many wrong codes recently (across resends); retry at `retryAt`. */
+  | { ok: false; reason: 'locked'; retryAt: Date };
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * When a rolling-window limit allows the next event: null when it already
+ * does. `times` are the window's events, oldest first.
+ */
+function windowReopens(times: Date[], limit: number, windowMs: number) {
+  if (times.length < limit) return null;
+  // The oldest event that must age out before one more fits.
+  return new Date(times[times.length - limit]!.getTime() + windowMs);
+}
 export type SessionInput = {
   id: string;
   familyId: string;
@@ -104,6 +119,26 @@ export class AuthRepository {
       >`SELECT id, "codeHash", "expiresAt", attempts FROM verification_codes
         WHERE "userId" = ${userId}::uuid AND purpose = ${purpose}::"OtpPurpose"
         FOR UPDATE`;
+      // Wrong codes are counted per address and purpose across resends, under
+      // the code's row lock, so parallel guesses cannot pass the limit.
+      const failures = await tx.authEmailEvent.findMany({
+        where: {
+          userId,
+          purpose,
+          kind: 'CODE_FAILED',
+          createdAt: {
+            gt: new Date(Date.now() - OTP_RULES.failureWindowSeconds * 1000),
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      });
+      const retryAt = windowReopens(
+        failures.map((failure) => failure.createdAt),
+        OTP_RULES.failuresPerWindow,
+        OTP_RULES.failureWindowSeconds * 1000,
+      );
+      if (retryAt) return { ok: false, reason: 'locked', retryAt } as const;
       if (!row) return { ok: false, reason: 'missing' } as const;
       const remove = () =>
         tx.verificationCode.delete({ where: { id: row.id } });
@@ -115,6 +150,9 @@ export class AuthRepository {
         await remove();
         return { ok: true } as const;
       }
+      await tx.authEmailEvent.create({
+        data: { userId, purpose, kind: 'CODE_FAILED' },
+      });
       const attempts = row.attempts + 1;
       if (attempts >= OTP_RULES.maxAttempts) {
         await remove();
@@ -132,18 +170,88 @@ export class AuthRepository {
     });
   }
 
-  /** Marks the email verified and starts the first session. */
+  /**
+   * Marks the email verified and starts the first session. Only an
+   * unverified account: a verification step shown for an existing verified
+   * account (signup never reveals that it exists) can never sign in. Returns
+   * null in that case.
+   */
   verifyAndSignIn(userId: string, session: SessionInput) {
     return this.db.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: userId },
+      const { count } = await tx.user.updateMany({
+        where: { id: userId, emailVerifiedAt: null },
         data: { emailVerifiedAt: new Date() },
       });
+      if (!count) return null;
       return tx.authSession.create({
         data: { userId, ...session },
         include: { user: true },
       });
     });
+  }
+
+  /**
+   * When the per-address send limits allow the next email for this purpose
+   * (5 per hour and 10 per rolling 24 hours, including the first): null
+   * when they already do.
+   */
+  async sendAllowedAt(userId: string, purpose: OtpPurpose) {
+    const now = Date.now();
+    const sends = (
+      await this.db.authEmailEvent.findMany({
+        where: {
+          userId,
+          purpose,
+          kind: 'SENT',
+          createdAt: { gt: new Date(now - DAY_MS) },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      })
+    ).map((send) => send.createdAt);
+    const lastHour = sends.filter((time) => time.getTime() > now - HOUR_MS);
+    const reopen = [
+      windowReopens(lastHour, OTP_RULES.sendsPerHour, HOUR_MS),
+      windowReopens(sends, OTP_RULES.sendsPerDay, DAY_MS),
+    ].filter((time): time is Date => time !== null);
+    return reopen.length
+      ? new Date(Math.max(...reopen.map((time) => time.getTime())))
+      : null;
+  }
+
+  /** Records an auth email sent to this account (a code or a notice). */
+  async recordSend(userId: string, purpose: OtpPurpose) {
+    await this.db.authEmailEvent.create({
+      data: { userId, purpose, kind: 'SENT' },
+    });
+  }
+
+  /** Auth emails sent since `since`, across every account. */
+  sentSince(since: Date) {
+    return this.db.authEmailEvent.count({
+      where: { kind: 'SENT', createdAt: { gte: since } },
+    });
+  }
+
+  /**
+   * Deletes accounts that never verified their email and were created
+   * before `before`, with their codes and email events (cascade). The
+   * condition is checked by the DELETE itself, so an account verified at
+   * that moment is kept. Verified accounts are never deleted.
+   */
+  async deleteNeverVerified(before: Date) {
+    const { count } = await this.db.user.deleteMany({
+      where: { emailVerifiedAt: null, createdAt: { lt: before } },
+    });
+    return count;
+  }
+
+  /** Drops email events no rolling window needs any more. */
+  async deleteEmailEventsBefore(before: Date) {
+    const { count } = await this.db.authEmailEvent.deleteMany({
+      where: { createdAt: { lt: before } },
+    });
+    return count;
   }
 
   /**

@@ -146,9 +146,27 @@ test(
       stored.sessions[0]!.refreshTokenHash,
       refreshValue(initial),
     );
+    // Signing up again answers like a new signup (no account enumeration):
+    // the owner gets a notice, and the account and session are unchanged.
+    const again = await request('/api/auth/signup', 'POST', {
+      ...input,
+      name: 'Someone Else',
+      password: 'a different but long password',
+    });
+    assert.equal(again.status, 201);
     assert.equal(
-      (await request('/api/auth/signup', 'POST', input)).status,
-      409,
+      ((await again.json()) as { data: { status: string } }).data.status,
+      'VERIFICATION_REQUIRED',
+    );
+    assert.equal(again.headers.getSetCookie().length, 0, 'no session');
+    assert.equal(
+      mailbox.messages.at(-1)?.subject,
+      'You already have a QuizMB account',
+    );
+    assert.equal(
+      (await db.user.findUniqueOrThrow({ where: { email } })).name,
+      input.name,
+      'the existing account is never changed',
     );
     assert.equal(
       (await request('/api/me', 'GET', undefined, initial)).status,

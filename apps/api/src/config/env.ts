@@ -30,6 +30,9 @@ const schema = z.object({
   EMAIL_FROM: z.string().min(3).optional(),
   // Shown in emails as the address people can write to.
   SUPPORT_EMAIL: z.email().optional(),
+  // The email provider's daily allowance (Resend free plan: 100). Auth
+  // emails warn at 80% of it and refuse non-essential sends at 90%.
+  EMAIL_DAILY_LIMIT: z.coerce.number().int().min(1).default(100),
   // Live sessions (Redis-backed presence and locks). Upstash: rediss:// URL.
   REDIS_URL: z
     .url()

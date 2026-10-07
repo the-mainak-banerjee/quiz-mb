@@ -231,16 +231,18 @@ Request:
 }
 ```
 
-Success:
+Success (`201`):
 
 ```json
 {
   "success": true,
   "data": {
-    "user": {
-      "id": "user_...",
-      "name": "Mainak Banerjee",
-      "email": "mainak@example.com"
+    "status": "VERIFICATION_REQUIRED",
+    "verification": {
+      "ticket": "...",
+      "email": "m***ak@example.com",
+      "expiresAt": "...",
+      "resendAvailableAt": "..."
     }
   }
 }
@@ -251,7 +253,22 @@ Rules:
 - normalize email before lookup/storage
 - hash password using Argon2 or equivalent
 - never return password hash
-- issue access/refresh credentials
+- no session is created: `POST /api/auth/verify-email` with the ticket and the emailed 6-digit code verifies the email and signs in
+- the answer is the same whether or not the email already has an account (no enumeration). For an existing verified account the owner is emailed a notice instead of a code, and the returned step can never sign in; for an existing unverified account a fresh code is sent. The existing account's name and password are never changed.
+
+## 6.1.1 One-time code limits
+
+Apply to email verification and password reset codes (per account and purpose):
+
+| Limit | Rule | Refusal |
+| --- | --- | --- |
+| Resend cooldown | 60 seconds | `429 RESEND_COOLDOWN`, `details.retryAfterSeconds` |
+| Code emails per address | 5 per hour and 10 per rolling 24 hours, including the first | `429 RESEND_COOLDOWN`, `details.retryAfterSeconds` |
+| Wrong attempts per code | 5, then the code is invalid | `422 INVALID_CODE` with `details.attemptsLeft`, then `410 CODE_EXPIRED` |
+| Wrong codes across resends | 10 in a rolling 30 minutes; every check is refused until older failures age out | `429 RATE_LIMITED` with a `Retry-After` header |
+| Daily email budget | From 90% of `EMAIL_DAILY_LIMIT`, repeat resends are refused; the first code and password reset still send | `429 RESEND_COOLDOWN` until the next UTC day |
+
+On signup and login the step is returned even when a limit stops the email; `resendAvailableAt` then says when a new code can be requested.
 
 ## 6.2 Login
 

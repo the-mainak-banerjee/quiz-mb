@@ -42,6 +42,15 @@ export const OTP_RULES = {
   checkWindowSeconds: 15 * 60,
   /** Reset codes one email address can be sent per hour. */
   resetRequestsPerHour: 5,
+  /** Code emails one address can be sent, per purpose, including the first. */
+  sendsPerHour: 5,
+  sendsPerDay: 10,
+  /**
+   * Wrong codes per address and purpose in a rolling window. Survives
+   * resends: a new code does not restore failed attempts.
+   */
+  failuresPerWindow: 10,
+  failureWindowSeconds: 30 * 60,
 } as const;
 const otpCode = z
   .string()

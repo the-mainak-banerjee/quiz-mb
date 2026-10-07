@@ -38,7 +38,8 @@ const escape = (value: string) =>
 
 type Content = {
   name: string;
-  code: string;
+  /** The one-time code; notices have none. */
+  code?: string;
   /** Where people can write to; the sending address is not read. */
   supportEmail?: string | undefined;
 };
@@ -47,7 +48,9 @@ type Copy = {
   heading: string;
   preview: string;
   intro: string;
-  codeLabel: string;
+  codeLabel?: string;
+  /** Paragraphs after the intro (or after the code). */
+  notes?: string[];
   ignore: string;
 };
 
@@ -57,7 +60,18 @@ function paragraph(html: string, style = '') {
 
 function render(content: Content, copy: Copy) {
   const minutes = OTP_RULES.ttlSeconds / 60;
-  const spaced = `${content.code.slice(0, 3)} ${content.code.slice(3)}`;
+  const code = content.code;
+  const codeHtml = code
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${COLOR.surfaceLow};border-radius:12px;margin:12px 0 24px;">
+<tr><td align="center" style="padding:20px 16px;">
+<div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:${COLOR.secondary};margin-bottom:8px;">${escape(copy.codeLabel ?? '')}</div>
+<div style="font-size:36px;line-height:44px;font-weight:700;letter-spacing:6px;color:${COLOR.text};">${code.slice(0, 3)} ${code.slice(3)}</div>
+</td></tr>
+</table>
+${paragraph(`This code expires in <strong style="color:${COLOR.text};">${minutes} minutes</strong> and works once.`)}
+${paragraph('For your security, don&rsquo;t share this code with anyone.')}`
+    : '';
+  const notes = (copy.notes ?? []).map((note) => paragraph(escape(note)));
   const support = content.supportEmail
     ? ` Questions? Contact us at <a href="mailto:${escape(content.supportEmail)}" style="color:${COLOR.accent};">${escape(content.supportEmail)}</a>.`
     : '';
@@ -84,14 +98,8 @@ function render(content: Content, copy: Copy) {
 <h1 style="margin:0 0 16px;font-size:24px;line-height:32px;font-weight:700;color:${COLOR.text};">${escape(copy.heading)}</h1>
 ${paragraph(`Hi ${escape(content.name)},`, `color:${COLOR.text};`)}
 ${paragraph(escape(copy.intro))}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${COLOR.surfaceLow};border-radius:12px;margin:12px 0 24px;">
-<tr><td align="center" style="padding:20px 16px;">
-<div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:${COLOR.secondary};margin-bottom:8px;">${escape(copy.codeLabel)}</div>
-<div style="font-size:36px;line-height:44px;font-weight:700;letter-spacing:6px;color:${COLOR.text};">${spaced}</div>
-</td></tr>
-</table>
-${paragraph(`This code expires in <strong style="color:${COLOR.text};">${minutes} minutes</strong> and works once.`)}
-${paragraph('For your security, don&rsquo;t share this code with anyone.')}
+${codeHtml}
+${notes.join('')}
 ${paragraph(escape(copy.ignore))}
 </td></tr>
 <tr><td style="padding:8px 32px 32px;">
@@ -110,10 +118,15 @@ This is an automated email, so replies to it are not read.${support}
     '',
     copy.intro,
     '',
-    `${copy.codeLabel}: ${content.code}`,
-    '',
-    `This code expires in ${minutes} minutes and works once.`,
-    "For your security, don't share this code with anyone.",
+    ...(code
+      ? [
+          `${copy.codeLabel}: ${code}`,
+          '',
+          `This code expires in ${minutes} minutes and works once.`,
+          "For your security, don't share this code with anyone.",
+        ]
+      : []),
+    ...(copy.notes ?? []),
     copy.ignore,
     '',
     'QuizMB',
@@ -153,6 +166,31 @@ export function passwordResetEmail(to: string, content: Content): EmailMessage {
       codeLabel: 'Your reset code',
       ignore:
         "If you didn't ask to reset your password, you can ignore this email. Your password stays the same.",
+    }),
+  };
+}
+
+/**
+ * Sent instead of a code when someone signs up with an address that already
+ * has a verified account, so signup never reveals that it exists.
+ */
+export function existingAccountEmail(
+  to: string,
+  content: Omit<Content, 'code'>,
+): EmailMessage {
+  return {
+    to,
+    subject: 'You already have a QuizMB account',
+    ...render(content, {
+      heading: 'You already have an account',
+      preview: 'Someone tried to create a new QuizMB account with this email.',
+      intro:
+        'Someone just tried to create a new QuizMB account with this email address. You already have an account, so no new account was created.',
+      notes: [
+        'If it was you, sign in with your existing password. If you have forgotten it, choose "Forgot password" on the sign-in page.',
+      ],
+      ignore:
+        "If it wasn't you, you can ignore this email. Nobody can use your account without your password.",
     }),
   };
 }

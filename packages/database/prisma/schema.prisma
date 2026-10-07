@@ -20,6 +20,7 @@ model User {
   updatedAt           DateTime             @updatedAt @db.Timestamptz(3)
   sessions            AuthSession[]
   verificationCodes   VerificationCode[]
+  authEmailEvents     AuthEmailEvent[]
   projects            Project[]
   quizzes             Quiz[]
   media               MediaAsset[]
@@ -56,6 +57,13 @@ enum OtpPurpose {
   PASSWORD_RESET
 }
 
+enum AuthEmailEventKind {
+  /// An auth email was sent (a code or a notice).
+  SENT
+  /// A one-time code was entered wrongly.
+  CODE_FAILED
+}
+
 /// One live code per user and purpose; replaced on resend, deleted once used.
 model VerificationCode {
   id        String     @id @default(uuid()) @db.Uuid
@@ -70,6 +78,21 @@ model VerificationCode {
   @@unique([userId, purpose])
   @@index([expiresAt])
   @@map("verification_codes")
+}
+
+/// Auth email sends and wrong codes, counted over rolling windows for the
+/// per-address limits and the daily email budget. Kept for two days.
+model AuthEmailEvent {
+  id        String             @id @default(uuid()) @db.Uuid
+  userId    String             @db.Uuid
+  purpose   OtpPurpose
+  kind      AuthEmailEventKind
+  createdAt DateTime           @default(now()) @db.Timestamptz(3)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, kind, createdAt])
+  @@index([kind, createdAt])
+  @@map("auth_email_events")
 }
 
 enum QuizStatus {

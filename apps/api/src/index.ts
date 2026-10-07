@@ -26,6 +26,7 @@ export const database = createDatabase(
   env.DATABASE_POOL_MAX,
 );
 export const events = new DomainEvents();
+export const authRepository = new AuthRepository(database);
 export const logger = createLogger(env.LOG_LEVEL);
 const storage = createStorage(process.env);
 // Live sessions need Redis; without REDIS_URL the REST-only API still runs.
@@ -44,12 +45,16 @@ export default createApp({
   allowedOrigins: env.ALLOWED_ORIGINS,
   logger,
   auth: new AuthService(
-    new AuthRepository(database),
+    authRepository,
     authConfig,
     env.RESEND_API_KEY && env.EMAIL_FROM
       ? new ResendEmailSender(env.RESEND_API_KEY, env.EMAIL_FROM, logger)
       : undefined,
-    { supportEmail: env.SUPPORT_EMAIL, logger },
+    {
+      supportEmail: env.SUPPORT_EMAIL,
+      logger,
+      dailyEmailLimit: env.EMAIL_DAILY_LIMIT,
+    },
   ),
   users: new UsersService(database),
   production: env.NODE_ENV === NODE_ENV.PRODUCTION,

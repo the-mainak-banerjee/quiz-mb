@@ -15,7 +15,12 @@ import {
 } from '@quizmb/contracts';
 import type { Logger } from 'pino';
 import type { EmailSender } from '../../infrastructure/email.js';
-import { passwordResetEmail, verificationEmail } from './emails.js';
+import {
+  existingAccountEmail,
+  passwordResetEmail,
+  verificationEmail,
+} from './emails.js';
+import { EmailBudget } from './email-budget.js';
 import {
   CodeHasher,
   FlowTokens,
@@ -28,8 +33,32 @@ export const publicUser = (user: Pick<User, 'id' | 'name' | 'email'>) => ({
   name: user.name,
   email: user.email,
 });
+/** Whole seconds from now until `time` (at least 1). */
+const secondsUntil = (time: Date) =>
+  Math.max(1, Math.ceil((time.getTime() - Date.now()) / 1000));
+
+/** "in 45 seconds", "in 12 minutes", "in 3 hours". */
+function waitText(seconds: number) {
+  if (seconds < 60)
+    return `in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60)
+    return `in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  const hours = Math.ceil(minutes / 60);
+  return `in ${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+}
+
 /** What a refused code means for the API response. */
 function codeRefusal(check: Exclude<CodeCheck, { ok: true }>) {
+  if (check.reason === 'locked') {
+    const wait = secondsUntil(check.retryAt);
+    return new ApiError(
+      429,
+      ERROR_CODE.RATE_LIMITED,
+      `Too many incorrect codes. Try again ${waitText(wait)}.`,
+      { retryAfterSeconds: String(wait) },
+    );
+  }
   if (check.reason === 'wrong')
     return new ApiError(
       422,
@@ -55,16 +84,46 @@ const flowExpired = () =>
 
 const inSeconds = (seconds: number) => new Date(Date.now() + seconds * 1000);
 
+/** Midnight UTC tomorrow, when the daily email budget starts again. */
+const nextUtcDay = () => {
+  const now = new Date();
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
+  );
+};
+
 export type AuthMailOptions = {
   /** Shown in emails as the address people can write to. */
   supportEmail?: string | undefined;
-  logger?: Pick<Logger, 'error'> | undefined;
+  logger?: Pick<Logger, 'error' | 'warn'> | undefined;
+  /** The provider's daily allowance; without it no budget is enforced. */
+  dailyEmailLimit?: number | undefined;
 };
+
+/**
+ * What a code request delivers: the code itself, a notice that the address
+ * already has an account (signup, so it never reveals that), or nothing (a
+ * resend for that existing account, answered like any other).
+ */
+type Delivery = 'code' | 'notice' | 'none';
+type SendOptions = {
+  /** First verification code and password reset pass the 90% budget limit. */
+  essential: boolean;
+  delivery?: Delivery;
+};
+type SendResult =
+  | { sent: true; resendAvailableAt: Date }
+  | {
+      sent: false;
+      reason: 'cooldown' | 'limit' | 'budget';
+      resendAvailableAt: Date;
+    };
 
 export class AuthService {
   readonly tokens: Tokens;
   private flow: FlowTokens;
   private codes: CodeHasher;
+  private budget: EmailBudget | undefined;
   constructor(
     readonly repository: AuthRepository,
     readonly config: AuthConfig,
@@ -74,17 +133,33 @@ export class AuthService {
     this.tokens = new Tokens(config);
     this.flow = new FlowTokens(config.AUTH_ACCESS_SECRET);
     this.codes = new CodeHasher(config.AUTH_ACCESS_SECRET);
+    this.budget = mail.dailyEmailLimit
+      ? new EmailBudget(repository, mail.dailyEmailLimit, mail.logger)
+      : undefined;
   }
 
   /**
-   * Issues and emails a new code (replacing, and so deleting, the previous
-   * one) unless the resend cooldown is still running.
+   * Issues a new code (replacing, and so deleting, the previous one) and
+   * delivers it, unless a limit refuses: the per-address send limits (5 per
+   * hour, 10 per 24 hours, per purpose), the daily email budget for
+   * non-essential sends, or the resend cooldown. Every send is recorded for
+   * those limits.
    */
   private async sendCode(
     user: Pick<User, 'id' | 'name' | 'email'>,
     purpose: OtpPurpose,
-  ) {
+    { essential, delivery = 'code' }: SendOptions,
+  ): Promise<SendResult> {
     if (!this.email) throw new Error('Email delivery is not configured');
+    const limitedUntil = await this.repository.sendAllowedAt(user.id, purpose);
+    if (limitedUntil)
+      return { sent: false, reason: 'limit', resendAvailableAt: limitedUntil };
+    if (
+      delivery !== 'none' &&
+      this.budget &&
+      !(await this.budget.allows(essential))
+    )
+      return { sent: false, reason: 'budget', resendAvailableAt: nextUtcDay() };
     const code = newCode();
     const blockedUntil = await this.repository.issueCode(
       user.id,
@@ -92,32 +167,54 @@ export class AuthService {
       this.codes.hash(user.id, purpose, code),
       inSeconds(OTP_RULES.ttlSeconds),
     );
-    if (blockedUntil) return { sent: false, resendAvailableAt: blockedUntil };
+    if (blockedUntil)
+      return {
+        sent: false,
+        reason: 'cooldown',
+        resendAvailableAt: blockedUntil,
+      };
     const content = {
       name: user.name,
       code,
       supportEmail: this.mail.supportEmail,
     };
-    await this.email.send(
-      purpose === OTP_PURPOSE.EMAIL_VERIFICATION
-        ? verificationEmail(user.email, content)
-        : passwordResetEmail(user.email, content),
-    );
+    if (delivery === 'code')
+      await this.email.send(
+        purpose === OTP_PURPOSE.EMAIL_VERIFICATION
+          ? verificationEmail(user.email, content)
+          : passwordResetEmail(user.email, content),
+      );
+    else if (delivery === 'notice')
+      await this.email.send(
+        existingAccountEmail(user.email, {
+          name: user.name,
+          supportEmail: this.mail.supportEmail,
+        }),
+      );
+    // Recorded for silent deliveries too, so an existing account's
+    // verification step meets the same limits as a new one.
+    await this.repository.recordSend(user.id, purpose);
     return {
       sent: true,
       resendAvailableAt: inSeconds(OTP_RULES.resendCooldownSeconds),
     };
   }
 
-  /** The verification step for an unverified account; sends a code if due. */
+  /**
+   * The verification step after signup or login. Sends a code if due; for
+   * an address that already has a verified account (signup only), sends a
+   * notice instead and returns the same step, which can never sign in.
+   */
   private async verificationChallenge(
     user: Pick<User, 'id' | 'name' | 'email'>,
+    options: SendOptions,
   ) {
     let resendAvailableAt = new Date();
     try {
       ({ resendAvailableAt } = await this.sendCode(
         user,
         OTP_PURPOSE.EMAIL_VERIFICATION,
+        options,
       ));
     } catch (error) {
       // The account exists either way; the person can resend from the
@@ -164,20 +261,33 @@ export class AuthService {
       expiresAt,
     };
   }
-  /** Creates an unverified account and emails a verification code. */
+  /**
+   * Creates an unverified account and emails a verification code. The
+   * answer is the same when the address already has an account, so signup
+   * never reveals which addresses are registered: a verified owner is sent
+   * a notice instead, and an unverified account gets a fresh code. The
+   * existing account's name and password are never changed (that would let
+   * whoever signed up second take over an account the inbox owner verifies).
+   */
   async signup(input: { name: string; email: string; password: string }) {
     const user = await this.repository.createUnverified({
       name: input.name,
       email: input.email,
       passwordHash: await hashPassword(input.password),
     });
-    if (!user)
+    if (user) return this.verificationChallenge(user, { essential: true });
+    const existing = await this.repository.findByEmail(input.email);
+    if (!existing)
+      // Deleted between the two queries; nothing to protect any more.
       throw new ApiError(
         409,
         ERROR_CODE.CONFLICT,
-        'An account could not be created with these details.',
+        'Please try signing up again.',
       );
-    return this.verificationChallenge(user);
+    return this.verificationChallenge(existing, {
+      essential: false,
+      delivery: existing.emailVerifiedAt ? 'notice' : 'code',
+    });
   }
 
   /**
@@ -192,7 +302,8 @@ export class AuthService {
         ERROR_CODE.UNAUTHENTICATED,
         'Email or password is incorrect.',
       );
-    if (!user.emailVerifiedAt) return this.verificationChallenge(user);
+    if (!user.emailVerifiedAt)
+      return this.verificationChallenge(user, { essential: true });
     const refresh = newRefresh();
     const session = await this.repository.createSession(
       user.id,
@@ -224,6 +335,8 @@ export class AuthService {
       userId,
       this.session(refresh, userAgent),
     );
+    // Already verified: a step shown by signup for an existing account.
+    if (!session) throw codeRefusal({ ok: false, reason: 'missing' });
     return this.credentials(
       session.user,
       session.id,
@@ -232,24 +345,30 @@ export class AuthService {
     );
   }
 
-  /** Sends a new verification code once the cooldown has passed. */
+  /**
+   * Sends a new verification code when the limits allow it. For the step
+   * signup shows for an existing verified account, nothing is sent but the
+   * answer (and the limits) are the same.
+   */
   async resendVerification(ticket: string) {
     const userId = await this.flow.verificationUser(ticket);
     const user = await this.repository.findById(userId);
-    if (!user || user.emailVerifiedAt) throw flowExpired();
-    const { sent, resendAvailableAt } = await this.sendCode(
-      user,
-      OTP_PURPOSE.EMAIL_VERIFICATION,
-    );
-    if (!sent) {
-      const wait = Math.max(
-        1,
-        Math.ceil((resendAvailableAt.getTime() - Date.now()) / 1000),
-      );
+    if (!user) throw flowExpired();
+    const result = await this.sendCode(user, OTP_PURPOSE.EMAIL_VERIFICATION, {
+      essential: false,
+      delivery: user.emailVerifiedAt ? 'none' : 'code',
+    });
+    const { resendAvailableAt } = result;
+    if (!result.sent) {
+      const wait = secondsUntil(resendAvailableAt);
       throw new ApiError(
         429,
         ERROR_CODE.RESEND_COOLDOWN,
-        `Please wait ${wait} seconds before requesting a new code.`,
+        result.reason === 'cooldown'
+          ? `Please wait ${wait} seconds before requesting a new code.`
+          : result.reason === 'limit'
+            ? `You've asked for several codes. You can request another ${waitText(wait)}.`
+            : "We can't send more codes right now. Please try again later.",
         { retryAfterSeconds: String(wait) },
       );
     }
@@ -271,7 +390,11 @@ export class AuthService {
     void this.repository
       .findByEmail(email)
       .then((user) =>
-        user ? this.sendCode(user, OTP_PURPOSE.PASSWORD_RESET) : null,
+        user
+          ? this.sendCode(user, OTP_PURPOSE.PASSWORD_RESET, {
+              essential: true,
+            })
+          : null,
       )
       .catch((error: unknown) =>
         this.mail.logger?.error(

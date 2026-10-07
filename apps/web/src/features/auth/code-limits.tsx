@@ -5,7 +5,7 @@ import { Callout } from '@/components/ui';
 const minutes = (seconds: number) => seconds / 60;
 
 /** The limits on emailed codes, stated up front so a lockout is no surprise. */
-export function CodeLimits({ reset = false }: { reset?: boolean }) {
+export function CodeLimits() {
   return (
     <Callout icon={<ShieldAlert size={16} aria-hidden="true" />}>
       <ul className="space-y-1">
@@ -15,14 +15,13 @@ export function CodeLimits({ reset = false }: { reset?: boolean }) {
         </li>
         <li>
           You can ask for a new code every {OTP_RULES.resendCooldownSeconds}{' '}
-          seconds
-          {reset ? `, up to ${OTP_RULES.resetRequestsPerHour} per hour.` : '.'}
+          seconds, up to {OTP_RULES.sendsPerHour} codes an hour and{' '}
+          {OTP_RULES.sendsPerDay} a day.
         </li>
         <li>
-          After {OTP_RULES.checksPerWindow} attempts within{' '}
-          {minutes(OTP_RULES.checkWindowSeconds)} minutes, you&apos;ll need to
-          wait {minutes(OTP_RULES.checkWindowSeconds)} minutes before trying
-          again.
+          After {OTP_RULES.failuresPerWindow} incorrect codes within{' '}
+          {minutes(OTP_RULES.failureWindowSeconds)} minutes, even with new
+          codes, you&apos;ll need to wait before trying again.
         </li>
       </ul>
     </Callout>

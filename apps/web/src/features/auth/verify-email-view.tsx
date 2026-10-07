@@ -27,7 +27,7 @@ import { AuthCard } from './auth-card';
 import { codeProblem } from './auth-messages';
 import { CodeLimits, cooldownEnd } from './code-limits';
 import { OtpInput } from './otp-input';
-import { useSecondsUntil } from './resend-timer';
+import { resendLabel, useSecondsUntil } from './resend-timer';
 import { useVerificationFlow } from './use-auth-flow';
 
 const panel = {
@@ -246,7 +246,7 @@ export function VerifyEmailView({
             {pending === 'resend'
               ? 'Sending…'
               : resendIn > 0
-                ? `Resend code in ${resendIn}s`
+                ? resendLabel(resendIn)
                 : 'Resend code'}
           </Button>
           <Link
