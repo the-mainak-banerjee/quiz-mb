@@ -574,7 +574,11 @@ export function attachLiveRealtime(
           ERROR_CODE.FORBIDDEN,
           'Only participants can answer questions.',
         );
-      const answer = await service.submit(userId, socket.id, command);
+      const { answer, retried } = await service.submit(
+        userId,
+        socket.id,
+        command,
+      );
       // Debug only: one line per answer is too much at info for big rooms.
       logger.debug(
         {
@@ -582,9 +586,11 @@ export function attachLiveRealtime(
           askedQuestionId: command.askedQuestionId,
           userId,
         },
-        'Live answer accepted',
+        retried ? 'Live answer resent' : 'Live answer accepted',
       );
-      publishProgress(command.liveSessionId, command.askedQuestionId);
+      // A resend changes nothing the host sees.
+      if (!retried)
+        publishProgress(command.liveSessionId, command.askedQuestionId);
       return answer;
     });
 

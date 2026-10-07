@@ -154,6 +154,25 @@ const submissionClosed = () =>
     'Time is up. Answers for this question are closed.',
   );
 
+const alreadySubmitted = () =>
+  new ApiError(
+    409,
+    ERROR_CODE.ALREADY_SUBMITTED,
+    'You have already submitted an answer for this question.',
+  );
+
+/** The same answer: the same options (in any order) and the same text. */
+function sameAnswer(
+  saved: SubmissionRow,
+  answer: { selectedOptionIds: string[]; answerText: string | null },
+) {
+  const ids = (list: string[]) => [...list].sort().join(',');
+  return (
+    ids(saved.options.map((option) => option.questionOptionId)) ===
+      ids(answer.selectedOptionIds) && saved.answerText === answer.answerText
+  );
+}
+
 /** A participant's own answer; correctness stays hidden until it ends. */
 function answerDto(
   asked: Pick<AskedQuestionRow, 'id' | 'status'>,
@@ -1385,11 +1404,34 @@ export class LiveSessionsService {
    * Accepts one explicit answer for the active question. Correctness is
    * decided here but returned only after the question ends.
    */
+  /**
+   * A resend of the answer already accepted (its acknowledgement was lost):
+   * the saved answer, unchanged and not scored again. A different answer is
+   * not a retry and is refused.
+   */
+  private async savedRetry(
+    askedQuestionId: string,
+    userId: string,
+    answer: { selectedOptionIds: string[]; answerText: string | null },
+  ): Promise<ParticipantAnswerDto | null> {
+    const saved = await this.repository.submissionFor(askedQuestionId, userId);
+    if (!saved || !sameAnswer(saved, answer)) return null;
+    // Correctness and points are revealed only when the question ends.
+    return answerDto(
+      { id: askedQuestionId, status: ASKED_QUESTION_STATUS.ACTIVE },
+      saved,
+    );
+  }
+
+  /**
+   * Accepts one answer per participant per asked question. `retried` is
+   * true when this was a resend of the answer already accepted.
+   */
   async submit(
     userId: string,
     socketId: string,
     command: AnswerSubmitCommand,
-  ): Promise<ParticipantAnswerDto> {
+  ): Promise<{ answer: ParticipantAnswerDto; retried: boolean }> {
     const receivedAt = new Date();
     const key = await this.answerKey(
       command.liveSessionId,
@@ -1402,12 +1444,19 @@ export class LiveSessionsService {
         ERROR_CODE.FORBIDDEN,
         'The host cannot answer questions.',
       );
+    const answer = evaluateAnswer(key, command);
     if (receivedAt >= key.endsAt) {
       // Also closes the question if its timer has not fired yet.
       await this.closeExpired(key.liveSessionId).catch(() => false);
+      // A retry of an answer accepted in time still gets it back.
+      const saved = await this.savedRetry(
+        command.askedQuestionId,
+        userId,
+        answer,
+      );
+      if (saved) return { answer: saved, retried: true };
       throw submissionClosed();
     }
-    const answer = evaluateAnswer(key, command);
     const [active, registered] = await Promise.all([
       this.isActiveSocket(key.liveSessionId, userId, socketId),
       this.isConfirmedParticipant(key.liveSessionId, key.quizId, userId),
@@ -1425,7 +1474,7 @@ export class LiveSessionsService {
         'Register for this quiz to answer its questions.',
       );
     const responseTimeMs = receivedAt.getTime() - key.startedAt.getTime();
-    await this.repository.submit({
+    const { inserted } = await this.repository.submit({
       askedQuestionId: command.askedQuestionId,
       userId,
       ...answer,
@@ -1438,13 +1487,25 @@ export class LiveSessionsService {
       submittedAt: receivedAt,
       responseTimeMs,
     });
+    if (!inserted) {
+      const saved = await this.savedRetry(
+        command.askedQuestionId,
+        userId,
+        answer,
+      );
+      if (saved) return { answer: saved, retried: true };
+      throw alreadySubmitted();
+    }
     return {
-      askedQuestionId: command.askedQuestionId,
-      status: ANSWER_STATUS.SUBMITTED,
-      selectedOptionIds: answer.selectedOptionIds,
-      answerText: answer.answerText,
-      isCorrect: null,
-      pointsAwarded: 0,
+      answer: {
+        askedQuestionId: command.askedQuestionId,
+        status: ANSWER_STATUS.SUBMITTED,
+        selectedOptionIds: answer.selectedOptionIds,
+        answerText: answer.answerText,
+        isCorrect: null,
+        pointsAwarded: 0,
+      },
+      retried: false,
     };
   }
 

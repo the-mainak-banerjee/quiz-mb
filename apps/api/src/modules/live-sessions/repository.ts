@@ -791,12 +791,9 @@ export class LiveSessionsRepository {
       SELECT (SELECT count(*) FROM question)::int AS open,
         (SELECT id::text FROM submission) AS inserted`;
     if (!row?.open) throw submissionClosed();
-    if (!row.inserted)
-      throw new ApiError(
-        409,
-        ERROR_CODE.ALREADY_SUBMITTED,
-        'You have already submitted an answer for this question.',
-      );
+    // False when an answer was already accepted: nothing is stored or
+    // scored again (the service decides whether it is a retry).
+    return { inserted: row.inserted !== null };
   }
 
   /**

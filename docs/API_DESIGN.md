@@ -1331,6 +1331,8 @@ responseTime
 submittedAt
 ```
 
+One answer is accepted per participant per asked question. Resending the same answer (for example after a lost acknowledgement, even just after the deadline) is answered with the saved answer and is never scored again; a different answer is refused with `ALREADY_SUBMITTED`. Correctness and points in the acknowledgement stay hidden until the question ends.
+
 ---
 
 # 29. Answer Submission Validation
