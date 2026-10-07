@@ -27,12 +27,27 @@ export type QuestionEnded = { liveSessionId: string; askedQuestionId: string };
  */
 export type AuthSessionsRevoked = { familyIds: string[] };
 
+/** The server closed an unstarted lobby (e.g. it expired). */
+export type LiveSessionClosed = {
+  liveSessionId: string;
+  code: string;
+  message: string;
+};
+
+/** The server ended a started quiz (host away too long, time limit). */
+export type LiveSessionEnded = {
+  liveSessionId: string;
+  reason: 'HOST_AWAY' | 'TIME_LIMIT';
+};
+
 /** Names of the in-process events carried by `DomainEvents`. */
 export const DOMAIN_EVENT = {
   registrationChanged: 'registrationChanged',
   quizStatusChanged: 'quizStatusChanged',
   questionEnded: 'questionEnded',
   authSessionsRevoked: 'authSessionsRevoked',
+  liveSessionClosed: 'liveSessionClosed',
+  liveSessionEnded: 'liveSessionEnded',
 } as const;
 
 export class DomainEvents extends EventEmitter<{
@@ -40,4 +55,6 @@ export class DomainEvents extends EventEmitter<{
   [DOMAIN_EVENT.quizStatusChanged]: [QuizStatusChange];
   [DOMAIN_EVENT.questionEnded]: [QuestionEnded];
   [DOMAIN_EVENT.authSessionsRevoked]: [AuthSessionsRevoked];
+  [DOMAIN_EVENT.liveSessionClosed]: [LiveSessionClosed];
+  [DOMAIN_EVENT.liveSessionEnded]: [LiveSessionEnded];
 }> {}

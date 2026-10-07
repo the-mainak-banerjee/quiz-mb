@@ -1203,11 +1203,20 @@ Server:
 
 - verifies host ownership
 - validates state
+- consumes one hosted session from the host's monthly allowance (3 per calendar month, UTC), atomically with the start under a lock on the host's account; a repeated Start fails the state check and is never counted twice. With no allowance left the start is refused with `LIMIT_REACHED` (the message gives the reset date) and the lobby stays open
 - activates session
 - initializes Redis
 - broadcasts `quiz:started`
 
 No question starts automatically.
+
+Server-enforced deadlines (security design 1.6), stored, re-armed when the API starts and also checked on every interaction:
+
+- **Lobby expiry:** an unstarted lobby expires 30 minutes after opening. It is closed like `host:lobby-close` (the quiz returns to `PUBLISHED`, registrations kept, nothing consumed); every socket in the room receives `session:removed` with `LOBBY_EXPIRED` and is disconnected, and later joins are refused with `409 LOBBY_EXPIRED`.
+- **Host disconnect grace:** when the host's last connection drops (or the API restarts) a started quiz ends after 15 minutes unless the host reconnects; it ends like `host:quiz-end`, keeping the results so far.
+- **Maximum length:** a live quiz ends 4 hours after it started, the same way. Snapshots carry `sessionEndsAt`; clients show a warning in the last 30 minutes.
+
+Snapshots also carry `lobbyExpiresAt` (in the lobby), and host snapshots carry `hostingAllowance` (`used`, `limit`, `resetsAt`) in the lobby.
 
 ---
 

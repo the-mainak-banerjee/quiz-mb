@@ -248,6 +248,40 @@ export function attachLiveRealtime(
     }
   });
 
+  // The server closed an unstarted lobby (it expired): like a host closing
+  // it, everyone is told why and disconnected.
+  events?.on(
+    DOMAIN_EVENT.liveSessionClosed,
+    ({ liveSessionId, code, message }) => {
+      const closed: LiveRemovedDto = { code, message };
+      nsp.to(liveRoom(liveSessionId)).emit(LIVE_EVENTS.removed, closed);
+      nsp.in(liveRoom(liveSessionId)).disconnectSockets(true);
+    },
+  );
+
+  // The server ended a started quiz (host away too long, or the maximum
+  // length): announced exactly like the host's "End quiz".
+  events?.on(DOMAIN_EVENT.liveSessionEnded, ({ liveSessionId, reason }) => {
+    announceEnded(liveSessionId).catch(() =>
+      logger.warn(
+        { liveSessionId, reason, code: ERROR_CODE.LIVE_UNAVAILABLE },
+        'Quiz end broadcast failed',
+      ),
+    );
+  });
+
+  /**
+   * Each participant gets their own final result first; the final
+   * leaderboard stays hidden until the host reveals it.
+   */
+  async function announceEnded(liveSessionId: string) {
+    for (const { socketId, result } of await service.finalResultDeliveries(
+      liveSessionId,
+    ))
+      nsp.to(socketId).emit(LIVE_EVENTS.quizEnded, result);
+    return broadcast(await service.session(liveSessionId));
+  }
+
   // A question closed (timer, recovery path or end): the host gets the new
   // snapshot and each connected participant a personal one with their own
   // answer and the shared reveal; recalculated standings follow.
@@ -569,15 +603,9 @@ export function attachLiveRealtime(
       liveSessionCommandSchema,
       async ({ liveSessionId }) => {
         requireHost();
-        const session = await service.end(liveSessionId, userId);
+        await service.end(liveSessionId, userId);
         logger.info({ liveSessionId }, 'Live quiz ended');
-        // Each participant gets their own final result first; the final
-        // leaderboard stays hidden until the host reveals it.
-        for (const { socketId, result } of await service.finalResultDeliveries(
-          liveSessionId,
-        ))
-          nsp.to(socketId).emit(LIVE_EVENTS.quizEnded, result);
-        return broadcast(session);
+        return announceEnded(liveSessionId);
       },
     );
 

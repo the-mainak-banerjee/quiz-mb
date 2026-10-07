@@ -147,6 +147,11 @@ export const ACCOUNT_LIMITS = {
   mediaBytes: 5 * 1024 * 1024,
   /** Successful image uploads per rolling 24 hours. */
   uploadsPerDay: 50,
+  /**
+   * Live quizzes a host may start per calendar month (UTC). Opening a lobby
+   * is free; ending early or deleting the quiz never gives a start back.
+   */
+  hostedSessionsPerMonth: 3,
 } as const;
 /** Protective bound for a descriptive answer; not a product rule. */
 export const ANSWER_LIMITS = { text: 2000 } as const;
@@ -693,6 +698,28 @@ export type HostCurrentQuestionDto = HostQuestionProgressDto & {
   ended: boolean;
 };
 
+/**
+ * Server-enforced live-session deadlines (security design 1.6): an
+ * unstarted lobby expires, a started quiz ends after the host has been
+ * disconnected for the grace period, and every live quiz has a maximum
+ * length with a final warning before it.
+ */
+export const LIVE_SESSION_LIMITS = {
+  lobbyMinutes: 30,
+  hostGraceMinutes: 15,
+  maxMinutes: 4 * 60,
+  /** The warning shows this long before the maximum is reached. */
+  warningMinutes: 30,
+} as const;
+
+/** The host's monthly hosted-session allowance (shown before starting). */
+export type HostingAllowanceDto = {
+  used: number;
+  limit: number;
+  /** When the allowance resets: the first day of next month (UTC). */
+  resetsAt: string;
+};
+
 type LiveSnapshotBase = {
   liveSessionId: string;
   /** Server clock when the snapshot was built; clients derive an offset. */
@@ -701,12 +728,18 @@ type LiveSnapshotBase = {
   allowLateJoin: boolean;
   startedAt: string | null;
   endedAt: string | null;
+  /** While in the lobby: when it expires unless the quiz starts. */
+  lobbyExpiresAt: string | null;
+  /** Once started: when the quiz ends automatically (maximum length). */
+  sessionEndsAt: string | null;
   quiz: LiveQuizInfoDto;
   counts: { connected: number; registered: number };
 };
 
 export type HostLiveSnapshotDto = LiveSnapshotBase & {
   role: typeof LIVE_ROLE.HOST;
+  /** In the lobby: how many starts the host has left this month. */
+  hostingAllowance: HostingAllowanceDto | null;
   /** First registrations by time; `counts.registered` is the full total. */
   roster: LiveRosterEntryDto[];
   questions: HostLiveQuestionDto[];

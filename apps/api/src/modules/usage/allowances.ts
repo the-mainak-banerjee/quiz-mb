@@ -8,7 +8,7 @@ import {
   windowReopens,
 } from '../../infrastructure/rolling-window.js';
 
-export type UsageKind = 'QUIZ_CREATED' | 'MEDIA_UPLOADED';
+export type UsageKind = 'QUIZ_CREATED' | 'MEDIA_UPLOADED' | 'SESSION_STARTED';
 
 /**
  * Locks the account's row for the rest of the transaction, so its
@@ -51,13 +51,24 @@ export async function requireAllowance(
   });
 }
 
-/** Usage rows no rolling window needs any more (kept two days). */
+/**
+ * Usage rows no window needs any more: daily allowances after two days,
+ * monthly hosted sessions after 62 days (always past the month they count).
+ */
 export async function trimUsageEvents(
   db: Pick<PrismaClient, 'usageEvent'>,
   now = Date.now(),
 ) {
   const { count } = await db.usageEvent.deleteMany({
-    where: { createdAt: { lt: new Date(now - 2 * DAY_MS) } },
+    where: {
+      OR: [
+        {
+          kind: { not: 'SESSION_STARTED' },
+          createdAt: { lt: new Date(now - 2 * DAY_MS) },
+        },
+        { createdAt: { lt: new Date(now - 62 * DAY_MS) } },
+      ],
+    },
   });
   return { usageEvents: count };
 }

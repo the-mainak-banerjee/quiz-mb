@@ -224,6 +224,11 @@ export async function startLiveHarness<Role extends string>(
         ),
         201,
       );
+    // Fixture reset: tests run several sessions per host, more than the
+    // monthly allowance; its own test seeds starts after opening.
+    await db.usageEvent.deleteMany({
+      where: { userId: userIds[host], kind: 'SESSION_STARTED' },
+    });
     const session = await data<LiveSessionRefDto>(
       await request(
         `/quizzes/${quiz.id}/live-session`,

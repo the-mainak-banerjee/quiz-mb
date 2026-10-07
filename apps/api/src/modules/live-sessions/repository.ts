@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from '@quizmb/database';
 import { ApiError } from '../../http/api-error.js';
 import { lockedTransaction } from '../../infrastructure/transactions.js';
+import { lockAccount } from '../usage/allowances.js';
 import {
   ANSWER_STATUS,
   ASKED_QUESTION_STATUS,
@@ -28,6 +29,8 @@ export type LiveSessionRow = {
   createdAt: Date;
   /** Set once the host reveals the final leaderboard. */
   finalLeaderboardShownAt: Date | null;
+  /** When the host's last connection dropped; null while connected. */
+  hostDisconnectedAt: Date | null;
   quiz: {
     id: string;
     publicId: string;
@@ -167,6 +170,29 @@ function invalidTransition(): never {
 }
 
 /** Locks the session row and reads what transitions need (one round trip). */
+/** The first instant of the next calendar month, UTC. */
+const nextMonth = (now: Date) =>
+  new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+/** Starts recorded this calendar month (UTC) for the host. */
+async function hostedThisMonth(
+  db: Pick<Prisma.TransactionClient, 'usageEvent'>,
+  hostUserId: string,
+  now = new Date(),
+) {
+  const monthStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  );
+  const used = await db.usageEvent.count({
+    where: {
+      userId: hostUserId,
+      kind: 'SESSION_STARTED',
+      createdAt: { gte: monthStart },
+    },
+  });
+  return { used, resetsAt: nextMonth(now) };
+}
+
 async function lockSession(tx: Prisma.TransactionClient, id: string) {
   const [session] = await tx.$queryRaw<
     Array<{
@@ -206,6 +232,7 @@ export class LiveSessionsRepository {
         endedAt: Date | null;
         createdAt: Date;
         finalLeaderboardShownAt: Date | null;
+        hostDisconnectedAt: Date | null;
         publicId: string;
         title: string;
         plannedStartAt: Date | null;
@@ -219,7 +246,8 @@ export class LiveSessionsRepository {
     >`
       SELECT s.id::text, s."quizId"::text, s."hostUserId"::text,
         s.state::text, s."allowLateJoin", s."startedAt", s."endedAt",
-        s."createdAt", s."finalLeaderboardShownAt", q."publicId", q.title,
+        s."createdAt", s."finalLeaderboardShownAt", s."hostDisconnectedAt",
+        q."publicId", q.title,
         q."plannedStartAt",
         q."registrationLimit", q."defaultQuestionDurationSeconds",
         p.name AS "projectName", u.name AS "creatorName",
@@ -244,6 +272,7 @@ export class LiveSessionsRepository {
       startedAt: row.startedAt,
       endedAt: row.endedAt,
       createdAt: row.createdAt,
+      hostDisconnectedAt: row.hostDisconnectedAt,
       finalLeaderboardShownAt: row.finalLeaderboardShownAt,
       quiz: {
         id: row.quizId,
@@ -392,10 +421,28 @@ export class LiveSessionsRepository {
   }
 
   /** LOBBY → LIVE_IDLE. Closes registration and locks quiz content. */
-  start(id: string) {
+  /**
+   * Starts the quiz and consumes one hosted session, atomically: the host's
+   * monthly starts are counted under a lock on the host's account, and a
+   * second Start (double click, retry) fails the state check before
+   * anything is counted. With no allowance left nothing changes; the lobby
+   * stays open.
+   */
+  start(id: string, sessionsPerMonth: number) {
     return this.db.$transaction(async (tx) => {
       const session = await lockSession(tx, id);
       if (session.state !== LIVE_SESSION_STATE.LOBBY) invalidTransition();
+      await lockAccount(tx, session.hostUserId);
+      const { used, resetsAt } = await hostedThisMonth(tx, session.hostUserId);
+      if (used >= sessionsPerMonth)
+        throw new ApiError(
+          409,
+          ERROR_CODE.LIMIT_REACHED,
+          `You have started ${sessionsPerMonth} live quizzes this month, the most allowed. Your allowance resets on ${resetsAt.toISOString().slice(0, 10)}. The lobby stays open until it expires.`,
+        );
+      await tx.usageEvent.create({
+        data: { userId: session.hostUserId, kind: 'SESSION_STARTED' },
+      });
       const startedAt = new Date();
       await tx.liveQuizSession.update({
         where: { id },
@@ -417,6 +464,77 @@ export class LiveSessionsRepository {
         data: { allowLateJoin },
       });
     }, lockedTransaction);
+  }
+
+  /** The host's starts this calendar month (UTC) and the next reset. */
+  hostingAllowance(hostUserId: string) {
+    return hostedThisMonth(this.db, hostUserId);
+  }
+
+  /**
+   * Expires an unstarted lobby opened before `openedBefore` exactly like a
+   * host closing it. Returns the quiz id, or null when there is nothing to
+   * expire (already started, closed or not old enough).
+   */
+  expireLobby(id: string, openedBefore: Date) {
+    return this.db.$transaction(async (tx) => {
+      const [session] = await tx.$queryRaw<
+        Array<{ quizId: string; state: LiveSessionState; createdAt: Date }>
+      >`SELECT "quizId"::text, state::text, "createdAt"
+        FROM live_quiz_sessions WHERE id = ${id}::uuid FOR UPDATE`;
+      if (
+        !session ||
+        session.state !== LIVE_SESSION_STATE.LOBBY ||
+        session.createdAt > openedBefore
+      )
+        return null;
+      await tx.liveQuizSession.delete({ where: { id } });
+      await tx.quiz.update({
+        where: { id: session.quizId },
+        data: { status: QUIZ_STATUS.PUBLISHED },
+      });
+      return session.quizId;
+    }, lockedTransaction);
+  }
+
+  /** Records when the host's last connection dropped (null: connected). */
+  async setHostDisconnected(id: string, at: Date | null) {
+    await this.db.liveQuizSession.updateMany({
+      where: { id, ...active },
+      data: { hostDisconnectedAt: at },
+    });
+  }
+
+  /**
+   * Startup: no socket survives a restart, so every started, unfinished
+   * session's host counts as disconnected from now (unless already away).
+   */
+  async markHostsDisconnected(at: Date) {
+    const { count } = await this.db.liveQuizSession.updateMany({
+      where: {
+        ...active,
+        state: {
+          notIn: [LIVE_SESSION_STATE.LOBBY, LIVE_SESSION_STATE.COMPLETED],
+        },
+        hostDisconnectedAt: null,
+      },
+      data: { hostDisconnectedAt: at },
+    });
+    return count;
+  }
+
+  /** Unfinished sessions with what their deadlines are derived from. */
+  deadlineSessions() {
+    return this.db.liveQuizSession.findMany({
+      where: active,
+      select: {
+        id: true,
+        state: true,
+        createdAt: true,
+        startedAt: true,
+        hostDisconnectedAt: true,
+      },
+    });
   }
 
   /**

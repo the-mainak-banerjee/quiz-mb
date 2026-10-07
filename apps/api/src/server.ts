@@ -38,6 +38,10 @@ async function start() {
     // (or at once if overdue) instead of waiting for the next interaction.
     const recovered = await live.recoverQuestionTimers();
     if (recovered) logger.info({ recovered }, 'Live question timers restored');
+    // Lobby expiry, host grace and the maximum length are re-armed too.
+    const deadlines = await live.recoverDeadlines();
+    if (deadlines)
+      logger.info({ deadlines }, 'Live session deadlines restored');
   } else {
     logger.warn('REDIS_URL is not set; live sessions are disabled');
   }

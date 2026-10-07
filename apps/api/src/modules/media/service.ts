@@ -113,6 +113,9 @@ export class MediaService {
     const limits = await limitsFor(userId);
     // Ownership and edit locks are checked before storage availability.
     const asset = await this.db.$transaction(async (tx) => {
+      // Account before quiz, the order every transaction locks them in
+      // (opening a lobby does the same), so the two cannot deadlock.
+      await lockAccount(tx, userId);
       await lockEditableQuiz(
         tx,
         resource.quizId,

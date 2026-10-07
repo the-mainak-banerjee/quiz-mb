@@ -203,15 +203,15 @@ User-facing summary: _Unlimited draft quizzes · 25 questions per quiz · 5 MB m
 | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | Participant sends a host command                   | Role derived on the server; host ownership checked on every REST request and socket command                 | **Implemented**                                              |
 | Host runs two quizzes at once                      | One unfinished session per host, including an open lobby (service, transaction and partial unique index)    | **Implemented**                                              |
-| Duplicate or retried Start                         | Start succeeds once; it consumes the hosted-session allowance exactly once                                  | **Partial** — start is exactly once; the allowance does not exist yet (see 1.6.1) |
+| Duplicate or retried Start                         | Start succeeds once; it consumes the hosted-session allowance exactly once                                  | **Implemented** |
 | Start a question while one is active               | Server rejects invalid state transitions                                                                    | **Implemented**                                              |
 | Change answers or timing during play               | Content frozen from lobby/live; server-owned question timer                                                 | **Implemented**                                              |
 | Ask the same question twice                        | Rejected within the session (unique constraint)                                                             | **Implemented**                                              |
 | Flood host commands                                | Per-socket command budget                                                                                   | **Implemented** (values in 1.10)                             |
 | Host disconnects                                   | The question timer keeps running, accepted answers stay, nothing advances automatically; the host reconnects to the server state | **Implemented**                      |
-| Abandoned lobby keeps resources | Lobby expires 30 minutes after opening if the quiz has not started (see below) | **To build** |
-| Host never comes back | 15-minute grace with no valid host connection, then the quiz is finalized (see below) | **To build** (participants are only told after 5 seconds) |
-| Session runs forever | 4-hour maximum with a warning at 3 h 30 min (see below) | **To build** |
+| Abandoned lobby keeps resources | Lobby expires 30 minutes after opening if the quiz has not started (see below) | **Implemented** |
+| Host never comes back | 15-minute grace with no valid host connection, then the quiz is finalized (see below) | **Implemented** — `hostDisconnectedAt` is stored; participants are still told after 5 seconds |
+| Session runs forever | 4-hour maximum with a warning at 3 h 30 min (see below) | **Implemented** — warning shown from 3 h 30 min; ended at 4 hours |
 
 An expired lobby does not consume hosted-session allowance; a started session does, even if it times out.
 
@@ -243,14 +243,14 @@ Phase 1 applies one fixed allowance to every account: **3 hosted quiz sessions p
 
 | Situation                                   | Rule                                              | Status       |
 | ------------------------------------------- | ------------------------------------------------- | ------------ |
-| Create a draft, publish, or open the lobby  | Does not consume a session                        | **To build** |
-| The server successfully starts the quiz     | Consumes one session, atomically with the start   | **To build** |
-| Double-click Start or retry the request     | Counts once                                       | **To build** |
-| Refresh or reconnect                        | No extra charge                                   | **To build** |
-| End early or delete the quiz                | Does not restore the allowance                    | **To build** |
-| Monthly reset                               | Calendar month (UTC), with the reset date shown   | **To build** |
-| Unused allowance                            | Does not carry forward                            | **To build** |
-| No allowance left                           | Start is refused with a clear message; the lobby stays open until it expires | **To build** |
+| Create a draft, publish, or open the lobby  | Does not consume a session                        | **Implemented** |
+| The server successfully starts the quiz     | Consumes one session, atomically with the start   | **Implemented** |
+| Double-click Start or retry the request     | Counts once                                       | **Implemented** |
+| Refresh or reconnect                        | No extra charge                                   | **Implemented** |
+| End early or delete the quiz                | Does not restore the allowance                    | **Implemented** |
+| Monthly reset                               | Calendar month (UTC), with the reset date shown   | **Implemented** |
+| Unused allowance                            | Does not carry forward                            | **Implemented** |
+| No allowance left                           | Start is refused with a clear message; the lobby stays open until it expires | **Implemented** |
 
 ## 1.7 Participant registration, joining and reconnecting
 

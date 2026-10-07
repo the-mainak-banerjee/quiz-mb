@@ -63,6 +63,8 @@ enum UsageEventKind {
   QUIZ_CREATED
   /// An uploaded image was verified and attached.
   MEDIA_UPLOADED
+  /// The host started a live quiz (monthly hosted-session allowance).
+  SESSION_STARTED
 }
 
 enum AuthEmailEventKind {
@@ -296,6 +298,9 @@ model LiveQuizSession {
   endedAt                 DateTime?            @db.Timestamptz(3)
   /// Set when the host reveals the final leaderboard to participants.
   finalLeaderboardShownAt DateTime?            @db.Timestamptz(3)
+  /// When the host's last live connection dropped (null while connected);
+  /// a started session ends after 15 minutes without the host.
+  hostDisconnectedAt      DateTime?            @db.Timestamptz(3)
   createdAt               DateTime             @default(now()) @db.Timestamptz(3)
   updatedAt               DateTime             @updatedAt @db.Timestamptz(3)
   quiz                    Quiz                 @relation(fields: [quizId], references: [id], onDelete: Cascade)

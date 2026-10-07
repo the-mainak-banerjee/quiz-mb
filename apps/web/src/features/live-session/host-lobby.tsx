@@ -20,6 +20,7 @@ import { LateJoinToggle } from './late-join-toggle';
 import { ParticipantRoster } from './participant-roster';
 import { StatTile } from './stat-tile';
 import type { LiveParticipant, LiveQuizSummary } from './types';
+import type { HostingAllowanceDto } from '@quizmb/contracts';
 
 const startNotes = [
   'Starting closes registration and locks questions for this quiz.',
@@ -38,7 +39,13 @@ export function HostLobby({
   onCloseLobby,
   onLateJoinChange,
   busy = false,
+  allowance = null,
+  lobbyExpiresAt = null,
 }: {
+  /** The host's starts this month; Start is unavailable when none are left. */
+  allowance?: HostingAllowanceDto | null;
+  /** When the lobby closes automatically unless the quiz starts. */
+  lobbyExpiresAt?: string | null;
   quiz: LiveQuizSummary;
   roster: LiveParticipant[];
   connected: number;
@@ -189,12 +196,29 @@ export function HostLobby({
               Starting moves everyone to the live stage. You will pick the first
               question from your console.
             </Text>
+            {allowance && (
+              <Text variant="caption" tone="inverse">
+                {allowance.used >= allowance.limit
+                  ? `You have used all ${allowance.limit} live quizzes for this month. `
+                  : `Live quizzes this month: ${allowance.used} of ${allowance.limit} used. `}
+                Resets on{' '}
+                <LocalDateTime value={allowance.resetsAt} format="date" />.
+              </Text>
+            )}
+            {lobbyExpiresAt && (
+              <Text variant="caption" tone="inverse">
+                If the quiz has not started, the lobby closes at{' '}
+                <LocalDateTime value={lobbyExpiresAt} format="time" />.
+              </Text>
+            )}
           </div>
           <div className="space-y-space-xs">
             <ActionButton
               onAction={onStartQuiz}
               preview="Starting the quiz"
-              disabled={busy}
+              disabled={
+                busy || (!!allowance && allowance.used >= allowance.limit)
+              }
               variant="outline"
               className="h-control-large w-full border-transparent text-card-title text-action-primary"
               icon={<Play size={20} aria-hidden="true" />}

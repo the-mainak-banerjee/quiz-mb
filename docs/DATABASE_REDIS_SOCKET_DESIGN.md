@@ -422,7 +422,7 @@ INDEX (kind, createdAt)
 
 ## 7.2 UsageEvent
 
-One row per quiz created (`QUIZ_CREATED`) and per upload verified and attached (`MEDIA_UPLOADED`), counted over a rolling 24 hours for the creation and upload allowances (security design 1.5). Rows outlive what they count, so deleting a quiz or image never gives the allowance back. Counted under a lock on the user's row; deleted after two days by the hourly maintenance job.
+One row per quiz created (`QUIZ_CREATED`) and per upload verified and attached (`MEDIA_UPLOADED`), counted over a rolling 24 hours for the creation and upload allowances (security design 1.5), and per live quiz started (`SESSION_STARTED`), counted per calendar month (UTC) for the hosted-session allowance (1.6.1). Rows outlive what they count, so deleting a quiz or image never gives the allowance back. Counted under a lock on the user's row; the hourly maintenance job deletes daily kinds after two days and `SESSION_STARTED` after 62 days.
 
 ```text
 UsageEvent
@@ -813,6 +813,8 @@ Redis may assist with fast UI counts, but PostgreSQL is the authority for capaci
 ---
 
 # 16. LiveQuizSession
+
+`hostDisconnectedAt` records when the host's last live connection dropped (null while connected; set for every started session when the API restarts). With `createdAt` (lobby expiry, 30 minutes) and `startedAt` (maximum length, 4 hours) it drives the server-enforced session deadlines (security design 1.6).
 
 Represents one live execution of a quiz.
 
