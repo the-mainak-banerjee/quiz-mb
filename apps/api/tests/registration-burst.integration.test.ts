@@ -9,7 +9,8 @@ import { RegistrationsRepository } from '../src/modules/registrations/repository
 // Many people registering the moment a link is shared: everyone gets an
 // answer quickly and capacity is never exceeded.
 const BURST = 100;
-const LIMIT = 40;
+// At the participants-per-session limit (ACCOUNT_LIMITS).
+const LIMIT = 30;
 
 test(
   'a registration burst is fast, exact on capacity and reuses cancelled rows',

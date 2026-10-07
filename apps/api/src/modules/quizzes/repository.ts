@@ -123,6 +123,14 @@ export async function validateMedia(
     await recordUsage(tx, userId, 'MEDIA_UPLOADED');
   }
 }
+/** The registration limit is above what the account's plan allows. */
+export function participantLimit(maxParticipants: number) {
+  const message = `A quiz can have up to ${maxParticipants} participants.`;
+  return new ApiError(422, ERROR_CODE.VALIDATION_ERROR, message, {
+    registrationLimit: message,
+  });
+}
+
 export class QuizzesRepository {
   constructor(readonly db: PrismaClient) {}
   get(id: string, userId: string) {
@@ -214,10 +222,30 @@ export class QuizzesRepository {
       return { quiz, coverRefusal };
     }, lockedTransaction);
   }
-  /** `coverVerified`: the cover is a PENDING upload whose file was checked. */
-  update(id: string, userId: string, input: QuizInput, coverVerified = false) {
+  /**
+   * `coverVerified`: the cover is a PENDING upload whose file was checked.
+   * `maxParticipants`: the account's capacity; a quiz created before the
+   * limit keeps a higher value it already has, but cannot raise it.
+   */
+  update(
+    id: string,
+    userId: string,
+    input: QuizInput,
+    {
+      coverVerified = false,
+      maxParticipants,
+    }: {
+      coverVerified?: boolean;
+      maxParticipants: number;
+    },
+  ) {
     return this.db.$transaction(async (tx) => {
-      await lockEditableQuiz(tx, id, userId);
+      const current = await lockEditableQuiz(tx, id, userId);
+      if (
+        input.registrationLimit > maxParticipants &&
+        input.registrationLimit > current.registrationLimit
+      )
+        throw participantLimit(maxParticipants);
       // Same row lock as registration, so the count cannot change meanwhile.
       const registered = await tx.quizRegistration.count({
         where: { quizId: id, status: REGISTRATION_STATUS.REGISTERED },

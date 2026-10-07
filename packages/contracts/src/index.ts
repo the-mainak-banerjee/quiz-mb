@@ -132,6 +132,7 @@ export const AUTHORING_LIMITS = {
   /** Questions per quiz, checked under the quiz lock when adding. */
   questions: 25,
   duration: 3600,
+  /** Absolute bound; the account's plan sets the real one (ACCOUNT_LIMITS). */
   participants: 10000,
 } as const;
 /**
@@ -152,6 +153,8 @@ export const ACCOUNT_LIMITS = {
    * is free; ending early or deleting the quiz never gives a start back.
    */
   hostedSessionsPerMonth: 3,
+  /** A quiz's registration limit (capacity of one live session). */
+  participantsPerSession: 30,
 } as const;
 /** Protective bound for a descriptive answer; not a product rule. */
 export const ANSWER_LIMITS = { text: 2000 } as const;

@@ -128,7 +128,7 @@ test(
     const basics = {
       title: 'Test draft',
       description: '',
-      registrationLimit: 50,
+      registrationLimit: 30,
       defaultQuestionDurationSeconds: 30,
       allowLateJoin: false,
       coverMediaId: null,

@@ -211,6 +211,38 @@ test(
     );
     assert.equal(tooMany.error?.code, ERROR_CODE.VALIDATION_ERROR);
 
+    // ---- 30 participants per session (security design 1.7).
+    const overCapacity = await json<unknown>(
+      await createQuiz(author, {
+        registrationLimit: ACCOUNT_LIMITS.participantsPerSession + 1,
+      }),
+      422,
+    );
+    assert.equal(overCapacity.error?.code, ERROR_CODE.VALIDATION_ERROR);
+    // A quiz from before the limit keeps its higher value but cannot raise it.
+    await db.quiz.update({
+      where: { id: quiz.id },
+      data: { registrationLimit: 50 },
+    });
+    await json(
+      await request(
+        `/quizzes/${quiz.id}`,
+        'PATCH',
+        { ...basics, title: 'Renamed', registrationLimit: 50 },
+        author.cookie,
+      ),
+      200,
+    );
+    await json(
+      await request(
+        `/quizzes/${quiz.id}`,
+        'PATCH',
+        { ...basics, registrationLimit: 51 },
+        author.cookie,
+      ),
+      422,
+    );
+
     if (!storage) return;
     const png = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF9kAAAAASUVORK5CYII=',

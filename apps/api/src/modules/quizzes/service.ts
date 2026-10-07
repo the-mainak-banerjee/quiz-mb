@@ -11,10 +11,11 @@ import {
   QUIZ_STATUS,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
-import type {
-  PublicQuizRow,
-  QuizzesRepository,
-  QuizRow,
+import {
+  participantLimit,
+  type PublicQuizRow,
+  type QuizzesRepository,
+  type QuizRow,
 } from './repository.js';
 import type { MediaService } from '../media/service.js';
 import { limitsFor } from '../../config/account-limits.js';
@@ -119,6 +120,8 @@ export class QuizzesService {
     // storage the quiz is still created and the cover reports failure.
     const id = randomUUID();
     const limits = await limitsFor(userId);
+    if (quiz.registrationLimit > limits.participantsPerSession)
+      throw participantLimit(limits.participantsPerSession);
     const asset =
       cover && this.media.available
         ? this.media.pendingAsset(userId, id, MEDIA_PURPOSE.QUIZ_COVER, cover)
@@ -153,7 +156,11 @@ export class QuizzesService {
       userId,
       MEDIA_PURPOSE.QUIZ_COVER,
     );
-    const row = await this.repository.update(id, userId, input, verified);
+    const { participantsPerSession } = await limitsFor(userId);
+    const row = await this.repository.update(id, userId, input, {
+      coverVerified: verified,
+      maxParticipants: participantsPerSession,
+    });
     // A replaced or removed cover frees its quota right away.
     await this.media.releaseDetached(id);
     return this.dto(row);

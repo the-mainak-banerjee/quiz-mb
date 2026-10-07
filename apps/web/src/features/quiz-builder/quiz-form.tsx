@@ -3,6 +3,7 @@ import { useState, useImperativeHandle, type Ref } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
+  ACCOUNT_LIMITS,
   quizSchema,
   type QuizInput,
   type QuizDto,
@@ -25,7 +26,8 @@ export function quizValues(q?: QuizDto): QuizInput {
   return {
     title: q?.title ?? '',
     description: q?.description ?? '',
-    registrationLimit: q?.registrationLimit ?? 50,
+    registrationLimit:
+      q?.registrationLimit ?? ACCOUNT_LIMITS.participantsPerSession,
     defaultQuestionDurationSeconds: q?.defaultQuestionDurationSeconds ?? 20,
     allowLateJoin: q?.allowLateJoin ?? true,
     coverMediaId: q?.coverMediaId ?? null,
@@ -194,11 +196,11 @@ export function QuizForm({
                 id="registration-limit"
                 label="Maximum participants"
                 required
-                {...(initial && initial.status !== QUIZ_STATUS.DRAFT
-                  ? {
-                      hint: `${initial.registrationCount} registered so far · the limit cannot go below this.`,
-                    }
-                  : {})}
+                hint={
+                  initial && initial.status !== QUIZ_STATUS.DRAFT
+                    ? `Up to ${ACCOUNT_LIMITS.participantsPerSession} · ${initial.registrationCount} registered so far, the limit cannot go below this.`
+                    : `Up to ${ACCOUNT_LIMITS.participantsPerSession} participants.`
+                }
                 error={errors.registrationLimit?.message}
               >
                 <div className="relative">
@@ -211,6 +213,7 @@ export function QuizForm({
                     id="registration-limit"
                     type="number"
                     min={1}
+                    max={ACCOUNT_LIMITS.participantsPerSession}
                     required
                     className="pl-space-xl"
                     {...register('registrationLimit', { valueAsNumber: true })}

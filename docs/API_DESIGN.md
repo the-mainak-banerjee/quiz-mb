@@ -473,7 +473,7 @@ Success returns:
 
 `coverUpload` is null when no cover was requested, image storage is unavailable or the cover was refused by the account's image limits; the quiz is created either way. `coverRefusal` then carries the refusal message (for example storage full), otherwise null.
 
-Creation limits (per account, security design 1.5): 5 quiz creations per minute (`429 RATE_LIMITED`) and 100 per rolling 24 hours (`429 LIMIT_REACHED` with `Retry-After`). Deleting a quiz never gives a creation back. A quiz holds at most 25 questions (`422 VALIDATION_ERROR` when adding more).
+Creation limits (per account, security design 1.5): 5 quiz creations per minute (`429 RATE_LIMITED`) and 100 per rolling 24 hours (`429 LIMIT_REACHED` with `Retry-After`). Deleting a quiz never gives a creation back. A quiz holds at most 25 questions (`422 VALIDATION_ERROR` when adding more). The registration limit (one live session's capacity) is at most 30 participants (`422 VALIDATION_ERROR` on `registrationLimit`, on create and update); a quiz created before this limit keeps a higher value but cannot raise it.
 
 ## 8.2 Get Host Quiz
 
