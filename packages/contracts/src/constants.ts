@@ -127,6 +127,8 @@ export const ERROR_CODE = {
   /** The verification or reset ticket expired; start the step again. */
   AUTH_FLOW_EXPIRED: 'AUTH_FLOW_EXPIRED',
   // Authoring and media
+  /** An account limit (ACCOUNT_LIMITS) is reached. */
+  LIMIT_REACHED: 'LIMIT_REACHED',
   QUIZ_LOCKED: 'QUIZ_LOCKED',
   INVALID_QUIZ_STATE: 'INVALID_QUIZ_STATE',
   INVALID_MEDIA: 'INVALID_MEDIA',

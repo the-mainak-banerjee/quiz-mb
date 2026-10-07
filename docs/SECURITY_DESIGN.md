@@ -140,8 +140,8 @@ Revoking sockets can interrupt a live quiz for that account. That is accepted: i
 | Abuse                                         | Protection                                                                     | Status                                    |
 | --------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------- |
 | Read or change another host's project         | Ownership check on every project request                                       | **Implemented**                           |
-| Create unlimited projects                     | Fixed limit of **3 projects per account**, checked atomically on create        | **To build**                              |
-| Create projects by script | 5 project creations per minute per account | **To build** |
+| Create unlimited projects                     | Fixed limit of **3 projects per account**, checked atomically on create        | **Implemented** — `ACCOUNT_LIMITS.projects`, counted under a lock on the owner's row; deleting a project frees a slot |
+| Create projects by script | 5 project creations per minute per account | **Implemented** |
 | Huge project lists                            | Cursor pagination with a server-enforced page size                             | **Implemented** (25 per page)             |
 | Oversized names or descriptions               | Length limits (60 / 240 characters)                                            | **Implemented**                           |
 | Deleting a project with a live quiz           | Only draft content is deleted; live and completed quizzes are protected        | **Implemented**                           |

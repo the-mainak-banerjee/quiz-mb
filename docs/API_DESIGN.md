@@ -206,6 +206,7 @@ UNAUTHENTICATED → 401
 FORBIDDEN → 403
 NOT_FOUND → 404
 CONFLICT → 409
+LIMIT_REACHED → 409
 QUIZ_FULL → 409
 RATE_LIMITED → 429
 INTERNAL_ERROR → 500
@@ -385,6 +386,8 @@ POST /api/projects
   "coverMediaId": null
 }
 ```
+
+An account can own at most `ACCOUNT_LIMITS.projects` (3) projects; beyond that the request is refused with `409 LIMIT_REACHED`. The count is taken under a lock on the owner's row, so simultaneous requests cannot pass it, and deleting a project frees a slot. Creations are also rate limited to 5 per minute per account (`429 RATE_LIMITED`).
 
 ## 7.3 Get Project
 

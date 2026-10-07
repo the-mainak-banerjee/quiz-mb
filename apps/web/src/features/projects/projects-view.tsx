@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import {
+  ACCOUNT_LIMITS,
   ACTIVE_QUIZ_STATUSES,
   QUIZ_STATUS,
   type ProjectDto,
@@ -153,6 +154,8 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
     );
   }
 
+  // The API enforces the limit; this explains it before anyone tries.
+  const atLimit = items.length >= ACCOUNT_LIMITS.projects;
   const totalQuizzes = items.reduce(
     (total, project) => total + project.quizCount,
     0,
@@ -177,12 +180,21 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
             recurring live sessions.
           </Text>
         </div>
-        <Button
-          icon={<Plus size={18} aria-hidden="true" />}
-          onClick={() => setCreateOpen(true)}
-        >
-          Create project
-        </Button>
+        <div className="flex flex-col items-start gap-space-xs lg:items-end">
+          <Button
+            icon={<Plus size={18} aria-hidden="true" />}
+            disabled={atLimit}
+            onClick={() => setCreateOpen(true)}
+          >
+            Create project
+          </Button>
+          {atLimit && (
+            <Text variant="caption" tone="secondary">
+              You can have up to {ACCOUNT_LIMITS.projects} projects. Delete one
+              to create a new project.
+            </Text>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-space-sm lg:flex-row lg:items-center lg:justify-between">
@@ -258,6 +270,7 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
           ))}
           <Button
             variant="outline"
+            disabled={atLimit}
             icon={
               <FolderPlus
                 className="text-accent"
@@ -293,7 +306,9 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
           categorized.
         </Text>
         <div className="flex gap-space-md">
-          <Text variant="label">{items.length} total projects</Text>
+          <Text variant="label">
+            {items.length} of {ACCOUNT_LIMITS.projects} projects
+          </Text>
           <Text variant="label">{totalQuizzes} enclosed quizzes</Text>
         </div>
       </div>

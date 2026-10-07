@@ -133,6 +133,14 @@ export const AUTHORING_LIMITS = {
   duration: 3600,
   participants: 10000,
 } as const;
+/**
+ * Plan-shaped limits. Before payments (security design Phase 1) every account
+ * has this one fixed set; Phase 2 replaces it with a per-plan lookup.
+ */
+export const ACCOUNT_LIMITS = {
+  /** Projects an account can own at once; deleting one frees a slot. */
+  projects: 3,
+} as const;
 /** Protective bound for a descriptive answer; not a product rule. */
 export const ANSWER_LIMITS = { text: 2000 } as const;
 export const MEDIA_LIMITS = {

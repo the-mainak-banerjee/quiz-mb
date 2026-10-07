@@ -35,6 +35,7 @@ export const RATE_LIMITS = {
     limit: 10,
     windowSeconds: 60 * 60,
   },
+  createProject: { scope: 'create-project', limit: 5, windowSeconds: 60 },
   register: { scope: 'register', limit: 20, windowSeconds: 60 },
   uploadRequest: { scope: 'upload-request', limit: 30, windowSeconds: 10 * 60 },
   openLobby: { scope: 'open-lobby', limit: 10, windowSeconds: 60 },

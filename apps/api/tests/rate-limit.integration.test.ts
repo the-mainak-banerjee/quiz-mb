@@ -38,6 +38,11 @@ test(
       ...RATE_LIMITS,
       signupIp: { scope: `test-signup-${run}`, limit: 1, windowSeconds: 60 },
       register: { scope: `test-register-${run}`, limit: 1, windowSeconds: 60 },
+      createProject: {
+        scope: `test-create-project-${run}`,
+        limit: 1,
+        windowSeconds: 60,
+      },
     };
     const origin = 'http://localhost:3000';
     const server = createApp({
@@ -55,6 +60,9 @@ test(
     const emails: string[] = [];
     t.after(async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      await db.project.deleteMany({
+        where: { owner: { email: { in: emails } } },
+      });
       await db.user.deleteMany({ where: { email: { in: emails } } });
       await db.$disconnect();
       await redis.quit();
@@ -120,6 +128,11 @@ test(
       post(`/quizzes/${randomUUID()}/register`, {}, { cookie });
     assert.equal((await register()).status, 404);
     await assertLimited(await register(), 'second registration request');
+    // Project creation by script (security design 1.4).
+    const createProject = () =>
+      post('/projects', { name: 'Rate project', description: '' }, { cookie });
+    assert.equal((await createProject()).status, 201);
+    await assertLimited(await createProject(), 'second project this minute');
 
     // A new window starts over (real Redis, one-second window).
     const reset = { scope: `test-reset-${run}`, limit: 1, windowSeconds: 1 };

@@ -72,6 +72,7 @@ export function authRateLimits(limiter: RateLimiter, rules: RateLimits) {
 export function userRateLimits(limiter: RateLimiter, rules: RateLimits) {
   const router = Router();
   const byUser = (rule: RateRule) => limit(limiter, [rule, BY.user]);
+  router.post('/projects', byUser(rules.createProject));
   router.post('/quizzes/:id/register', byUser(rules.register));
   router.post('/media/upload-request', byUser(rules.uploadRequest));
   router.post('/quizzes/:id/live-session', byUser(rules.openLobby));
