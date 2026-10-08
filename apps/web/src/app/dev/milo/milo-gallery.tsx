@@ -33,6 +33,21 @@ const POSES: { pose: MiloPose; use: string; motion: string }[] = [
     use: 'Quiz completed (host and participant)',
     motion: 'Jumps, cheers, confetti',
   },
+  {
+    pose: 'search',
+    use: 'No search results (projects and quizzes)',
+    motion: 'Holds a magnifying glass, the lens glints, blinks',
+  },
+  {
+    pose: 'waiting',
+    use: 'Waiting for the host (participant lobby)',
+    motion: 'Reads a book in round glasses, turns a page',
+  },
+  {
+    pose: 'greet',
+    use: 'First-time welcome',
+    motion: 'Opens both arms, a heart floats',
+  },
 ];
 
 const LIVE_SCREENS = [

@@ -9,7 +9,6 @@ import {
   History,
   Layers3,
   Plus,
-  Search,
   Sparkles,
 } from 'lucide-react';
 import {
@@ -19,7 +18,8 @@ import {
   type ProjectDto,
   type QuizSummaryDto,
 } from '@quizmb/contracts';
-import { Badge, Button, Input, Surface, Text } from '@/components/ui';
+import { Badge, Button, SearchInput, Surface, Text } from '@/components/ui';
+import { MiloEmpty } from '@/components/milo/milo-states';
 import { EmptyStateIllustration } from '@/components/empty-state-illustration';
 import { Modal } from '@/components/ui/modal';
 import { NavigationItem } from '@/components/workspace/navigation-item';
@@ -162,6 +162,12 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
     (total, project) => total + project.quizCount,
     0,
   );
+  const search = query.trim().toLowerCase();
+  const visible = search
+    ? items.filter((project) =>
+        `${project.name} ${project.description}`.toLowerCase().includes(search),
+      )
+    : items;
 
   return (
     <>
@@ -221,26 +227,19 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
       </div>
 
       <div className="flex flex-col gap-space-sm lg:flex-row lg:items-center lg:justify-between">
-        <label className="relative block w-full lg:max-w-xl">
-          <Search
-            className="pointer-events-none absolute left-control-x top-1/2 -translate-y-1/2 text-text-secondary"
-            size={18}
-            aria-hidden="true"
-          />
-          <Input
-            type="search"
+        <div className="w-full lg:max-w-xl">
+          <SearchInput
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onValueChange={setQuery}
             placeholder="Search projects by title or description…"
             aria-label="Search projects"
-            className="pl-space-xl"
           />
-        </label>
+        </div>
       </div>
 
-      {initial.length ? (
+      {visible.length ? (
         <div className="grid gap-gutter md:grid-cols-2">
-          {initial.map((project) => (
+          {visible.map((project) => (
             <Surface
               key={project.id}
               as="article"
@@ -308,13 +307,16 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
           </Button>
         </div>
       ) : (
-        <Surface className="text-center">
-          <Text as="h2" variant="section-heading">
-            No matching projects
-          </Text>
-          <Text tone="secondary" className="mt-space-xs">
-            Try a different project name or description.
-          </Text>
+        <Surface>
+          <MiloEmpty
+            pose="search"
+            title="No matching projects"
+            description={`Nothing matches “${query.trim()}”. Try a different project name or description.`}
+          >
+            <Button variant="secondary" onClick={() => setQuery('')}>
+              Clear search
+            </Button>
+          </MiloEmpty>
         </Surface>
       )}
 

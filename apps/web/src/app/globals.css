@@ -38,6 +38,17 @@ body {
 }
 
 @layer base {
+  /* Anything clickable shows the pointer; a disabled button keeps the
+     normal arrow (never "not allowed"). */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  summary {
+    cursor: pointer;
+  }
+  button:disabled,
+  [role='button'][aria-disabled='true'] {
+    cursor: default;
+  }
   :focus-visible {
     outline: var(--focus-width) solid var(--color-accent);
     outline-offset: var(--focus-offset);
