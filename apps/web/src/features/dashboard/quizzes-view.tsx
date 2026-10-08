@@ -33,7 +33,7 @@ export function QuizzesView({ quizzes }: { quizzes: Quiz[] }) {
           Create quiz
         </NavigationItem>
       </div>
-      <QuizList quizzes={quizzes} showViewAll={false} />
+      <QuizList quizzes={quizzes} showViewAll={false} displayHeaders={false} />
     </>
   );
 }

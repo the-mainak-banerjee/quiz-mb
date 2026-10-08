@@ -2,7 +2,18 @@
 import { useId } from 'react';
 import { cn } from '@/lib/utils';
 
-export type MiloPose = 'welcome' | 'loading' | 'error' | 'celebrate';
+export type MiloPose =
+  | 'welcome'
+  | 'loading'
+  | 'error'
+  | 'celebrate'
+  | 'message'
+  /** No search results: peering through a magnifying glass. */
+  | 'search'
+  /** Waiting for the host: glasses on, reading a book. */
+  | 'waiting'
+  /** First-time welcome: both arms open in a friendly hello. */
+  | 'greet';
 
 const INK = 'var(--color-milo-ink)';
 const SPARK = 'var(--color-milo-spark)';
@@ -140,6 +151,49 @@ export function Milo({
         </>
       )}
 
+      {pose === 'message' && (
+        <>
+          {ground()}
+          <g className="milo-bob">
+            {feet}
+            {egg}
+            {head}
+            {eyes([92, 116], [130, 116])}
+            <path d="M80 99q8-7 17-2M121 94q8-5 16 1" {...stroke} />
+            <path d="M100 137q10 9 20 0" {...stroke} />
+            <g transform="rotate(-8 110 170)">
+              <rect
+                x="66"
+                y="150"
+                width="88"
+                height="48"
+                rx="8"
+                fill="var(--color-surface)"
+                stroke="var(--color-milo-limb)"
+                strokeWidth="3"
+              />
+              <path
+                d="m68 154 42 28 42-28M68 194l25-20M152 194l-25-20"
+                fill="none"
+                stroke="var(--color-milo-limb)"
+                strokeWidth="3"
+                strokeLinejoin="round"
+              />
+            </g>
+            <ellipse cx="65" cy="171" rx="13" ry="11" fill={limb} />
+            <ellipse cx="155" cy="159" rx="13" ry="11" fill={limb} />
+            <g
+              className="milo-spark"
+              stroke={SPARK}
+              strokeWidth="4"
+              strokeLinecap="round"
+            >
+              <path d="m182 138 12-7m-14-5 6-12m-3 38 13 2" />
+            </g>
+          </g>
+        </>
+      )}
+
       {pose === 'loading' && (
         <>
           {ground()}
@@ -206,6 +260,191 @@ export function Milo({
             {eyes([92, 118], [130, 118])}
             <path d="M80 102q9 3 16-5M123 97q8 8 16 5" {...stroke} />
             <path d="M101 143q9-8 18 0" {...stroke} />
+          </g>
+        </>
+      )}
+
+      {pose === 'search' && (
+        <>
+          {ground()}
+          <g className="milo-bob">
+            {feet}
+            <ellipse
+              cx="52"
+              cy="156"
+              rx="12"
+              ry="22"
+              transform="rotate(18 52 156)"
+              fill={limb}
+            />
+            {egg}
+            {head}
+            {/* The near eye; the far one is seen through the lens. */}
+            <g className="milo-blink">
+              <ellipse cx="90" cy="118" rx="7.5" ry="10" fill={INK} />
+              <circle cx="92.5" cy="113.5" r="2.4" fill="#fff" />
+            </g>
+            <path d="M78 99q8-8 17-3" {...stroke} />
+            <ellipse cx="106" cy="142" rx="4.5" ry="5.5" fill={INK} />
+            {/* The glass stays over the eye; only its glint moves. */}
+            <g>
+              <path
+                d="M152 128l20 22"
+                stroke="var(--color-milo-limb)"
+                strokeWidth="9"
+                strokeLinecap="round"
+              />
+              <circle
+                cx="136"
+                cy="112"
+                r="23"
+                fill="var(--color-surface)"
+                fillOpacity="0.55"
+                stroke="var(--color-milo-limb)"
+                strokeWidth="5.5"
+              />
+              {/* Magnified eye behind the glass. */}
+              <g className="milo-blink">
+                <ellipse cx="135" cy="114" rx="10" ry="13" fill={INK} />
+                <circle cx="138.5" cy="108" r="3.2" fill="#fff" />
+              </g>
+              <path
+                className="milo-glint"
+                d="M122 101q4-6 10-7"
+                stroke="#fff"
+                strokeWidth="3"
+                strokeLinecap="round"
+                fill="none"
+              />
+              <ellipse cx="174" cy="153" rx="13" ry="11" fill={limb} />
+            </g>
+            <g
+              className="milo-spark"
+              stroke={SPARK}
+              strokeWidth="4"
+              strokeLinecap="round"
+            >
+              <path d="m176 84 10-7m-4 22 12-2m-24-31 3-12" />
+            </g>
+          </g>
+        </>
+      )}
+
+      {pose === 'waiting' && (
+        <>
+          {ground()}
+          <g className="milo-bob">
+            {feet}
+            {egg}
+            {head}
+            {/* Reading while the host gets ready: eyes down on the page. */}
+            {eyes([92, 120], [130, 120])}
+            {/* Round glasses. */}
+            <g {...stroke} strokeWidth={3}>
+              <circle cx="92" cy="118" r="14" />
+              <circle cx="130" cy="118" r="14" />
+              <path d="M106 116q5-4 10 0M78 114l-10-4M144 114l10-4" />
+            </g>
+            <path d="M101 140q9 7 18 0" {...stroke} />
+            {/* An open book held in both hands. */}
+            <g transform="rotate(-4 110 172)">
+              <path
+                d="M110 156c-12-7-30-8-44-4v38c14-4 32-3 44 4Z"
+                fill="var(--color-surface)"
+                stroke="var(--color-milo-limb)"
+                strokeWidth="3"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M110 156c12-7 30-8 44-4v38c-14-4-32-3-44 4Z"
+                fill="var(--color-surface)"
+                stroke="var(--color-milo-limb)"
+                strokeWidth="3"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M76 164q14-3 26 1M76 173q14-3 26 1M76 182q10-2 18 0M118 165q12-4 26-1M118 174q12-4 26-1"
+                stroke="var(--color-milo-bobble-shade)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                fill="none"
+              />
+              {/* A page turning now and then. */}
+              <path
+                className="milo-page"
+                d="M110 156c10-5 22-6 32-4v36c-10-2-22-1-32 4Z"
+                fill="var(--color-surface-low)"
+                stroke="var(--color-milo-limb)"
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M110 156v38"
+                stroke="var(--color-milo-limb)"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+            </g>
+            <ellipse cx="64" cy="176" rx="12" ry="11" fill={limb} />
+            <ellipse cx="156" cy="176" rx="12" ry="11" fill={limb} />
+            <g
+              className="milo-spark"
+              stroke={SPARK}
+              strokeWidth="4"
+              strokeLinecap="round"
+            >
+              <path d="m180 132 11-6m-13-8 6-11m-2 36 12 2" />
+            </g>
+          </g>
+        </>
+      )}
+
+      {pose === 'greet' && (
+        <>
+          {ground()}
+          <path
+            className="milo-heart"
+            d="M180 40c-3-6-13-5-13 3 0 6 8 11 13 15 5-4 13-9 13-15 0-8-10-9-13-3Z"
+            fill={SPARK}
+          />
+          <g className="milo-bob">
+            {feet}
+            <g className="milo-greet-left">
+              <ellipse
+                cx="42"
+                cy="118"
+                rx="12.5"
+                ry="25"
+                transform="rotate(-48 42 118)"
+                fill={limb}
+              />
+            </g>
+            <g className="milo-greet-right">
+              <ellipse
+                cx="178"
+                cy="118"
+                rx="12.5"
+                ry="25"
+                transform="rotate(48 178 118)"
+                fill={limb}
+              />
+            </g>
+            {egg}
+            {head}
+            <path
+              d="M84 118q8-11 16 0M122 118q8-11 16 0"
+              {...stroke}
+              strokeWidth={3.6}
+            />
+            <path d="M98 134q12 15 24 0Z" fill={INK} />
+            <g
+              className="milo-spark"
+              stroke={SPARK}
+              strokeWidth="4.5"
+              strokeLinecap="round"
+            >
+              <path d="M16 96 6 90M22 80l-6-9M204 104l10-5" />
+            </g>
           </g>
         </>
       )}

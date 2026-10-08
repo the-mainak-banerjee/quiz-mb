@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import {
   AUTH_RESULT_STATUS,
+  changePasswordSchema,
+  deleteAccountSchema,
   HTTP_HEADER,
   passwordResetCompleteSchema,
   passwordResetRequestSchema,
@@ -119,6 +121,23 @@ export function authRoutes(
     );
     const { name } = validate(profileSchema, req.body);
     res.json({ success: true, data: await users.updateName(user.id, name) });
+  });
+  // Settings. This device stays signed in; every other one is signed out.
+  router.post('/me/password', async (req, res) => {
+    await auth.changePassword(
+      cookies.read(req).access,
+      validate(changePasswordSchema, req.body),
+    );
+    res.json({ success: true, data: {} });
+  });
+  // POST with a body (the password): DELETE bodies are not reliably sent.
+  router.post('/me/delete', async (req, res) => {
+    const { password } = validate(deleteAccountSchema, req.body);
+    const { user } = await auth.authenticateSession(cookies.read(req).access);
+    await auth.confirmPassword(user, password, 'password');
+    await users.deleteAccount(user.id);
+    cookies.clear(res);
+    res.status(204).end();
   });
   return router;
 }

@@ -17,6 +17,7 @@ Import primitives from `@/components/ui`. Tokens live in `src/styles/tokens.css`
 - `Avatar`: initials avatar from `name`; pass `decorative` when the name is already visible beside it; `size="small" | "medium" | "large"` (28/32/40px), `tone="accent" | "neutral" | "muted"`, and optional presence `status="positive" | "neutral"`. The name is the accessible label.
 - `SegmentedControl`: controlled mutually exclusive filter buttons (`options`, `value`, `onValueChange`, required group `label`). Use it for local presentation filters, not navigation.
 - `Callout`: quiet tinted note with an optional decorative icon, for guidance or state explanations inside a card.
+- `Accordion`, `AccordionItem`, `AccordionTrigger`, `AccordionContent`: Radix-backed compound accordion, styled with QuizMB tokens and Button/Text. Supports single or multiple open items, keyboard navigation, disabled items, and controlled state. Use unique item values within each accordion.
 
 All primitives accept className for composition. Use semantic utilities for customization; do not introduce raw palette values or replace the focus treatment. Components remain server-compatible except FormField. Interactive Button handlers must be passed from a client component.
 

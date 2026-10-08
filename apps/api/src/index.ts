@@ -64,7 +64,7 @@ export default createApp({
       events,
     },
   ),
-  users: new UsersService(database),
+  users: new UsersService(database, mediaMaintenance, events),
   production: env.NODE_ENV === NODE_ENV.PRODUCTION,
   database,
   storage,

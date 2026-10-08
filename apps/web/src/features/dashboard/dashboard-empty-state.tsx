@@ -1,5 +1,6 @@
-import { ClipboardCheck, SquarePen, Activity, ShieldCheck } from 'lucide-react';
+import { SquarePen, Activity, ShieldCheck } from 'lucide-react';
 import { Surface, Text } from '@/components/ui';
+import { EmptyStateIllustration } from '@/components/empty-state-illustration';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
 
@@ -10,13 +11,7 @@ export function DashboardEmptyState() {
       aria-labelledby="dashboard-empty-heading"
       className="flex flex-col items-center gap-space-md px-space-md py-space-xl text-center md:p-space-2xl"
     >
-      <div
-        aria-hidden="true"
-        className="relative rounded-card bg-surface-low p-space-md text-accent shadow-card"
-      >
-        <ClipboardCheck className="size-control" />
-        <span className="ds-live-dot absolute bottom-0 right-0 size-space-sm rounded-pill bg-accent" />
-      </div>
+      <EmptyStateIllustration kind="quiz" />
       <div className="space-y-space-xs md:w-2/3 lg:w-1/2">
         <Text as="h2" id="dashboard-empty-heading" variant="section-heading">
           No quizzes hosted yet

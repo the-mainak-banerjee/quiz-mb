@@ -13,6 +13,8 @@ export const API_ROUTES = {
     PASSWORD_RESET_VERIFY: `${API_PREFIX}/auth/password-reset/verify`,
     PASSWORD_RESET_COMPLETE: `${API_PREFIX}/auth/password-reset/complete`,
     ME: `${API_PREFIX}/me`,
+    CHANGE_PASSWORD: `${API_PREFIX}/me/password`,
+    DELETE_ACCOUNT: `${API_PREFIX}/me/delete`,
   },
   PROJECTS: {
     LIST: `${API_PREFIX}/projects`,

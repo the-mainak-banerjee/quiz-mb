@@ -1,10 +1,9 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Search } from 'lucide-react';
-import { Button, Input, Text } from '@/components/ui';
-import { VisuallyHidden } from '@/components/visually-hidden';
-import { cn } from '@/lib/utils';
+import { ArrowRight } from 'lucide-react';
+import { Button, SearchInput, Surface, Text } from '@/components/ui';
+import { MiloEmpty } from '@/components/milo/milo-states';
 import { QuizCard } from './quiz-card';
 import { EmptyState } from './empty-state';
 import { NavigationItem } from '@/components/workspace/navigation-item';
@@ -15,20 +14,17 @@ import { DeleteDraftQuizButton } from '@/features/quiz-builder/delete-draft-quiz
 export function QuizList({
   quizzes,
   showViewAll = true,
+  displayHeaders = true,
 }: {
   quizzes: Quiz[];
   showViewAll?: boolean;
+  displayHeaders?: boolean;
 }) {
   const router = useRouter();
   const [filter, setFilter] = useState<'all' | 'host' | 'participant'>('all');
   /** Deleted here; hidden until the refreshed page data arrives. */
   const [deleted, setDeleted] = useState<string[]>([]);
   const [query, setQuery] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (searchOpen) searchInputRef.current?.focus();
-  }, [searchOpen]);
   const filters = [
     {
       value: 'all',
@@ -58,14 +54,16 @@ export function QuizList({
       className="scroll-mt-space-2xl space-y-space-md"
     >
       <div className="flex items-start justify-between gap-space-sm">
-        <div>
-          <Text as="h2" id="quizzes-heading" variant="section-heading">
-            My quizzes
-          </Text>
-          <Text variant="caption" tone="secondary">
-            Every quiz you host or participate in, across all statuses
-          </Text>
-        </div>
+        {displayHeaders && (
+          <div>
+            <Text as="h2" id="quizzes-heading" variant="section-heading">
+              My quizzes
+            </Text>
+            <Text variant="caption" tone="secondary">
+              Every quiz you host or participate in, across all statuses
+            </Text>
+          </div>
+        )}
         {showViewAll && (
           <NavigationItem
             href={APP_LINKS.WORKSPACE.QUIZZES}
@@ -78,56 +76,14 @@ export function QuizList({
         )}
       </div>
       <div className="flex flex-col gap-space-sm md:flex-row md:items-center md:justify-between">
-        <div className="relative h-control-large w-full min-w-0 md:flex-1">
-          <Button
-            variant="ghost"
-            icon={<Search size={18} aria-hidden="true" />}
-            aria-expanded={searchOpen}
-            aria-controls="quiz-search"
-            onClick={() => setSearchOpen(true)}
-            className={cn(
-              'absolute inset-y-0 left-0 transition-[opacity,transform] duration-(--motion-duration) ease-out motion-reduce:transition-none',
-              searchOpen
-                ? 'pointer-events-none -translate-y-space-xs opacity-0'
-                : 'translate-y-0 opacity-100',
-            )}
-          >
-            Search quizzes
-          </Button>
-          <div
-            id="quiz-search"
-            role="search"
-            aria-hidden={!searchOpen}
-            className={cn(
-              'absolute inset-0 flex min-w-0 items-center gap-space-xs transition-[opacity,transform] duration-(--motion-duration) ease-out motion-reduce:transition-none',
-              searchOpen
-                ? 'translate-y-0 opacity-100'
-                : 'pointer-events-none translate-y-space-xs opacity-0',
-            )}
-          >
-            <label htmlFor="dashboard-query">
-              <VisuallyHidden>Search by quiz or project name</VisuallyHidden>
-            </label>
-            <Input
-              ref={searchInputRef}
-              id="dashboard-query"
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Find a quiz…"
-              tabIndex={searchOpen ? 0 : -1}
-            />
-            <Button
-              variant="ghost"
-              tabIndex={searchOpen ? 0 : -1}
-              onClick={() => {
-                setQuery('');
-                setSearchOpen(false);
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
+        <div role="search" className="w-full min-w-0 md:max-w-xl md:flex-1">
+          <SearchInput
+            id="dashboard-query"
+            value={query}
+            onValueChange={setQuery}
+            placeholder="Search quizzes by title or project…"
+            aria-label="Search quizzes"
+          />
         </div>
         <div
           role="group"
@@ -190,15 +146,25 @@ export function QuizList({
             );
           })}
         </div>
+      ) : quizzes.length ? (
+        <Surface>
+          <MiloEmpty
+            pose="search"
+            title="No matching quizzes"
+            description="Try another search or switch your role filter."
+          >
+            {query.trim() && (
+              <Button variant="secondary" onClick={() => setQuery('')}>
+                Clear search
+              </Button>
+            )}
+          </MiloEmpty>
+        </Surface>
       ) : (
         <EmptyState
-          title={quizzes.length ? 'No matching quizzes' : 'No quizzes yet'}
-          description={
-            quizzes.length
-              ? 'Try another search or switch your role filter.'
-              : 'Create a quiz or register for one to see it here.'
-          }
-          create={!quizzes.length}
+          title="No quizzes yet"
+          description="Create a quiz or register for one to see it here."
+          create
         />
       )}
     </section>

@@ -34,3 +34,6 @@ export const REQUEST_PATH_HEADER = 'x-quizmb-path';
 
 /** Query flag on the login page: the session ended and could not be renewed. */
 export const SESSION_ENDED_PARAM = 'expired';
+
+/** Query flag on the login page: the account was just deleted. */
+export const ACCOUNT_DELETED_PARAM = 'deleted';

@@ -35,6 +35,13 @@ export const RATE_LIMITS = {
     limit: 10,
     windowSeconds: 60 * 60,
   },
+  /** Settings password change and account deletion, per client IP. Wrong
+   * passwords are also paused per account by LOGIN_PAUSE. */
+  accountChangeIp: {
+    scope: 'account-change-ip',
+    limit: 20,
+    windowSeconds: 15 * 60,
+  },
   createProject: { scope: 'create-project', limit: 5, windowSeconds: 60 },
   createQuiz: { scope: 'create-quiz', limit: 5, windowSeconds: 60 },
   /** Register and unregister share one budget per account. */

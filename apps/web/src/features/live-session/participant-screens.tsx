@@ -9,6 +9,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Avatar, Badge, Callout, Surface, Text } from '@/components/ui';
+import { MiloStage } from '@/components/milo/milo-states';
 import { LocalDateTime } from '@/components/local-date-time';
 import { cn, pluralize } from '@/lib/utils';
 import { ActionButton } from './action-button';
@@ -68,6 +69,7 @@ export function ParticipantLobby({
   return (
     <ParticipantStage glow={<AmbientGlow placement="top-center" />}>
       <div className="flex w-full max-w-2xl flex-col items-center text-center">
+        <MiloStage pose="waiting" className="mb-space-sm w-28 md:w-32" />
         <Badge
           variant="live"
           label="Connected to live room"

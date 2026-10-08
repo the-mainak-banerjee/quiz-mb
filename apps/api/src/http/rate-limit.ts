@@ -65,6 +65,8 @@ export function authRateLimits(limiter: RateLimiter, rules: RateLimits) {
     '/auth/password-reset/complete',
     limit(limiter, [rules.passwordResetCompleteIp, BY.ip]),
   );
+  router.post('/me/password', limit(limiter, [rules.accountChangeIp, BY.ip]));
+  router.post('/me/delete', limit(limiter, [rules.accountChangeIp, BY.ip]));
   return router;
 }
 

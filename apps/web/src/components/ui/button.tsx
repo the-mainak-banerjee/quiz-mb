@@ -40,7 +40,7 @@ export function Button({
       {...props}
       type={type}
       className={cn(
-        'ds-focus ds-control-motion inline-flex shrink-0 cursor-pointer items-center justify-center gap-space-xs rounded-control px-control-x text-label disabled:cursor-not-allowed disabled:opacity-(--disabled-opacity)',
+        'ds-focus ds-control-motion inline-flex shrink-0 cursor-pointer items-center justify-center gap-space-xs rounded-control px-control-x text-label disabled:cursor-default disabled:opacity-(--disabled-opacity)',
         size === 'hero' ? 'h-control-large' : 'h-control',
         variants[variant],
         className,

@@ -6,12 +6,9 @@ import {
   ArrowRight,
   Clock3,
   FolderOpen,
-  FolderPlus,
   History,
   Layers3,
-  ListChecks,
   Plus,
-  Search,
   Sparkles,
 } from 'lucide-react';
 import {
@@ -21,7 +18,9 @@ import {
   type ProjectDto,
   type QuizSummaryDto,
 } from '@quizmb/contracts';
-import { Button, Input, Surface, Text } from '@/components/ui';
+import { Badge, Button, SearchInput, Surface, Text } from '@/components/ui';
+import { MiloEmpty } from '@/components/milo/milo-states';
+import { EmptyStateIllustration } from '@/components/empty-state-illustration';
 import { Modal } from '@/components/ui/modal';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
@@ -32,6 +31,9 @@ import { DeleteDraftQuizButton } from '@/features/quiz-builder/delete-draft-quiz
 import { api } from '@/lib/api/browser';
 import { apiError } from '@/lib/api/client';
 import { API_ROUTES } from '@/lib/api/routes';
+import { pluralize } from '@/lib/utils';
+
+const LIMIT_NOTE_ID = 'project-limit-note';
 
 type QuizFilter = 'all' | 'scheduled' | 'draft' | 'completed';
 
@@ -65,9 +67,7 @@ function EmptyProjects({ onCreate }: { onCreate: () => void }) {
 
   return (
     <section className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-space-xl text-center">
-      <div className="flex size-control-large items-center justify-center rounded-card bg-action-secondary text-accent">
-        <FolderPlus size={24} aria-hidden="true" />
-      </div>
+      <EmptyStateIllustration kind="project" />
       <Text as="h1" variant="page-title" className="mt-space-md">
         Create your first project
       </Text>
@@ -156,10 +156,18 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
 
   // The API enforces the limit; this explains it before anyone tries.
   const atLimit = items.length >= ACCOUNT_LIMITS.projects;
+  const remaining = Math.max(ACCOUNT_LIMITS.projects - items.length, 0);
+  // Counts come from all loaded projects, never the search box.
   const totalQuizzes = items.reduce(
     (total, project) => total + project.quizCount,
     0,
   );
+  const search = query.trim().toLowerCase();
+  const visible = search
+    ? items.filter((project) =>
+        `${project.name} ${project.description}`.toLowerCase().includes(search),
+      )
+    : items;
 
   return (
     <>
@@ -172,52 +180,66 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
             <FolderOpen size={16} aria-hidden="true" />
             Organize &amp; categorize
           </Text>
-          <Text as="h1" variant="page-title">
-            Projects
-          </Text>
+          <div className="flex flex-wrap items-center gap-x-space-sm gap-y-space-xs">
+            <Text as="h1" variant="page-title">
+              Projects
+            </Text>
+            <Badge
+              variant="draft"
+              label={`${totalQuizzes} ${pluralize(totalQuizzes, 'quiz', 'quizzes')} total`}
+            />
+          </div>
           <Text tone="secondary" className="max-w-2xl">
             Lightweight containers for your knowledge checks, cohorts, and
             recurring live sessions.
           </Text>
         </div>
-        <div className="flex flex-col items-start gap-space-xs lg:items-end">
+        <div className="flex min-w-0 flex-col items-start gap-space-xs lg:items-end lg:text-right">
           <Button
             icon={<Plus size={18} aria-hidden="true" />}
             disabled={atLimit}
+            aria-describedby={atLimit ? LIMIT_NOTE_ID : undefined}
             onClick={() => setCreateOpen(true)}
           >
             Create project
           </Button>
+          <Text
+            variant="body-secondary"
+            tone="secondary"
+            className="font-medium"
+          >
+            {items.length} of {ACCOUNT_LIMITS.projects} projects used ·{' '}
+            {atLimit ? 'Limit reached' : `${remaining} remaining`}
+          </Text>
           {atLimit && (
-            <Text variant="caption" tone="secondary">
-              You can have up to {ACCOUNT_LIMITS.projects} projects. Delete one
-              to create a new project.
+            <Text
+              id={LIMIT_NOTE_ID}
+              variant="caption"
+              tone="secondary"
+              className="max-w-sm"
+            >
+              You can have up to {ACCOUNT_LIMITS.projects} projects. To free a
+              slot, open a project and choose Delete project; only projects
+              whose quizzes are all drafts can be deleted.
             </Text>
           )}
         </div>
       </div>
 
       <div className="flex flex-col gap-space-sm lg:flex-row lg:items-center lg:justify-between">
-        <label className="relative block w-full lg:max-w-xl">
-          <Search
-            className="pointer-events-none absolute left-control-x top-1/2 -translate-y-1/2 text-text-secondary"
-            size={18}
-            aria-hidden="true"
-          />
-          <Input
-            type="search"
+        <div className="w-full lg:max-w-xl">
+          <SearchInput
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onValueChange={setQuery}
             placeholder="Search projects by title or description…"
             aria-label="Search projects"
-            className="pl-space-xl"
           />
-        </label>
+        </div>
       </div>
 
-      {initial.length ? (
+      {visible.length ? (
         <div className="grid gap-gutter md:grid-cols-2">
-          {initial.map((project) => (
+          {visible.map((project) => (
             <Surface
               key={project.id}
               as="article"
@@ -271,16 +293,11 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
           <Button
             variant="outline"
             disabled={atLimit}
-            icon={
-              <FolderPlus
-                className="text-accent"
-                size={28}
-                aria-hidden="true"
-              />
-            }
+            aria-describedby={atLimit ? LIMIT_NOTE_ID : undefined}
             onClick={() => setCreateOpen(true)}
-            className="h-auto min-h-56 flex-col border-dashed bg-surface-low p-space-md"
+            className="h-auto! min-h-56 flex-col self-stretch border-dashed bg-surface-low p-space-md"
           >
+            <EmptyStateIllustration kind="project" className="w-28" />
             <Text as="span" variant="card-title">
               New project container
             </Text>
@@ -290,13 +307,16 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
           </Button>
         </div>
       ) : (
-        <Surface className="text-center">
-          <Text as="h2" variant="section-heading">
-            No matching projects
-          </Text>
-          <Text tone="secondary" className="mt-space-xs">
-            Try a different project name or description.
-          </Text>
+        <Surface>
+          <MiloEmpty
+            pose="search"
+            title="No matching projects"
+            description={`Nothing matches “${query.trim()}”. Try a different project name or description.`}
+          >
+            <Button variant="secondary" onClick={() => setQuery('')}>
+              Clear search
+            </Button>
+          </MiloEmpty>
         </Surface>
       )}
 
@@ -305,12 +325,6 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
           Projects are lightweight folders designed to keep your quizzes cleanly
           categorized.
         </Text>
-        <div className="flex gap-space-md">
-          <Text variant="label">
-            {items.length} of {ACCOUNT_LIMITS.projects} projects
-          </Text>
-          <Text variant="label">{totalQuizzes} enclosed quizzes</Text>
-        </div>
       </div>
 
       {error && (
@@ -502,9 +516,7 @@ export function ProjectQuizzes({
       ) : (
         <Surface className="flex flex-col items-center py-space-2xl text-center">
           {!items.length && (
-            <div className="mb-space-sm flex size-space-2xl items-center justify-center rounded-pill bg-action-secondary text-accent">
-              <ListChecks size={28} aria-hidden="true" />
-            </div>
+            <EmptyStateIllustration kind="quiz" className="mb-space-sm" />
           )}
           <Text
             as="h3"

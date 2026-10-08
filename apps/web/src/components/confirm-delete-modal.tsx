@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button, Text } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
 import { apiError } from '@/lib/api/client';
@@ -15,6 +15,8 @@ export function ConfirmDeleteModal({
   description,
   confirmLabel,
   onConfirm,
+  children,
+  confirmDisabled = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -22,6 +24,10 @@ export function ConfirmDeleteModal({
   description: string;
   confirmLabel: string;
   onConfirm: () => Promise<void>;
+  /** Extra content above the buttons, e.g. confirmation fields. */
+  children?: ReactNode;
+  /** Keeps the delete button disabled until the extra fields are complete. */
+  confirmDisabled?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -37,6 +43,7 @@ export function ConfirmDeleteModal({
       title={title}
       description={description}
     >
+      {children}
       {error && (
         <Text role="alert" className="mb-space-sm text-danger">
           {error}
@@ -52,7 +59,7 @@ export function ConfirmDeleteModal({
         </Button>
         <Button
           variant="danger"
-          disabled={busy}
+          disabled={busy || confirmDisabled}
           onClick={async () => {
             setBusy(true);
             setError('');

@@ -4,14 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import {
-  Award,
-  ChevronDown,
-  Menu,
-  Settings2,
-  UserRound,
-  X,
-} from 'lucide-react';
+import { ChevronDown, Menu, Settings2, UserRound, X } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { Brand } from '@/components/brand';
 import { Button, Text } from '@/components/ui';
@@ -116,7 +109,7 @@ export function WorkspaceHeader() {
                         Settings
                       </NavigationItem>
                     </DropdownMenu.Item>
-                    <DropdownMenu.Item asChild>
+                    {/* <DropdownMenu.Item asChild>
                       <NavigationItem
                         className="w-full justify-start data-highlighted:bg-surface-low"
                         href={APP_LINKS.ACCOUNT.PLANS}
@@ -124,7 +117,7 @@ export function WorkspaceHeader() {
                       >
                         Workspace plan
                       </NavigationItem>
-                    </DropdownMenu.Item>
+                    </DropdownMenu.Item> */}
                   </DropdownMenu.Group>
                   <LogoutButton
                     renderAction={(props) => (

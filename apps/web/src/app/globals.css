@@ -30,6 +30,13 @@
     background: var(--color-text-secondary) padding-box;
   }
 }
+/* Modals and menus (Radix) lock scrolling and add a right margin the width
+   of the scrollbar so the page does not shift. The root already reserves
+   that space (scrollbar-gutter: stable), so the margin would shift it
+   instead: cancel it. The selector outranks the one Radix injects. */
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
+}
 body {
   margin: 0;
   font-family: var(--font-sans);
@@ -38,6 +45,17 @@ body {
 }
 
 @layer base {
+  /* Anything clickable shows the pointer; a disabled button keeps the
+     normal arrow (never "not allowed"). */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  summary {
+    cursor: pointer;
+  }
+  button:disabled,
+  [role='button'][aria-disabled='true'] {
+    cursor: default;
+  }
   :focus-visible {
     outline: var(--focus-width) solid var(--color-accent);
     outline-offset: var(--focus-offset);

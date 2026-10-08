@@ -56,7 +56,8 @@ export const MAIN_NAVIGATION = [
 
 export const FOOTER_NAVIGATION = [
   { label: 'Documentation', href: APP_LINKS.FOOTER.DOCUMENTATION },
-  { label: 'Privacy & Terms', href: APP_LINKS.FOOTER.PRIVACY },
+  { label: 'Privacy', href: APP_LINKS.LEGAL.PRIVACY },
+  { label: 'Terms', href: APP_LINKS.LEGAL.TERMS },
   { label: 'Fair use', href: APP_LINKS.LEGAL.FAIR_USE },
   { label: 'Help Center', href: APP_LINKS.FOOTER.HELP },
 ] as const;
