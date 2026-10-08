@@ -12,6 +12,10 @@ import {
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
 import {
+  PAUSABLE_FEATURE,
+  requireActive,
+} from '../../config/feature-switch.js';
+import {
   participantLimit,
   type PublicQuizRow,
   type QuizzesRepository,
@@ -114,6 +118,7 @@ export class QuizzesService {
     userId: string,
     input: QuizCreateInput,
   ): Promise<QuizCreatedDto> {
+    requireActive(PAUSABLE_FEATURE.QUIZ_CREATE);
     const { cover, ...quiz } = input;
     // The id is chosen here so the cover's upload URL can be signed while
     // the quiz is created; an unused signed URL is harmless. Without

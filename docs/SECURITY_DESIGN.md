@@ -322,12 +322,12 @@ Starting values, to validate under load. Participant limits are per account and 
 | Secrets              | Privileged keys only on the server; configuration from validated environment                           | **Implemented**                                                        |
 | Client IP            | Taken from a trusted proxy hop count only                                                              | **Implemented**                                                        |
 | Database             | Row-level security on every table; the API is the only data path                                       | **Implemented**                                                        |
-| Failure handling     | Competitive checks fail closed; rate limits fail open; pool saturation returns a retryable `503`        | **Implemented**                                                        |
+| Failure handling     | Competitive checks fail closed; rate limits fail open; pool saturation returns a retryable `503`        | **Implemented** — the Supabase pooler refusing connections (`EMAXCONNSESSION`) is also a `503` |
 | Logging              | Joins, refusals and lifecycle logged with ids and codes; passwords, codes and tokens redacted           | **Implemented**                                                        |
-| Monitoring           | Alerts for rejected host actions, unusual traffic, quota failures, storage and egress usage             | **To build**                                                           |
-| Protective switch    | One setting to pause new signups, quiz creation or uploads before capacity is exhausted                | **To build**                                                           |
-| Fair-use policy      | Published policy for unlimited drafts and the limits above                                             | **To build**                                                           |
-| Automated tests      | Simultaneous starts, duplicate submissions, capacity races, expired codes, revoked sessions, participant access to host data | **Partial** — all exist except revoked-session socket tests and quota tests |
+| Monitoring           | Alerts for rejected host actions, unusual traffic, quota failures, storage and egress usage             | **Implemented** — warn/error log lines carry an `alert` field (`LIVE_COMMAND_FORBIDDEN`, `RATE_LIMITED`, `LIVE_RATE_LIMITED`, `SOCKET_FLOOD`, `QUOTA_REFUSED`, `STORAGE_HIGH`, `STORAGE_FULL`, `EMAIL_BUDGET`), throttled per window; alerts are set up on them in the log provider. Egress usage is not tracked yet |
+| Protective switch    | One setting to pause new signups, quiz creation or uploads before capacity is exhausted                | **Implemented** — `PAUSED_FEATURES` (`signup`, `quiz_create`, `upload`); `503 FEATURE_PAUSED` with a message the web app shows |
+| Fair-use policy      | Published policy for unlimited drafts and the limits above                                             | **Implemented** — public `/fair-use` page built from the enforced limits, linked from the footer and signup |
+| Automated tests      | Simultaneous starts, duplicate submissions, capacity races, expired codes, revoked sessions, participant access to host data | **Implemented** — revoked-session socket tests (logout, password reset) and quota tests (projects, quizzes, questions, media, hosted sessions, participants) added; integration tests run one file at a time |
 
 ---
 

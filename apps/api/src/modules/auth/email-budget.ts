@@ -1,4 +1,5 @@
 import type { Logger } from 'pino';
+import { ALERT } from '../../infrastructure/alerts.js';
 import type { AuthRepository } from './repository.js';
 
 /** Share of the provider's daily allowance that logs a warning. */
@@ -37,7 +38,12 @@ export class EmailBudget {
       this.loggedDay = day;
       this.logged = { warning: false, hardLimit: false };
     }
-    const context = { sent, dailyLimit: this.dailyLimit, day };
+    const context = {
+      sent,
+      dailyLimit: this.dailyLimit,
+      day,
+      alert: ALERT.EMAIL_BUDGET,
+    };
     if (sent >= this.dailyLimit * EMAIL_BUDGET_HARD_LIMIT) {
       if (!this.logged.hardLimit) {
         this.logged.hardLimit = true;

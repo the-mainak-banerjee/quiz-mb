@@ -113,6 +113,8 @@ export const ERROR_CODE = {
   RATE_LIMITED: 'RATE_LIMITED',
   /** Temporarily overloaded; safe to retry after `Retry-After` seconds. */
   SERVICE_BUSY: 'SERVICE_BUSY',
+  /** Paused by the operator (signups, quiz creation or uploads); not retried. */
+  FEATURE_PAUSED: 'FEATURE_PAUSED',
   // Authentication
   UNAUTHENTICATED: 'UNAUTHENTICATED',
   TOKEN_EXPIRED: 'TOKEN_EXPIRED',

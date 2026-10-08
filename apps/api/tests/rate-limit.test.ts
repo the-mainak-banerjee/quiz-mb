@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RateLimiter } from '../src/infrastructure/rate-limiter.js';
+import { ALERT } from '../src/infrastructure/alerts.js';
 import {
   floodCounter,
   socketRateLimiter,
@@ -76,7 +77,10 @@ test('Redis limiter counts per window, hides identifiers and reports the wait', 
       return counts.get(key)!;
     },
   } as unknown as Redis;
-  const limiter = new RateLimiter(redis, { warn: () => {} });
+  const warnings: { alert?: string; client?: string }[] = [];
+  const limiter = new RateLimiter(redis, {
+    warn: (context: object) => warnings.push(context),
+  } as never);
   const now = 60_000 * 10 + 15_000; // 45 s before the window ends
   assert.equal(await limiter.hit(rule, 'person@example.com', now), 0);
   assert.equal(await limiter.hit(rule, 'person@example.com', now), 0);
@@ -87,6 +91,11 @@ test('Redis limiter counts per window, hides identifiers and reports the wait', 
     0,
     'the next window starts over',
   );
+  // The first refusal in a window is one alert line, without the identifier.
+  assert.equal(await limiter.hit(rule, 'person@example.com', now), 45);
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0]!.alert, ALERT.RATE_LIMITED);
+  assert.ok(!JSON.stringify(warnings).includes('example.com'));
   const keys = [...counts.keys()];
   assert.ok(keys.every((key) => key.startsWith('rate:test:')));
   assert.ok(

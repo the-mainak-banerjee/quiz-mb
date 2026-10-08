@@ -38,7 +38,7 @@ test(
     const origin = 'http://localhost:3000';
     const server = createApp({
       allowedOrigins: [origin],
-      logger: createLogger('silent'),
+      logger: createLogger('error'),
       auth: new AuthService(repository, config, mailbox),
       users: new UsersService(db),
     }).listen(0, '127.0.0.1');
@@ -297,8 +297,7 @@ test(
     );
     assert.equal(loginPending.data.status, 'VERIFICATION_REQUIRED');
     assert.equal(
-      (await fetch(`${base}/api/projects`, { headers: { Origin: origin } }))
-        .status,
+      (await fetch(`${base}/api/me`, { headers: { Origin: origin } })).status,
       401,
     );
 

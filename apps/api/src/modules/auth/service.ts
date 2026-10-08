@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { User } from '@quizmb/database';
 import { ApiError } from '../../http/api-error.js';
+import {
+  PAUSABLE_FEATURE,
+  requireActive,
+} from '../../config/feature-switch.js';
 import type { AuthConfig } from './config.js';
 import { AuthRepository } from './repository.js';
 import { hashPassword, verifyPassword } from './password.js';
@@ -278,6 +282,7 @@ export class AuthService {
    * whoever signed up second take over an account the inbox owner verifies).
    */
   async signup(input: { name: string; email: string; password: string }) {
+    requireActive(PAUSABLE_FEATURE.SIGNUP);
     const user = await this.repository.createUnverified({
       name: input.name,
       email: input.email,

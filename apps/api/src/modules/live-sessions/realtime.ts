@@ -19,6 +19,7 @@ import {
   LIVE_ROLE,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
+import { ALERT } from '../../infrastructure/alerts.js';
 import {
   DOMAIN_EVENT,
   type DomainEvents,
@@ -381,13 +382,22 @@ export function attachLiveRealtime(
             const budget = bucket ? withinBudget(budgetKey, bucket) : null;
             if (budget?.firstRefusal)
               logger.warn(
-                { event, liveSessionId: socket.data.ticketSessionId, userId },
+                {
+                  event,
+                  liveSessionId: socket.data.ticketSessionId,
+                  userId,
+                  alert: ALERT.LIVE_RATE_LIMITED,
+                },
                 'Live commands rate limited',
               );
             if (budget && !budget.allowed && flooding()) {
               // Keeps sending far past its budget: close the connection.
               logger.warn(
-                { liveSessionId: socket.data.ticketSessionId, userId },
+                {
+                  liveSessionId: socket.data.ticketSessionId,
+                  userId,
+                  alert: ALERT.SOCKET_FLOOD,
+                },
                 'Live socket disconnected for flooding',
               );
               socket.disconnect(true);
@@ -420,16 +430,27 @@ export function attachLiveRealtime(
             // Refusals are part of normal play (late answers, invalid host
             // steps); log what was refused, never what was sent. Rate-limited
             // commands were logged once above.
+            // A forbidden command (a participant sending host commands, or
+            // another session's ticket) and a used-up allowance are alerts.
+            const alert =
+              error instanceof ApiError
+                ? error.code === ERROR_CODE.FORBIDDEN
+                  ? ALERT.LIVE_COMMAND_FORBIDDEN
+                  : error.code === ERROR_CODE.LIMIT_REACHED
+                    ? ALERT.QUOTA_REFUSED
+                    : undefined
+                : undefined;
             if (
               error instanceof ApiError &&
               error.code !== ERROR_CODE.RATE_LIMITED
             )
-              logger.info(
+              logger[alert ? 'warn' : 'info'](
                 {
                   event,
                   code: error.code,
                   liveSessionId: socket.data.ticketSessionId,
                   userId,
+                  ...(alert ? { alert } : {}),
                 },
                 'Live command refused',
               );

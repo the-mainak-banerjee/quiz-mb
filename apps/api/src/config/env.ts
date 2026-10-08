@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { NODE_ENV } from './constants.js';
+import { PAUSABLE_FEATURE, parsePausedFeatures } from './feature-switch.js';
 
 const origin = z.url().refine((value) => {
   if (!URL.canParse(value)) return false;
@@ -33,6 +34,16 @@ const schema = z.object({
   // The email provider's daily allowance (Resend free plan: 100). Auth
   // emails warn at 80% of it and refuse non-essential sends at 90%.
   EMAIL_DAILY_LIMIT: z.coerce.number().int().min(1).default(100),
+  // Protective switch: comma-separated features to pause (signup,
+  // quiz_create, upload). Validated here so a typo fails at startup.
+  PAUSED_FEATURES: z
+    .string()
+    .optional()
+    .refine((value) =>
+      parsePausedFeatures(value).every((item) =>
+        (Object.values(PAUSABLE_FEATURE) as string[]).includes(item),
+      ),
+    ),
   // Live sessions (Redis-backed presence and locks). Upstash: rediss:// URL.
   REDIS_URL: z
     .url()

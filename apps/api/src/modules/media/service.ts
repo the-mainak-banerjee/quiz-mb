@@ -12,6 +12,11 @@ import {
   type UploadInput,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
+import { ALERT } from '../../infrastructure/alerts.js';
+import {
+  PAUSABLE_FEATURE,
+  requireActive,
+} from '../../config/feature-switch.js';
 import { lockedTransaction } from '../../infrastructure/transactions.js';
 import { lockEditableQuiz, mediaEditScope } from '../quizzes/repository.js';
 import { limitsFor } from '../../config/account-limits.js';
@@ -141,6 +146,7 @@ export class MediaService {
     sizeBytes: number,
     limits: Pick<typeof ACCOUNT_LIMITS, 'mediaBytes' | 'uploadsPerDay'>,
   ) {
+    requireActive(PAUSABLE_FEATURE.UPLOAD);
     await lockAccount(tx, userId);
     await requireAllowance(
       tx,
@@ -172,7 +178,7 @@ export class MediaService {
       )._sum.sizeBytes ?? 0;
     if (total + sizeBytes > PLATFORM_STORAGE.pauseBytes) {
       this.logger?.error(
-        { totalBytes: total },
+        { totalBytes: total, alert: ALERT.STORAGE_FULL },
         'Platform media storage at 800 MB: new uploads paused',
       );
       throw new ApiError(
@@ -188,7 +194,7 @@ export class MediaService {
     ) {
       this.warnedDay = day;
       this.logger?.warn(
-        { totalBytes: total },
+        { totalBytes: total, alert: ALERT.STORAGE_HIGH },
         'Platform media storage passed 600 MB',
       );
     }

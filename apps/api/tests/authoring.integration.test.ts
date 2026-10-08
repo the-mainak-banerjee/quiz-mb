@@ -451,13 +451,20 @@ test(
             .status,
           409,
         );
+        // A save that detaches the image deletes it (security design 1.5),
+        // freeing its quota; there is nothing left to delete.
         await data<QuizDto>(
           await request(`/quizzes/${quiz.id}`, 'PATCH', basics, owner),
         );
         assert.equal(
+          (await db.mediaAsset.findUniqueOrThrow({ where: { id: asset.id } }))
+            .status,
+          'DELETED',
+        );
+        assert.equal(
           (await request(`/media/${asset.id}`, 'DELETE', undefined, owner))
             .status,
-          204,
+          404,
         );
       },
     );

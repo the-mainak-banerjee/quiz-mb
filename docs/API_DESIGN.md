@@ -210,7 +210,11 @@ LIMIT_REACHED → 409
 QUIZ_FULL → 409
 RATE_LIMITED → 429
 INTERNAL_ERROR → 500
+SERVICE_BUSY → 503
+FEATURE_PAUSED → 503
 ```
+
+`SERVICE_BUSY` means the database is saturated (its pool, or the Supabase pooler, has no free connection); nothing changed and the request can be retried after `Retry-After`. `FEATURE_PAUSED` means the operator paused new signups (`POST /auth/signup`), quiz creation (`POST /projects/:id/quizzes`) or image uploads (upload requests, and a cover sent with a new quiz, which is then created without it) with the protective switch (`PAUSED_FEATURES`, security design 1.11); its message is shown to the user and the request is not retried.
 
 ---
 
