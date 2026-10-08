@@ -60,12 +60,14 @@ async function start() {
   );
 }
 
-server.on('error', () => {
-  logger.error('API failed to listen');
+// `err` uses pino's error serializer (type, message, stack, code); the
+// logger's redaction still applies.
+server.on('error', (error) => {
+  logger.error({ err: error }, 'API failed to listen');
   process.exitCode = 1;
 });
-start().catch(() => {
-  logger.error('API failed to start');
+start().catch((error: unknown) => {
+  logger.error({ err: error }, 'API failed to start');
   process.exit(1);
 });
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
