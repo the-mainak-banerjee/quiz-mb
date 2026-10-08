@@ -22,7 +22,7 @@ export const signupSchema = z
 export const loginSchema = z
   .object({ email, password: z.string().min(1).max(1024) })
   .strict();
-export const profileSchema = z.object({ name }).strict();
+export { profileSchema } from '@quizmb/contracts';
 export function validate<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (result.success) return result.data;

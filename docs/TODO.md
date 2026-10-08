@@ -27,8 +27,8 @@ Every authoring response reloads the full quiz with `quizInclude` (project, cove
 Fix direction: enable the `relationJoins` preview feature in `packages/database/prisma/schema.prisma` and use `relationLoadStrategy: 'join'` for `quizInclude` reads, so each reload is a single SQL query. Regenerate the client and re-run every integration test. Hosting the production API near the database (e.g. Render Singapore for the Seoul database) matters more and should be done regardless.
 
 ## Before launch
-- What to do for settings and workspace plan.
-- Handle session expire automatically
+- What to do for settings. => Done
+- Handle session expire automatically => Done
 - Create Home page/Landing page
 - QA testing and issues fixes   
 - Pages of footer
@@ -38,3 +38,9 @@ Fix direction: enable the `relationJoins` preview feature in `packages/database/
 ## During deployment
 - Email footer on render
 - Set up log alerts on Render (security design 1.11): the API writes warning lines with an `alert` field (`LIVE_COMMAND_FORBIDDEN`, `RATE_LIMITED`, `LIVE_RATE_LIMITED`, `SOCKET_FLOOD`, `QUOTA_REFUSED`, `STORAGE_HIGH`, `STORAGE_FULL`, `EMAIL_BUDGET`). Nothing notifies anyone until a log search or alert on `"alert":` is configured in Render (or a log drain). Also note the protective switch: `PAUSED_FEATURES=signup,quiz_create,upload` in Render's environment pauses those features.
+
+## UI QA Issues
+
+- Add text color success whenever we are doing any success activity like password validation match text.
+- Add miro in empty screens rather than icon. Like no quiezzes found
+- Whenever the dropdown and modal is opening UI is shifting as there is a more place added for scrollbar

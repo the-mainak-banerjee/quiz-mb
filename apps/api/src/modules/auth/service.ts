@@ -560,6 +560,63 @@ export class AuthService {
       );
     return { user: publicUser(session.user), familyId: session.familyId };
   }
+  /**
+   * Re-checks the signed-in user's password before a sensitive change.
+   * Wrong passwords count towards the same pause as login (per email), so a
+   * stolen session cannot be used to guess the password. A wrong password is
+   * a 422 on `field`, never a 401 (which would renew the session and retry).
+   */
+  async confirmPassword(
+    user: { id: string; email: string },
+    password: string,
+    field: string,
+  ) {
+    const throttle = this.guards.loginThrottle;
+    const paused = await throttle?.pausedFor(user.email);
+    if (paused)
+      throw new ApiError(
+        429,
+        ERROR_CODE.RATE_LIMITED,
+        `Too many incorrect passwords. Try again ${waitText(paused)}.`,
+        { retryAfterSeconds: String(paused) },
+      );
+    const stored = await this.repository.findById(user.id);
+    if (!(await verifyPassword(password, stored?.passwordHash))) {
+      await throttle?.recordFailure(user.email);
+      throw new ApiError(
+        422,
+        ERROR_CODE.VALIDATION_ERROR,
+        'Your password is incorrect.',
+        { [field]: 'Incorrect password.' },
+      );
+    }
+    await throttle?.clear(user.email);
+  }
+
+  /**
+   * Settings: a new password for the signed-in user. Every other device is
+   * signed out (and its live sockets closed); this one stays signed in. The
+   * owner is emailed that the password changed.
+   */
+  async changePassword(
+    access: string | undefined,
+    input: { currentPassword: string; newPassword: string },
+  ) {
+    const { user, familyId } = await this.authenticateSession(access);
+    await this.confirmPassword(user, input.currentPassword, 'currentPassword');
+    const { user: updated, revokedFamilyIds } =
+      await this.repository.changePassword(
+        user.id,
+        await hashPassword(input.newPassword),
+        familyId,
+      );
+    if (revokedFamilyIds.length)
+      this.guards.events?.emit(DOMAIN_EVENT.authSessionsRevoked, {
+        familyIds: revokedFamilyIds,
+      });
+    await this.passwordChanged(updated);
+  }
+
   async logout(refresh?: string) {
     if (!refresh) return;
     const familyId = await this.repository.revokeFamily(hashRefresh(refresh));

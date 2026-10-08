@@ -121,12 +121,12 @@ function Preview({ signup }: { signup: boolean }) {
 export function AuthPage({
   mode,
   returnTo,
-  sessionEnded = false,
+  notice,
 }: {
   mode: 'login' | 'signup';
   returnTo: string;
-  /** The session could not be renewed: say why sign-in is needed. */
-  sessionEnded?: boolean;
+  /** Why the visitor is here, e.g. the session ended or the account was deleted. */
+  notice?: string | undefined;
 }) {
   const signup = mode === 'signup';
 
@@ -159,9 +159,9 @@ export function AuthPage({
                 : 'Enter your credentials to access your live quiz sessions and workspaces.'}
             </Text>
           </div>
-          {sessionEnded && (
+          {notice && (
             <Callout role="status" className="mb-space-md">
-              Your session has ended. Please sign in again to continue.
+              {notice}
             </Callout>
           )}
           <AuthForm mode={mode} returnTo={returnTo} />

@@ -36,6 +36,11 @@
   --color-danger: #ba1a1a;
   --color-danger-surface: #ffdad6;
   --color-danger-on-surface: #93000a;
+  /* Success messages: a clearer, brighter green than the accent, still
+     readable as text on white (about 4.6:1). */
+  --color-success: #198a45;
+  --color-success-surface: #dcf5e3;
+  --color-success-on-surface: #0e5a2b;
   --color-text-primary: #131b15;
   --color-text-secondary: #5c665f;
   --color-border-surface: #e6e9e4;
