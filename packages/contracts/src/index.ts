@@ -96,6 +96,36 @@ export const passwordResetRequestSchema = z
 export const passwordResetVerifySchema = z
   .object({ email: authEmail, code: otpCode })
   .strict();
+/** Settings: the profile fields a user can change (the email cannot). */
+export const profileSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Enter your name.').max(100),
+  })
+  .strict();
+export type ProfileInput = z.infer<typeof profileSchema>;
+/** Settings: change the password while signed in. */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z
+      .string()
+      .min(1, 'Enter your current password.')
+      .max(1024),
+    newPassword: newPasswordSchema,
+  })
+  .strict();
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+/** What must be typed (exactly) to confirm deleting an account. */
+export const ACCOUNT_DELETE_CONFIRMATION = 'DELETE';
+/** Settings: delete the account; needs the typed word and the password. */
+export const deleteAccountSchema = z
+  .object({
+    confirmation: z.literal(ACCOUNT_DELETE_CONFIRMATION, {
+      error: `Type ${ACCOUNT_DELETE_CONFIRMATION} to confirm.`,
+    }),
+    password: z.string().min(1, 'Enter your password.').max(1024),
+  })
+  .strict();
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
 export const passwordResetCompleteSchema = z
   .object({
     resetToken: z.string().min(1).max(512),

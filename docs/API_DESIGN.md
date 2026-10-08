@@ -355,6 +355,33 @@ name
 avatarMediaId
 ```
 
+`name` is trimmed, 1–100 characters (`profileSchema`). The email cannot be changed. Returns the updated user.
+
+## 6.7 Change Password
+
+```http
+POST /api/me/password
+```
+
+Body: `{ currentPassword, newPassword }` (`changePasswordSchema`; the new password follows the signup rules, 15–128 characters).
+
+- A wrong current password is `422 VALIDATION_ERROR` on `currentPassword` (never a 401, which clients answer by renewing the session). It counts towards the same per-email pause as login (5 in 15 minutes); while paused the request is `429 RATE_LIMITED` with `Retry-After`.
+- On success every other sign-in is revoked and its live sockets disconnected; the sign-in that made the change stays signed in. The owner receives the "Your QuizMB password was changed" email.
+- Rate limited per client IP (20 per 15 minutes, shared with account deletion).
+
+## 6.8 Delete Account
+
+```http
+POST /api/me/delete
+```
+
+Body: `{ confirmation: "DELETE", password }` (`deleteAccountSchema`; `DELETE` is case-sensitive). POST rather than DELETE because the body carries the password.
+
+- A wrong password is `422 VALIDATION_ERROR` on `password` and counts towards the login pause, as in 6.7.
+- Refused with `409 CONFLICT` (a message saying why) while the user hosts a quiz that is `PUBLISHED`, `LOBBY` or `LIVE`, or holds a `REGISTERED` registration for one: other people still depend on the account.
+- Otherwise, in one transaction under a lock on the account: the user's quizzes (with questions, images, live sessions and the results in them), projects and uploads are deleted, then the user, which removes their sign-ins, registrations, answers and results in other hosts' quizzes, codes and email/usage records. Other participants' stored ranks are not recomputed. Stored image files are removed afterwards (a storage failure is logged).
+- Every sign-in's live sockets are disconnected and the auth cookies are cleared. Answers `204`.
+
 ---
 
 # 7. Project APIs

@@ -280,6 +280,41 @@ export class AuthRepository {
       };
     });
   }
+  /**
+   * Settings password change: every other sign-in is revoked; the family
+   * that made the change (`keepFamilyId`) stays signed in.
+   */
+  async changePassword(
+    userId: string,
+    passwordHash: string,
+    keepFamilyId: string,
+  ) {
+    const now = new Date();
+    return this.db.$transaction(async (tx) => {
+      const others = {
+        userId,
+        revokedAt: null,
+        familyId: { not: keepFamilyId },
+      };
+      const active = await tx.authSession.findMany({
+        where: others,
+        select: { familyId: true },
+        distinct: ['familyId'],
+      });
+      const user = await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash },
+      });
+      await tx.authSession.updateMany({
+        where: others,
+        data: { revokedAt: now },
+      });
+      return {
+        user,
+        revokedFamilyIds: active.map((session) => session.familyId),
+      };
+    });
+  }
   async createAccount(
     input: { name: string; email: string; passwordHash: string },
     session: SessionInput,
