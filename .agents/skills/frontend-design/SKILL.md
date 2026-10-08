@@ -279,3 +279,13 @@ Before finishing frontend work, verify:
 ## Reusable Create/Edit Forms
 
 Use one form component per entity for both creation and editing. Initialize it with existing data for edits, and keep fields, validation, dirty-state handling, and submission feedback shared. Route pages and inline dialogs compose the same form; do not fork separate create/edit implementations. Project creation from a quiz flow and from a standalone Create Project action must reuse the same project form.
+
+## Visual Language for Empty States
+
+Use a consistent hierarchy:
+
+- Functional actions → use existing icons.
+- Structural empty states → use small QuizMB product illustrations.
+- Emotional states (no results, errors, waiting, celebratory moments) → Milo may be used selectively.
+- Do not use Milo on every empty state.
+- Avoid generic icon-in-a-circle visuals as the primary empty-state artwork when a product-specific illustration can explain the concept better.

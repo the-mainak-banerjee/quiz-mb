@@ -29,6 +29,7 @@ import {
   quizSchema,
 } from '@quizmb/contracts';
 import { Button, Callout, Surface, Text, Badge } from '@/components/ui';
+import { EmptyStateIllustration } from '@/components/empty-state-illustration';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
 import { VisuallyHidden } from '@/components/visually-hidden';
@@ -311,6 +312,12 @@ export function QuizEditor({
                   </Button>
                 )}
               </div>
+              {!quiz.questions.length && (
+                <EmptyStateIllustration
+                  kind="question"
+                  className="mx-auto w-32"
+                />
+              )}
               <ol className="space-y-space-xs">
                 {quiz.questions.map((q, index) => (
                   <li

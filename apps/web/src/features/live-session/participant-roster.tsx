@@ -10,6 +10,7 @@ import {
   Text,
 } from '@/components/ui';
 import { NavigationItem } from '@/components/workspace/navigation-item';
+import { EmptyStateIllustration } from '@/components/empty-state-illustration';
 import { cn } from '@/lib/utils';
 import type { LiveParticipant } from './types';
 
@@ -91,7 +92,10 @@ export function ParticipantRoster({
           </li>
         ))}
         {visible.length === 0 && (
-          <li className="py-space-md">
+          <li className="flex flex-col items-center gap-space-xs py-space-md text-center">
+            {filter !== 'offline' && (
+              <EmptyStateIllustration kind="participant" />
+            )}
             <Text variant="body-secondary" tone="secondary">
               No participants match this filter.
             </Text>

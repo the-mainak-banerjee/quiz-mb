@@ -1,6 +1,7 @@
-import { ArrowRight, CalendarDays, History, LayoutGrid } from 'lucide-react';
+import { ArrowRight, CalendarDays, LayoutGrid } from 'lucide-react';
 import type { ParticipantHistoryDto } from '@quizmb/contracts';
 import { Badge, Surface, Text } from '@/components/ui';
+import { EmptyStateIllustration } from '@/components/empty-state-illustration';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { LocalDateTime } from '@/components/local-date-time';
 import { APP_LINKS } from '@/config/navigation';
@@ -127,12 +128,7 @@ export function HistoryView({ items }: { items: ParticipantHistoryDto[] }) {
         </ul>
       ) : (
         <Surface className="flex flex-col items-center gap-space-sm py-space-2xl text-center">
-          <span
-            aria-hidden="true"
-            className="flex size-space-2xl items-center justify-center rounded-pill bg-action-secondary text-accent"
-          >
-            <History size={24} />
-          </span>
+          <EmptyStateIllustration kind="history" />
           <Text as="h2" variant="section-heading">
             No completed quizzes yet
           </Text>
