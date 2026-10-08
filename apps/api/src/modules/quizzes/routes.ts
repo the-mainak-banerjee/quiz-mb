@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { quizSchema } from '@quizmb/contracts';
+import { quizCreateSchema, quizSchema } from '@quizmb/contracts';
 import { validate } from '../auth/validation.js';
 import type { QuizzesService } from './service.js';
 export function quizRoutes(service: QuizzesService) {
@@ -21,7 +21,7 @@ export function quizRoutes(service: QuizzesService) {
       data: await service.create(
         validate(z.uuid(), req.params.id),
         res.locals.userId as string,
-        validate(quizSchema, req.body),
+        validate(quizCreateSchema, req.body),
       ),
     });
   });
@@ -43,6 +43,13 @@ export function quizRoutes(service: QuizzesService) {
         validate(quizSchema, req.body),
       ),
     });
+  });
+  r.delete('/quizzes/:id', async (req, res) => {
+    await service.remove(
+      validate(z.uuid(), req.params.id),
+      res.locals.userId as string,
+    );
+    res.status(204).end();
   });
   r.post('/quizzes/:id/publish', async (req, res) => {
     res.json({

@@ -11,6 +11,7 @@ import {
   type LeaderboardDto,
   type HostLiveSnapshotDto,
   LIVE_ROLE,
+  LIVE_SESSION_LIMITS,
   LIVE_SESSION_STATE,
   type LiveQuizInfoDto,
   type LiveRole,
@@ -46,6 +47,29 @@ import type {
 } from './repository.js';
 import type { SocketTickets } from './tickets.js';
 import { HOST_AWAY_GRACE_MS, LOCK_OPERATION } from './constants.js';
+import { limitsFor } from '../../config/account-limits.js';
+
+const MINUTE_MS = 60_000;
+const LOBBY_MS = LIVE_SESSION_LIMITS.lobbyMinutes * MINUTE_MS;
+const HOST_GRACE_MS = LIVE_SESSION_LIMITS.hostGraceMinutes * MINUTE_MS;
+const MAX_SESSION_MS = LIVE_SESSION_LIMITS.maxMinutes * MINUTE_MS;
+
+/** Server-enforced session deadlines (security design 1.6). */
+type Deadline = 'lobby' | 'hostGrace' | 'maxLength';
+type DeadlineSource = {
+  id: string;
+  state: string;
+  createdAt: Date;
+  startedAt: Date | null;
+  hostDisconnectedAt: Date | null;
+};
+
+const lobbyExpired = () =>
+  new ApiError(
+    409,
+    ERROR_CODE.LOBBY_EXPIRED,
+    `The lobby expired because the quiz did not start within ${LIVE_SESSION_LIMITS.lobbyMinutes} minutes.`,
+  );
 
 /** Host snapshots list at most this many registrations; counts stay exact. */
 export const HOST_ROSTER_LIMIT = 100;
@@ -130,6 +154,25 @@ const submissionClosed = () =>
     'Time is up. Answers for this question are closed.',
   );
 
+const alreadySubmitted = () =>
+  new ApiError(
+    409,
+    ERROR_CODE.ALREADY_SUBMITTED,
+    'You have already submitted an answer for this question.',
+  );
+
+/** The same answer: the same options (in any order) and the same text. */
+function sameAnswer(
+  saved: SubmissionRow,
+  answer: { selectedOptionIds: string[]; answerText: string | null },
+) {
+  const ids = (list: string[]) => [...list].sort().join(',');
+  return (
+    ids(saved.options.map((option) => option.questionOptionId)) ===
+      ids(answer.selectedOptionIds) && saved.answerText === answer.answerText
+  );
+}
+
 /** A participant's own answer; correctness stays hidden until it ends. */
 function answerDto(
   asked: Pick<AskedQuestionRow, 'id' | 'status'>,
@@ -171,6 +214,8 @@ export class LiveSessionsService {
   private hostSockets = new Map<string, Set<string>>();
   /** When each session's host closed its last connection. */
   private hostAwaySince = new Map<string, number>();
+  /** Armed deadline timers per session (in process; re-armed at boot). */
+  private deadlines = new Map<string, Map<Deadline, NodeJS.Timeout>>();
 
   /** The session's caches, created on first use; sweeps idle ones. */
   private cacheFor(liveSessionId: string) {
@@ -202,6 +247,168 @@ export class LiveSessionsService {
     this.clearTimer(liveSessionId);
     this.caches.delete(liveSessionId);
     this.hostAwaySince.delete(liveSessionId);
+    this.disarm(liveSessionId);
+  }
+
+  // ---- Session deadlines ---------------------------------------------------
+  // Lobby expiry (30 min), host disconnect grace (15 min) and the maximum
+  // length (4 h) are derived from stored times, armed as timers, re-armed at
+  // startup, and also checked by `current` on every interaction.
+
+  private arm(liveSessionId: string, kind: Deadline, at: number) {
+    this.disarm(liveSessionId, kind);
+    const timer = setTimeout(
+      () => {
+        this.deadlines.get(liveSessionId)?.delete(kind);
+        this.load(liveSessionId)
+          .then((session) => this.enforceDeadlines(session))
+          .catch((error: unknown) => {
+            // Gone already, or a transient failure: the next interaction
+            // (or the next boot) checks the deadline again.
+            if (error instanceof ApiError) return;
+            this.logger?.error(
+              { liveSessionId, deadline: kind, err: error },
+              'Live session deadline failed',
+            );
+          });
+      },
+      Math.max(0, at - Date.now()) + CLOSE_GRACE_MS,
+    );
+    timer.unref();
+    let armed = this.deadlines.get(liveSessionId);
+    if (!armed) {
+      armed = new Map();
+      this.deadlines.set(liveSessionId, armed);
+    }
+    armed.set(kind, timer);
+  }
+
+  private disarm(liveSessionId: string, kind?: Deadline) {
+    const armed = this.deadlines.get(liveSessionId);
+    if (!armed) return;
+    for (const [entry, timer] of armed)
+      if (!kind || entry === kind) {
+        clearTimeout(timer);
+        armed.delete(entry);
+      }
+    if (!armed.size) this.deadlines.delete(liveSessionId);
+  }
+
+  /** Arms the deadlines that apply to the session in its current state. */
+  private armDeadlines(session: DeadlineSource) {
+    if (session.state === LIVE_SESSION_STATE.COMPLETED) return;
+    if (session.state === LIVE_SESSION_STATE.LOBBY) {
+      this.arm(session.id, 'lobby', session.createdAt.getTime() + LOBBY_MS);
+      return;
+    }
+    this.disarm(session.id, 'lobby');
+    if (session.startedAt)
+      this.arm(
+        session.id,
+        'maxLength',
+        session.startedAt.getTime() + MAX_SESSION_MS,
+      );
+    if (session.hostDisconnectedAt)
+      this.arm(
+        session.id,
+        'hostGrace',
+        session.hostDisconnectedAt.getTime() + HOST_GRACE_MS,
+      );
+  }
+
+  /**
+   * Startup: hosts lost their connections with the restart, so started
+   * sessions count them as disconnected from now; then every unfinished
+   * session's deadlines are armed again (overdue ones run at once).
+   */
+  async recoverDeadlines() {
+    await this.repository.markHostsDisconnected(new Date());
+    const sessions = await this.repository.deadlineSessions();
+    for (const session of sessions) this.armDeadlines(session);
+    return sessions.length;
+  }
+
+  /**
+   * Applies any deadline that has passed: an expired lobby is closed (and
+   * the caller is refused with LOBBY_EXPIRED); a started quiz past its
+   * maximum length, or whose host has been away past the grace period, is
+   * ended with its results. Returns the session as it now is.
+   */
+  private async enforceDeadlines(session: LiveSessionRow) {
+    const now = Date.now();
+    if (session.state === LIVE_SESSION_STATE.LOBBY) {
+      if (
+        session.createdAt.getTime() + LOBBY_MS <= now &&
+        (await this.expireLobby(session.id))
+      )
+        throw lobbyExpired();
+      return session;
+    }
+    if (session.state === LIVE_SESSION_STATE.COMPLETED || !session.startedAt)
+      return session;
+    const reason =
+      session.startedAt.getTime() + MAX_SESSION_MS <= now
+        ? 'TIME_LIMIT'
+        : session.hostDisconnectedAt &&
+            session.hostDisconnectedAt.getTime() + HOST_GRACE_MS <= now
+          ? 'HOST_AWAY'
+          : null;
+    if (!reason) return session;
+    await this.autoEnd(session.id, reason);
+    return this.load(session.id);
+  }
+
+  /** Closes an unstarted lobby that expired, like the host closing it. */
+  private async expireLobby(liveSessionId: string) {
+    const quizId = await this.store.withLock(
+      LOCK_OPERATION.SESSION_TRANSITION,
+      liveSessionId,
+      () =>
+        this.repository.expireLobby(
+          liveSessionId,
+          new Date(Date.now() - LOBBY_MS),
+        ),
+    );
+    if (!quizId) return false;
+    await this.store.clearPresence(liveSessionId);
+    this.forget(liveSessionId);
+    this.publishStatus(quizId, QUIZ_STATUS.PUBLISHED);
+    this.logger?.info({ liveSessionId, quizId }, 'Live lobby expired');
+    const error = lobbyExpired();
+    this.events?.emit(DOMAIN_EVENT.liveSessionClosed, {
+      liveSessionId,
+      code: error.code,
+      message: error.message,
+    });
+    return true;
+  }
+
+  /** Ends a started quiz with its results, as "End quiz" would. */
+  private async autoEnd(
+    liveSessionId: string,
+    reason: 'HOST_AWAY' | 'TIME_LIMIT',
+  ) {
+    const ended = await this.store.withLock(
+      LOCK_OPERATION.SESSION_TRANSITION,
+      liveSessionId,
+      () => this.repository.end(liveSessionId),
+    );
+    if (!ended) return false;
+    const session = await this.load(liveSessionId);
+    this.forget(liveSessionId);
+    await this.store.expireCompleted(liveSessionId);
+    this.publishStatus(session.quizId, QUIZ_STATUS.COMPLETED);
+    this.logger?.info(
+      { liveSessionId, reason },
+      'Live quiz ended by the server',
+    );
+    this.events?.emit(DOMAIN_EVENT.liveSessionEnded, { liveSessionId, reason });
+    return true;
+  }
+
+  /** A session as stored, for the transport after a server-side change. */
+  session(liveSessionId: string) {
+    return this.load(liveSessionId);
   }
 
   // ---- Host presence -------------------------------------------------------
@@ -216,6 +423,18 @@ export class LiveSessionsService {
     const returned = sockets.size === 0;
     sockets.add(socketId);
     this.hostAwaySince.delete(liveSessionId);
+    if (returned) {
+      // Back within the grace period: the session simply continues.
+      this.disarm(liveSessionId, 'hostGrace');
+      this.repository
+        .setHostDisconnected(liveSessionId, null)
+        .catch((error: unknown) =>
+          this.logger?.warn(
+            { liveSessionId, err: error },
+            'Host presence not saved',
+          ),
+        );
+    }
     return returned;
   }
 
@@ -224,7 +443,19 @@ export class LiveSessionsService {
     const sockets = this.hostSockets.get(liveSessionId);
     if (!sockets?.delete(socketId) || sockets.size) return false;
     this.hostSockets.delete(liveSessionId);
-    this.hostAwaySince.set(liveSessionId, Date.now());
+    const now = Date.now();
+    this.hostAwaySince.set(liveSessionId, now);
+    // A started quiz ends if the host does not come back within the grace
+    // period (stored, so a restart keeps counting it).
+    this.arm(liveSessionId, 'hostGrace', now + HOST_GRACE_MS);
+    this.repository
+      .setHostDisconnected(liveSessionId, new Date(now))
+      .catch((error: unknown) =>
+        this.logger?.warn(
+          { liveSessionId, err: error },
+          'Host presence not saved',
+        ),
+      );
     return true;
   }
 
@@ -277,9 +508,9 @@ export class LiveSessionsService {
   }
 
   /** Watch tickets reveal only public status, so any signed-in user qualifies. */
-  async issueWatchTicket(quizId: string, userId: string) {
+  async issueWatchTicket(quizId: string, userId: string, authFamilyId: string) {
     await this.quizStatus(quizId);
-    return this.tickets.issueWatch(userId, quizId);
+    return this.tickets.issueWatch(userId, quizId, authFamilyId);
   }
 
   private async load(liveSessionId: string) {
@@ -325,6 +556,9 @@ export class LiveSessionsService {
   }
 
   private base(session: LiveSessionRow, connected: number) {
+    const lobby = session.state === LIVE_SESSION_STATE.LOBBY;
+    const running =
+      session.startedAt && session.state !== LIVE_SESSION_STATE.COMPLETED;
     return {
       liveSessionId: session.id,
       serverTime: new Date().toISOString(),
@@ -332,6 +566,12 @@ export class LiveSessionsService {
       allowLateJoin: session.allowLateJoin,
       startedAt: session.startedAt?.toISOString() ?? null,
       endedAt: session.endedAt?.toISOString() ?? null,
+      lobbyExpiresAt: lobby
+        ? new Date(session.createdAt.getTime() + LOBBY_MS).toISOString()
+        : null,
+      sessionEndsAt: running
+        ? new Date(session.startedAt!.getTime() + MAX_SESSION_MS).toISOString()
+        : null,
       quiz: this.quizInfo(session),
       counts: {
         connected,
@@ -586,6 +826,10 @@ export class LiveSessionsService {
     return {
       ...this.base(session, connectedIds.size),
       role: LIVE_ROLE.HOST,
+      hostingAllowance:
+        session.state === LIVE_SESSION_STATE.LOBBY
+          ? await this.hostingAllowance(session.hostUserId)
+          : null,
       roster: roster.map((registration) => ({
         userId: registration.user.id,
         name: registration.user.name,
@@ -822,8 +1066,22 @@ export class LiveSessionsService {
     return active.length;
   }
 
+  /** The host's starts this month, shown in the lobby before starting. */
+  private async hostingAllowance(hostUserId: string) {
+    const [{ used, resetsAt }, limits] = await Promise.all([
+      this.repository.hostingAllowance(hostUserId),
+      limitsFor(hostUserId),
+    ]);
+    return {
+      used,
+      limit: limits.hostedSessionsPerMonth,
+      resetsAt: resetsAt.toISOString(),
+    };
+  }
+
   /** Brings a session up to date before it is read or changed. */
-  private async current(session: LiveSessionRow) {
+  private async current(stored: LiveSessionRow) {
+    const session = await this.enforceDeadlines(stored);
     if (session.state !== LIVE_SESSION_STATE.QUESTION_ACTIVE) return session;
     return (await this.closeExpired(session.id))
       ? this.load(session.id)
@@ -836,7 +1094,9 @@ export class LiveSessionsService {
     const id = await this.repository.openLobby(quizId, hostUserId);
     this.logger?.info({ liveSessionId: id, quizId }, 'Live lobby opened');
     this.publishStatus(quizId, QUIZ_STATUS.LOBBY);
-    return this.ref(await this.load(id), LIVE_ROLE.HOST);
+    const session = await this.load(id);
+    this.armDeadlines(session);
+    return this.ref(session, LIVE_ROLE.HOST);
   }
 
   async currentForQuiz(
@@ -867,10 +1127,14 @@ export class LiveSessionsService {
     };
   }
 
-  async issueTicket(liveSessionId: string, userId: string) {
+  async issueTicket(
+    liveSessionId: string,
+    userId: string,
+    authFamilyId: string,
+  ) {
     const session = await this.load(liveSessionId);
     await this.roleFor(session, userId);
-    return this.tickets.issue(userId, liveSessionId);
+    return this.tickets.issue(userId, liveSessionId, authFamilyId);
   }
 
   private ref(session: LiveSessionRow, role: LiveRole): LiveSessionRefDto {
@@ -1001,10 +1265,13 @@ export class LiveSessionsService {
     return this.load(liveSessionId);
   }
 
+  /** Starts the quiz; consumes one hosted session (see the repository). */
   async start(liveSessionId: string, userId: string) {
+    const limits = await limitsFor(userId);
     const session = await this.hostTransition(liveSessionId, userId, () =>
-      this.repository.start(liveSessionId),
+      this.repository.start(liveSessionId, limits.hostedSessionsPerMonth),
     );
+    this.armDeadlines(session);
     this.publishStatus(session.quizId, QUIZ_STATUS.LIVE);
     return session;
   }
@@ -1137,11 +1404,34 @@ export class LiveSessionsService {
    * Accepts one explicit answer for the active question. Correctness is
    * decided here but returned only after the question ends.
    */
+  /**
+   * A resend of the answer already accepted (its acknowledgement was lost):
+   * the saved answer, unchanged and not scored again. A different answer is
+   * not a retry and is refused.
+   */
+  private async savedRetry(
+    askedQuestionId: string,
+    userId: string,
+    answer: { selectedOptionIds: string[]; answerText: string | null },
+  ): Promise<ParticipantAnswerDto | null> {
+    const saved = await this.repository.submissionFor(askedQuestionId, userId);
+    if (!saved || !sameAnswer(saved, answer)) return null;
+    // Correctness and points are revealed only when the question ends.
+    return answerDto(
+      { id: askedQuestionId, status: ASKED_QUESTION_STATUS.ACTIVE },
+      saved,
+    );
+  }
+
+  /**
+   * Accepts one answer per participant per asked question. `retried` is
+   * true when this was a resend of the answer already accepted.
+   */
   async submit(
     userId: string,
     socketId: string,
     command: AnswerSubmitCommand,
-  ): Promise<ParticipantAnswerDto> {
+  ): Promise<{ answer: ParticipantAnswerDto; retried: boolean }> {
     const receivedAt = new Date();
     const key = await this.answerKey(
       command.liveSessionId,
@@ -1154,12 +1444,19 @@ export class LiveSessionsService {
         ERROR_CODE.FORBIDDEN,
         'The host cannot answer questions.',
       );
+    const answer = evaluateAnswer(key, command);
     if (receivedAt >= key.endsAt) {
       // Also closes the question if its timer has not fired yet.
       await this.closeExpired(key.liveSessionId).catch(() => false);
+      // A retry of an answer accepted in time still gets it back.
+      const saved = await this.savedRetry(
+        command.askedQuestionId,
+        userId,
+        answer,
+      );
+      if (saved) return { answer: saved, retried: true };
       throw submissionClosed();
     }
-    const answer = evaluateAnswer(key, command);
     const [active, registered] = await Promise.all([
       this.isActiveSocket(key.liveSessionId, userId, socketId),
       this.isConfirmedParticipant(key.liveSessionId, key.quizId, userId),
@@ -1177,7 +1474,7 @@ export class LiveSessionsService {
         'Register for this quiz to answer its questions.',
       );
     const responseTimeMs = receivedAt.getTime() - key.startedAt.getTime();
-    await this.repository.submit({
+    const { inserted } = await this.repository.submit({
       askedQuestionId: command.askedQuestionId,
       userId,
       ...answer,
@@ -1190,13 +1487,25 @@ export class LiveSessionsService {
       submittedAt: receivedAt,
       responseTimeMs,
     });
+    if (!inserted) {
+      const saved = await this.savedRetry(
+        command.askedQuestionId,
+        userId,
+        answer,
+      );
+      if (saved) return { answer: saved, retried: true };
+      throw alreadySubmitted();
+    }
     return {
-      askedQuestionId: command.askedQuestionId,
-      status: ANSWER_STATUS.SUBMITTED,
-      selectedOptionIds: answer.selectedOptionIds,
-      answerText: answer.answerText,
-      isCorrect: null,
-      pointsAwarded: 0,
+      answer: {
+        askedQuestionId: command.askedQuestionId,
+        status: ANSWER_STATUS.SUBMITTED,
+        selectedOptionIds: answer.selectedOptionIds,
+        answerText: answer.answerText,
+        isCorrect: null,
+        pointsAwarded: 0,
+      },
+      retried: false,
     };
   }
 

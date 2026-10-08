@@ -1,20 +1,36 @@
 'use client';
 import { useState, type SubmitEvent } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Eye, EyeOff } from 'lucide-react';
-import { Button, FormField, Input, Text } from '@/components/ui';
-import { VisuallyHidden } from '@/components/visually-hidden';
+import { ArrowRight } from 'lucide-react';
+import { Button, FormField, Text } from '@/components/ui';
 import { APP_LINKS } from '@/config/navigation';
 import { api } from '@/lib/api/browser';
 import { apiError } from '@/lib/api/client';
 import { API_ROUTES } from '@/lib/api/routes';
 import { z } from 'zod';
-import { ERROR_CODE } from '@quizmb/contracts';
+import {
+  AUTH_RESULT_STATUS,
+  ERROR_CODE,
+  PASSWORD_LIMITS,
+  type AuthResultDto,
+} from '@quizmb/contracts';
+import { useRouter } from 'next/navigation';
+import { authFlow } from '@/lib/auth/auth-flow';
+import { PasswordField } from './password-field';
 
-type Field = 'name' | 'email' | 'password';
+type Field = 'name' | 'email' | 'password' | 'confirm';
 const emailSchema = z.email().max(254);
 
-function fieldError(field: Field, value: string, signup: boolean): string {
+function fieldError(
+  field: Field,
+  value: string,
+  signup: boolean,
+  password = '',
+): string {
+  if (field === 'confirm') {
+    if (!value) return 'Confirm your password.';
+    return value === password ? '' : 'The passwords do not match.';
+  }
   if (field === 'name') {
     if (!value.trim()) return 'Enter your full name.';
     return value.trim().length > 100 ? 'Use 100 characters or fewer.' : '';
@@ -27,7 +43,9 @@ function fieldError(field: Field, value: string, signup: boolean): string {
   }
   if (signup) {
     const length = Array.from(value).length;
-    return length < 15 || length > 128 ? 'Use 15–128 characters.' : '';
+    return length < PASSWORD_LIMITS.min || length > PASSWORD_LIMITS.max
+      ? `Use ${PASSWORD_LIMITS.min}–${PASSWORD_LIMITS.max} characters.`
+      : '';
   }
   if (!value) return 'Enter your password.';
   return value.length > 1024 ? 'Use 1024 characters or fewer.' : '';
@@ -41,27 +59,34 @@ export function AuthForm({
   returnTo: string;
 }) {
   const signup = mode === 'signup';
-  const [visible, setVisible] = useState(false);
+  const router = useRouter();
   const [pending, setPending] = useState(false);
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const [confirm, setConfirm] = useState('');
+
   function validateField(field: Field, value: string) {
     setErrors((previous) => ({
       ...previous,
-      [field]: fieldError(field, value, signup),
+      [field]: fieldError(field, value, signup, password),
     }));
   }
 
   function editField(field: Field, value: string) {
     setMessage('');
     // Keep untouched fields quiet; once validated, update on every edit.
-    setErrors((previous) =>
-      field in previous
-        ? { ...previous, [field]: fieldError(field, value, signup) }
-        : previous,
-    );
+    setErrors((previous) => {
+      const next =
+        field in previous
+          ? { ...previous, [field]: fieldError(field, value, signup, password) }
+          : previous;
+      // A changed password re-checks an already checked confirmation.
+      return field === 'password' && 'confirm' in next
+        ? { ...next, confirm: fieldError('confirm', confirm, signup, value) }
+        : next;
+    });
   }
 
   async function submit(event: SubmitEvent<HTMLFormElement>) {
@@ -75,12 +100,17 @@ export function AuthForm({
       ...(signup ? { name: data.get('name') } : {}),
     };
     const fields: Field[] = signup
-      ? ['name', 'email', 'password']
+      ? ['name', 'email', 'password', 'confirm']
       : ['email', 'password'];
     const nextErrors = Object.fromEntries(
       fields.map((field) => [
         field,
-        fieldError(field, String(data.get(field) ?? ''), signup),
+        fieldError(
+          field,
+          String(data.get(field) ?? ''),
+          signup,
+          String(data.get('password') ?? ''),
+        ),
       ]),
     );
     setErrors(nextErrors);
@@ -92,10 +122,19 @@ export function AuthForm({
     }
     setPending(true);
     try {
-      await api.post(
+      const result = await api.post<AuthResultDto>(
         signup ? API_ROUTES.AUTH.SIGNUP : API_ROUTES.AUTH.LOGIN,
         input,
       );
+      if (result.status === AUTH_RESULT_STATUS.VERIFICATION_REQUIRED) {
+        // No session yet: the email must be verified first.
+        authFlow.setVerification({
+          challenge: result.verification,
+          returnTo,
+        });
+        router.push(APP_LINKS.AUTH.VERIFY_EMAIL);
+        return;
+      }
       // A full server navigation verifies the new session before rendering.
       window.location.assign(returnTo);
     } catch (error) {
@@ -152,74 +191,54 @@ export function AuthForm({
         onBlur={(event) => validateField('email', event.target.value)}
         disabled={pending}
       />
-      <div className="space-y-space-xs">
-        <div className="flex items-center justify-between gap-space-xs">
-          <label htmlFor="password" className="text-label">
-            Password <span className="text-danger">*</span>
-          </label>
-          {!signup && (
-            <Link
-              href={APP_LINKS.AUTH.FORGOT_PASSWORD}
-              className="ds-focus text-caption text-accent underline-offset-4 hover:text-action-primary hover:underline"
-            >
-              Forgot password?
-            </Link>
-          )}
-        </div>
-        <div className="relative">
-          <Input
-            id="password"
-            name="password"
-            type={visible ? 'text' : 'password'}
-            required
-            autoComplete={signup ? 'new-password' : 'current-password'}
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-              editField('password', event.target.value);
-            }}
-            onBlur={(event) => validateField('password', event.target.value)}
-            disabled={pending}
-            aria-invalid={Boolean(errors.password)}
-            aria-describedby={
-              signup ? 'password-hint password-error' : 'password-error'
+      <PasswordField
+        id="password"
+        name="password"
+        label="Password"
+        required
+        autoComplete={signup ? 'new-password' : 'current-password'}
+        value={password}
+        onChange={(event) => {
+          setPassword(event.target.value);
+          editField('password', event.target.value);
+        }}
+        onBlur={(event) => validateField('password', event.target.value)}
+        disabled={pending}
+        placeholder={signup ? 'Create a secure password' : '••••••••••••'}
+        error={errors.password}
+        {...(signup
+          ? {
+              hint: `Use ${PASSWORD_LIMITS.min}–${PASSWORD_LIMITS.max} characters. Spaces and Unicode are welcome.`,
             }
-            className="pr-space-2xl"
-            placeholder={signup ? 'Create a secure password' : '••••••••••••'}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            icon={
-              visible ? (
-                <EyeOff aria-hidden="true" size={16} />
-              ) : (
-                <Eye aria-hidden="true" size={16} />
-              )
-            }
-            aria-label={visible ? 'Hide password' : 'Show password'}
-            aria-pressed={visible}
-            onClick={() => setVisible(!visible)}
-            className="absolute right-space-xs top-1/2 -translate-y-1/2 px-space-xs text-caption"
-          >
-            <VisuallyHidden>
-              {visible ? 'Hide password' : 'Show password'}
-            </VisuallyHidden>
-          </Button>
-        </div>
-        <Text
-          id="password-error"
-          role={errors.password ? 'alert' : undefined}
-          variant="body-secondary"
-          className="text-danger"
-        >
-          {errors.password}
-        </Text>
-      </div>
+          : {
+              labelAction: (
+                <Link
+                  href={APP_LINKS.AUTH.FORGOT_PASSWORD}
+                  className="ds-focus text-caption text-accent underline-offset-4 hover:text-action-primary hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              ),
+            })}
+      />
       {signup && (
-        <Text id="password-hint" variant="caption" tone="secondary">
-          Use 15–128 characters. Spaces and Unicode are welcome.
-        </Text>
+        // Checked in the browser only; the API receives one password.
+        <PasswordField
+          id="confirm"
+          name="confirm"
+          label="Confirm password"
+          required
+          autoComplete="new-password"
+          value={confirm}
+          onChange={(event) => {
+            setConfirm(event.target.value);
+            editField('confirm', event.target.value);
+          }}
+          onBlur={(event) => validateField('confirm', event.target.value)}
+          disabled={pending}
+          placeholder="Re-enter your password"
+          error={errors.confirm}
+        />
       )}
       {message && (
         <Text role="alert" variant="body-secondary" className="text-danger">
@@ -257,6 +276,13 @@ export function AuthForm({
             className="ds-focus text-accent underline"
           >
             Privacy Policy
+          </Link>
+          , and the{' '}
+          <Link
+            href={APP_LINKS.LEGAL.FAIR_USE}
+            className="ds-focus text-accent underline"
+          >
+            fair-use limits
           </Link>
           .
         </Text>

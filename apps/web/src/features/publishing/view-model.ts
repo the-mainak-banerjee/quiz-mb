@@ -4,11 +4,12 @@ import type { PublicQuizDto } from '@quizmb/contracts';
 import { APP_LINKS } from '@/config/navigation';
 import type { PublishedQuizViewModel } from './types';
 
+// The planned start stays an ISO timestamp: it is formatted in the viewer's
+// browser, since the server's locale and time zone may differ.
 export function toPublishedQuizViewModel(
   quiz: PublicQuizDto,
   appOrigin: string,
 ): PublishedQuizViewModel {
-  const planned = new Date(quiz.plannedStartAt);
   return {
     id: quiz.id,
     status: quiz.status,
@@ -18,21 +19,6 @@ export function toPublishedQuizViewModel(
     project: quiz.project.name,
     host: quiz.host.name,
     plannedStartAt: quiz.plannedStartAt,
-    date: planned.toLocaleDateString(undefined, {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    }),
-    dateTileMonth: planned
-      .toLocaleDateString(undefined, { month: 'short' })
-      .toUpperCase(),
-    dateTileDay: planned.toLocaleDateString(undefined, { day: 'numeric' }),
-    time: planned.toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZoneName: 'short',
-    }),
     cover: quiz.cover,
     registrationLimit: quiz.registrationLimit,
     registeredCount: quiz.registrationCount,

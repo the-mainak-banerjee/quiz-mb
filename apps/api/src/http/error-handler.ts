@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler } from 'express';
 import type { Logger } from 'pino';
+import { ALERT } from '../infrastructure/alerts.js';
 import { ApiError } from './api-error.js';
 import { ERROR_CODE, HTTP_HEADER } from '@quizmb/contracts';
 
@@ -15,7 +16,9 @@ function isDatabaseBusy(error: unknown) {
   return (
     error instanceof Error &&
     (error.message === 'timeout exceeded when trying to connect' ||
-      (error as { code?: unknown }).code === 'P2028')
+      (error as { code?: unknown }).code === 'P2028' ||
+      // The Supabase pooler refusing a connection: all its clients are taken.
+      error.message.includes('EMAXCONNSESSION'))
   );
 }
 
@@ -52,6 +55,20 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
           String(BUSY_RETRY_AFTER_SECONDS),
         );
       }
+      // Account limits and allowances: who hit which limit, for quota alerts.
+      if (error.code === ERROR_CODE.LIMIT_REACHED)
+        logger.warn(
+          {
+            requestId: res.locals.requestId,
+            userId: res.locals.userId,
+            code: error.code,
+            alert: ALERT.QUOTA_REFUSED,
+          },
+          'Request refused: limit reached',
+        );
+      // Limits raised by services carry their wait in the details.
+      if (error.status === 429 && error.details?.retryAfterSeconds)
+        res.setHeader(HTTP_HEADER.RETRY_AFTER, error.details.retryAfterSeconds);
       res.status(error.status).json({
         success: false,
         error: {

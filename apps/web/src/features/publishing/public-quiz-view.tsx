@@ -18,6 +18,7 @@ import {
   UserMinus,
 } from 'lucide-react';
 import { Button, Surface, Text } from '@/components/ui';
+import { LocalDateTime } from '@/components/local-date-time';
 import { Modal } from '@/components/ui/modal';
 import { WorkspaceFooter } from '@/components/workspace/workspace-footer';
 import { APP_LINKS } from '@/config/navigation';
@@ -34,10 +35,14 @@ import { QUIZ_STATUS } from '@quizmb/contracts';
 
 function SessionFacts({ quiz }: { quiz: PublishedQuizViewModel }) {
   const facts = [
-    { label: 'Date', value: quiz.date, Icon: CalendarDays },
+    {
+      label: 'Date',
+      value: <LocalDateTime value={quiz.plannedStartAt} format="longDate" />,
+      Icon: CalendarDays,
+    },
     {
       label: 'Time',
-      value: quiz.time,
+      value: <LocalDateTime value={quiz.plannedStartAt} format="time" />,
       Icon: Clock3,
     },
     { label: 'Location', value: 'Online live room', Icon: LockKeyhole },
@@ -574,7 +579,8 @@ export function PublicQuizView({
             </Text>
             <Text variant="label">{quiz.title}</Text>
             <Text variant="caption" tone="secondary">
-              {quiz.date} · {quiz.time}
+              <LocalDateTime value={quiz.plannedStartAt} format="longDate" /> ·{' '}
+              <LocalDateTime value={quiz.plannedStartAt} format="time" />
             </Text>
           </Surface>
           <div className="flex flex-col-reverse gap-space-xs sm:flex-row sm:justify-end">

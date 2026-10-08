@@ -6,9 +6,11 @@ import {
   type ProjectDto,
   type ProjectInput,
   type QuestionInput,
+  type QuizCreatedDto,
   type QuizDto,
   type QuizInput,
   type UploadDto,
+  type UploadFileInput,
 } from '@quizmb/contracts';
 import { ApiError } from './client';
 const auth = { authenticated: true };
@@ -21,10 +23,21 @@ export const authoringApi = {
     id
       ? api.patch<QuizDto>(`/api/quizzes/${id}`, data, auth)
       : api.post<QuizDto>(`/api/projects/${projectId}/quizzes`, data, auth),
+  /** Creates a quiz; with `cover`, the response also carries its upload ticket. */
+  createQuiz: (projectId: string, data: QuizInput, cover?: File) =>
+    api.post<QuizCreatedDto>(
+      `/api/projects/${projectId}/quizzes`,
+      cover ? { ...data, cover: fileDetails(cover) } : data,
+      auth,
+    ),
   saveQuestion: (quizId: string, data: QuestionInput, id?: string) =>
     id
       ? api.patch<QuizDto>(`/api/questions/${id}`, data, auth)
       : api.post<QuizDto>(`/api/quizzes/${quizId}/questions`, data, auth),
+  /** Draft quizzes only. */
+  deleteQuiz: (id: string) => api.delete(`/api/quizzes/${id}`, auth),
+  /** Only when every quiz in the project is a draft; they are deleted too. */
+  deleteProject: (id: string) => api.delete(`/api/projects/${id}`, auth),
   deleteQuestion: (id: string) =>
     api.delete<QuizDto>(`/api/questions/${id}`, auth),
   reorder: (id: string, questionIds: string[]) =>
@@ -36,15 +49,31 @@ export const authoringApi = {
 };
 // Binary uploads are separate from our JSON factory: signed URL, no app cookies,
 // no broad storage keys and no automatic retries of a non-idempotent upload.
-/** Why this file cannot be uploaded as an image, or null when it can. */
+/**
+ * Why this (already optimized, see lib/media/optimize-image) file cannot be
+ * uploaded, or null when it can. The server and bucket enforce the same.
+ */
 export function imageProblem(file: File) {
   return !(MEDIA_LIMITS.mimeTypes as readonly string[]).includes(file.type) ||
     file.size > MEDIA_LIMITS.maxBytes ||
     !file.size
-    ? 'Choose a PNG, JPEG or WebP image up to 10 MB.'
+    ? 'This image could not be prepared for upload. Try another image.'
     : null;
 }
 
+function fileDetails(file: File): UploadFileInput {
+  return {
+    fileName: file.name,
+    mimeType: file.type as UploadFileInput['mimeType'],
+    sizeBytes: file.size,
+  };
+}
+
+/**
+ * Uploads an image for a quiz. The returned media is still pending: it
+ * shows the local file, and the server checks the upload when the quiz or
+ * question is saved with it.
+ */
 export async function uploadImage(
   quizId: string,
   purpose: MediaPurpose,
@@ -54,15 +83,19 @@ export async function uploadImage(
   if (problem) throw new ApiError(problem);
   const ticket = await api.post<UploadDto>(
     '/api/media/upload-request',
-    {
-      purpose,
-      fileName: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      resource: { quizId },
-    },
+    { purpose, ...fileDetails(file), resource: { quizId } },
     auth,
   );
+  await putUpload(ticket, file);
+  return {
+    id: ticket.mediaId,
+    fileName: file.name,
+    url: URL.createObjectURL(file),
+  };
+}
+
+/** Sends the file to the signed storage URL from an upload ticket. */
+export async function putUpload(ticket: UploadDto, file: File) {
   const url = new URL(ticket.upload.url);
   if (
     url.protocol !== 'https:' ||
@@ -79,5 +112,4 @@ export async function uploadImage(
   });
   if (!response.ok)
     throw new ApiError('Image upload failed. Please try again.');
-  return api.post<MediaDto>(`/api/media/${ticket.mediaId}/complete`, {}, auth);
 }

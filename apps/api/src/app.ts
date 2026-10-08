@@ -75,7 +75,7 @@ export function createApp({
       authenticate(auth, production),
       csrf(allowedOrigins),
       ...(rateLimiter ? [userRateLimits(rateLimiter, rateLimits)] : []),
-      authoringRoutes(database, storage, events),
+      authoringRoutes(database, storage, events, logger),
       ...(live ? [liveSessionRoutes(live)] : []),
     );
   app.use(notFound);

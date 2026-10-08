@@ -10,8 +10,8 @@ export type LiveQuizSummary = {
   title: string;
   projectName: string;
   hostName: string;
-  plannedDate: string;
-  plannedTime: string;
+  /** ISO timestamp, or null when not scheduled; formatted in the browser. */
+  plannedStartAt: string | null;
   registrationLimit: number;
   questionCount: number;
   defaultDurationSeconds: number;

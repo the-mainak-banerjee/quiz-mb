@@ -3,11 +3,11 @@ import { useState, useImperativeHandle, type Ref } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
+  ACCOUNT_LIMITS,
   quizSchema,
   type QuizInput,
   type QuizDto,
   type MediaDto,
-  MEDIA_PURPOSE,
   QUIZ_STATUS,
 } from '@quizmb/contracts';
 import { Button, FormField, Input, Surface, Text } from '@/components/ui';
@@ -17,14 +17,17 @@ import { CalendarClock, Clock3, Settings2, Users } from 'lucide-react';
 import { Field } from '@/components/forms/field';
 import { setApiErrors } from '@/components/forms/form-errors';
 import { useUnsavedChanges } from '@/components/forms/unsaved-changes';
-import { authoringApi, uploadImage } from '@/lib/api/authoring';
+import { authoringApi, putUpload } from '@/lib/api/authoring';
 import { ImageUpload } from './image-upload';
+import { EDITOR_NOTICE, type EditorNotice } from './editor-notice';
+import type { QuestionFormHandle } from './question-form';
 
 export function quizValues(q?: QuizDto): QuizInput {
   return {
     title: q?.title ?? '',
     description: q?.description ?? '',
-    registrationLimit: q?.registrationLimit ?? 50,
+    registrationLimit:
+      q?.registrationLimit ?? ACCOUNT_LIMITS.participantsPerSession,
     defaultQuestionDurationSeconds: q?.defaultQuestionDurationSeconds ?? 20,
     allowLateJoin: q?.allowLateJoin ?? true,
     coverMediaId: q?.coverMediaId ?? null,
@@ -44,16 +47,19 @@ export function QuizForm({
   onSaved,
   onCancel,
   readOnly = false,
+  leaving = false,
   ref,
 }: {
   projectId: string;
+  /** Saved and moving to the quiz's own page: keep everything disabled. */
+  leaving?: boolean;
   initial?: QuizDto;
   /** Show the saved details with every control disabled. */
   readOnly?: boolean;
-  /** `coverFailed`: the quiz saved but a cover chosen before saving did not upload. */
-  onSaved: (quiz: QuizDto, next: boolean, coverFailed?: boolean) => void;
+  /** `coverNotice`: the quiz saved but a cover chosen before saving was not added. */
+  onSaved: (quiz: QuizDto, next: boolean, coverNotice?: EditorNotice) => void;
   onCancel: () => void;
-  ref?: Ref<{ confirm: (action: () => void) => void }>;
+  ref?: Ref<QuestionFormHandle>;
 }) {
   const [cover, setCover] = useState<MediaDto | null>(initial?.cover ?? null);
   /** A cover chosen before the quiz exists; uploaded after the first save. */
@@ -75,7 +81,10 @@ export function QuizForm({
     defaultValues: quizValues(initial),
   });
   const guard = useUnsavedChanges(isDirty || uploading || !!pendingCover);
-  useImperativeHandle(ref, () => ({ confirm: guard.confirm }));
+  useImperativeHandle(ref, () => ({
+    confirm: guard.confirm,
+    leave: guard.afterSave,
+  }));
   const values = useWatch({ control });
   const title = values.title;
   const description = values.description;
@@ -86,32 +95,39 @@ export function QuizForm({
         noValidate
         onSubmit={handleSubmit(async (input) => {
           try {
-            let saved = await authoringApi.saveQuiz(
-              projectId,
-              input,
-              initial?.id,
-            );
-            let coverFailed = false;
-            if (pendingCover) {
-              // The quiz exists now: upload the cover chosen before saving.
-              try {
-                const media = await uploadImage(
-                  saved.id,
-                  MEDIA_PURPOSE.QUIZ_COVER,
-                  pendingCover,
-                );
-                saved = await authoringApi.saveQuiz(
+            let saved: QuizDto;
+            let coverNotice: EditorNotice | undefined;
+            if (initial) {
+              saved = await authoringApi.saveQuiz(projectId, input, initial.id);
+            } else {
+              // Creating also requests the cover's upload ticket; the cover
+              // is uploaded, then attached (and checked) by one update.
+              const { coverUpload, coverRefusal, ...created } =
+                await authoringApi.createQuiz(
                   projectId,
-                  { ...quizValues(saved), coverMediaId: media.id },
-                  saved.id,
+                  input,
+                  pendingCover ?? undefined,
                 );
-              } catch {
-                coverFailed = true;
+              saved = created;
+              if (pendingCover && coverRefusal)
+                coverNotice = EDITOR_NOTICE.COVER_REFUSED;
+              else if (pendingCover) {
+                try {
+                  if (!coverUpload) throw new Error('No upload ticket.');
+                  await putUpload(coverUpload, pendingCover);
+                  saved = await authoringApi.saveQuiz(
+                    projectId,
+                    { ...quizValues(saved), coverMediaId: coverUpload.mediaId },
+                    saved.id,
+                  );
+                } catch {
+                  coverNotice = EDITOR_NOTICE.COVER_FAILED;
+                }
               }
               setPendingCover(null);
             }
             reset(quizValues(saved));
-            guard.afterSave(() => onSaved(saved, next, coverFailed));
+            guard.afterSave(() => onSaved(saved, next, coverNotice));
           } catch (e) {
             setApiErrors(e, setError);
           }
@@ -119,7 +135,7 @@ export function QuizForm({
         className="grid items-start gap-gutter lg:grid-cols-3"
       >
         <fieldset
-          disabled={isSubmitting || readOnly}
+          disabled={isSubmitting || leaving || readOnly}
           className="min-w-0 space-y-space-md lg:col-span-2"
         >
           <Surface className="space-y-space-md">
@@ -180,11 +196,11 @@ export function QuizForm({
                 id="registration-limit"
                 label="Maximum participants"
                 required
-                {...(initial && initial.status !== QUIZ_STATUS.DRAFT
-                  ? {
-                      hint: `${initial.registrationCount} registered so far · the limit cannot go below this.`,
-                    }
-                  : {})}
+                hint={
+                  initial && initial.status !== QUIZ_STATUS.DRAFT
+                    ? `Up to ${ACCOUNT_LIMITS.participantsPerSession} · ${initial.registrationCount} registered so far, the limit cannot go below this.`
+                    : `Up to ${ACCOUNT_LIMITS.participantsPerSession} participants.`
+                }
                 error={errors.registrationLimit?.message}
               >
                 <div className="relative">
@@ -197,6 +213,7 @@ export function QuizForm({
                     id="registration-limit"
                     type="number"
                     min={1}
+                    max={ACCOUNT_LIMITS.participantsPerSession}
                     required
                     className="pl-space-xl"
                     {...register('registrationLimit', { valueAsNumber: true })}
@@ -285,7 +302,7 @@ export function QuizForm({
                   disabled={uploading}
                   onClick={() => setNext(false)}
                 >
-                  {isSubmitting
+                  {(isSubmitting || leaving) && !next
                     ? 'Saving…'
                     : initial && initial.status !== QUIZ_STATUS.DRAFT
                       ? 'Save changes'
@@ -299,9 +316,11 @@ export function QuizForm({
                     else setNext(true);
                   }}
                 >
-                  {continueWithoutSaving
-                    ? 'Continue to questions'
-                    : 'Save & add questions'}
+                  {(isSubmitting || leaving) && next
+                    ? 'Saving…'
+                    : continueWithoutSaving
+                      ? 'Continue to questions'
+                      : 'Save & add questions'}
                 </Button>
               </div>
             </div>

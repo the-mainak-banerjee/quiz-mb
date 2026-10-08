@@ -41,6 +41,15 @@ export function retryWait(seconds: number | undefined) {
   return `in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
 }
 
+/**
+ * Unavailable answers whose message is written for people (a paused feature
+ * or full image storage); other 5xx messages are replaced by a generic one.
+ */
+const SHOWN_UNAVAILABLE_CODES = new Set<string>([
+  ERROR_CODE.FEATURE_PAUSED,
+  ERROR_CODE.STORAGE_UNAVAILABLE,
+]);
+
 /** Automatic retries of a SERVICE_BUSY answer (nothing was changed). */
 const BUSY_RETRIES = 2;
 /** Longest wait before a busy retry, whatever Retry-After says. */
@@ -167,7 +176,7 @@ export function createApiClient(config: Config) {
               ? `Too many attempts. Try again ${retryWait(retryAfterSeconds)}.`
               : code === ERROR_CODE.SERVICE_BUSY
                 ? 'The server is busy right now. Please try again in a moment.'
-                : response.status >= 500
+                : response.status >= 500 && !SHOWN_UNAVAILABLE_CODES.has(code)
                   ? 'Service unavailable. Please try again.'
                   : typeof error.message === 'string'
                     ? error.message

@@ -29,6 +29,7 @@ import { StatusStrip } from './participant-question';
 import { ParticipantStage } from './participant-screens';
 import { StatTile } from './stat-tile';
 import type { LiveQuizSummary } from './types';
+import { Milo } from '@/components/milo/milo';
 
 /** Top three as podium cards, the winner in the middle on wider screens. */
 function FinalPodium({
@@ -155,17 +156,20 @@ export function HostQuizCompleted({
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-space-md px-margin-sm py-space-lg md:px-margin">
       <div className="flex flex-col gap-space-sm md:flex-row md:items-end md:justify-between">
-        <div className="space-y-space-xs">
-          <Text
-            variant="caption"
-            tone="secondary"
-            className="tracking-wider uppercase"
-          >
-            {quiz.projectName}
-          </Text>
-          <Text as="h1" variant="page-title">
-            {quiz.title}
-          </Text>
+        <div className="flex items-end gap-space-sm">
+          <Milo pose="celebrate" className="w-20 shrink-0 md:w-24" />
+          <div className="space-y-space-xs">
+            <Text
+              variant="caption"
+              tone="secondary"
+              className="tracking-wider uppercase"
+            >
+              {quiz.projectName}
+            </Text>
+            <Text as="h1" variant="page-title">
+              {quiz.title}
+            </Text>
+          </div>
         </div>
         <div className="flex flex-wrap gap-space-xs">
           <Badge variant="draft" label="Quiz completed" />
@@ -222,7 +226,7 @@ export function HostQuizCompleted({
           rank.
         </Callout>
       ) : (
-        <Surface className="flex flex-col gap-space-sm md:flex-row md:items-center md:justify-between">
+        <Surface className="flex flex-col gap-space-md">
           <div className="flex items-start gap-space-sm">
             <span
               aria-hidden="true"
@@ -241,11 +245,12 @@ export function HostQuizCompleted({
               </Text>
             </div>
           </div>
+          {/* Actions sit under the explanation. */}
           <div className="flex flex-col gap-space-xs sm:flex-row">
             <NavigationItem
               href={resultsHref}
               icon={<Table2 size={18} aria-hidden="true" />}
-              className="bg-surface-low"
+              className="h-control min-h-0 border border-border-surface bg-surface text-text-primary hover:border-accent hover:bg-canvas"
             >
               View full results
             </NavigationItem>
@@ -336,6 +341,7 @@ export function ParticipantQuizEnded({
   return (
     <ParticipantStage className="md:py-space-2xl">
       <div className="flex w-full max-w-2xl flex-col items-center gap-space-md text-center">
+        <Milo pose="celebrate" className="w-28 md:w-32" />
         <div className="space-y-space-xs">
           <Badge variant="draft" label="Quiz ended" />
           <Text tone="secondary">{quizTitle}</Text>

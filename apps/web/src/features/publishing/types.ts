@@ -11,11 +11,8 @@ export type PublishedQuizViewModel = {
   description: string;
   project: string;
   host: string;
+  /** ISO timestamp; formatted in the viewer's browser. */
   plannedStartAt: string;
-  date: string;
-  dateTileMonth: string;
-  dateTileDay: string;
-  time: string;
   cover: MediaDto | null;
   registrationLimit: number;
   registeredCount: number;

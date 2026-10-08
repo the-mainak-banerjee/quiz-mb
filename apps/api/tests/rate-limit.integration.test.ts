@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { createDatabase } from '@quizmb/database';
 import { ERROR_CODE, HTTP_HEADER } from '@quizmb/contracts';
 import { createApp } from '../src/app.js';
+import { MemoryMailbox } from '../src/infrastructure/email.js';
 import { createLogger } from '../src/infrastructure/logger.js';
 import { createRedis } from '../src/infrastructure/redis.js';
 import { RateLimiter } from '../src/infrastructure/rate-limiter.js';
@@ -16,7 +17,7 @@ import { parseAuthEnv } from '../src/modules/auth/config.js';
 import { UsersService } from '../src/modules/users/service.js';
 
 test(
-  'REST rate limits: per account, per client IP behind a proxy, per user, and window reset',
+  'REST rate limits: per client IP behind a proxy, per user, and window reset',
   { skip: !process.env.DATABASE_URL || !process.env.REDIS_URL },
   async (t) => {
     if (process.env.NODE_ENV === 'production')
@@ -26,6 +27,7 @@ test(
       config.DATABASE_URL,
       config.DATABASE_SSL_CA_BASE64,
     );
+    const mailbox = new MemoryMailbox();
     const redis = createRedis(process.env.REDIS_URL!);
     await redis.connect();
     const logger = createLogger('silent');
@@ -34,15 +36,19 @@ test(
     const run = randomUUID();
     const rules = {
       ...RATE_LIMITS,
-      loginAccount: { scope: `test-login-${run}`, limit: 2, windowSeconds: 60 },
       signupIp: { scope: `test-signup-${run}`, limit: 1, windowSeconds: 60 },
       register: { scope: `test-register-${run}`, limit: 1, windowSeconds: 60 },
+      createProject: {
+        scope: `test-create-project-${run}`,
+        limit: 1,
+        windowSeconds: 60,
+      },
     };
     const origin = 'http://localhost:3000';
     const server = createApp({
       allowedOrigins: [origin],
       logger,
-      auth: new AuthService(new AuthRepository(db), config),
+      auth: new AuthService(new AuthRepository(db), config, mailbox),
       users: new UsersService(db),
       database: db,
       rateLimiter: limiter,
@@ -54,6 +60,9 @@ test(
     const emails: string[] = [];
     t.after(async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      await db.project.deleteMany({
+        where: { owner: { email: { in: emails } } },
+      });
       await db.user.deleteMany({ where: { email: { in: emails } } });
       await db.$disconnect();
       await redis.quit();
@@ -82,30 +91,6 @@ test(
       assert.ok(wait >= 1 && wait <= 60, `${label}: Retry-After ${wait}`);
     };
 
-    // Per account: attempts count against that email whatever its case or
-    // surrounding spaces; other accounts keep their own budget.
-    const target = `rate-${run}@example.invalid`;
-    for (const email of [target, ` ${target.toUpperCase()} `])
-      assert.equal(
-        (await post('/auth/login', { email, password: 'wrong password!' }))
-          .status,
-        401,
-      );
-    await assertLimited(
-      await post('/auth/login', { email: target, password: 'wrong password!' }),
-      'third login for one account',
-    );
-    assert.equal(
-      (
-        await post('/auth/login', {
-          email: `other-${run}@example.invalid`,
-          password: 'wrong password!',
-        })
-      ).status,
-      401,
-      'other accounts are unaffected',
-    );
-
     // Per client IP, read from the trusted proxy hop (X-Forwarded-For).
     const signup = (ip: string) => {
       const email = `rate-signup-${randomUUID()}@example.invalid`;
@@ -126,7 +111,16 @@ test(
     );
 
     // Per signed-in user, counted before the route itself runs.
-    const cookie = first.headers
+    // Signup does not sign in: verify the first account to get a session.
+    const firstBody = (await first.json()) as {
+      data: { verification: { ticket: string } };
+    };
+    const verified = await post('/auth/verify-email', {
+      ticket: firstBody.data.verification.ticket,
+      code: await mailbox.codeFor(emails[0]!),
+    });
+    assert.equal(verified.status, 200);
+    const cookie = verified.headers
       .getSetCookie()
       .map((value) => value.split(';')[0])
       .join('; ');
@@ -134,6 +128,11 @@ test(
       post(`/quizzes/${randomUUID()}/register`, {}, { cookie });
     assert.equal((await register()).status, 404);
     await assertLimited(await register(), 'second registration request');
+    // Project creation by script (security design 1.4).
+    const createProject = () =>
+      post('/projects', { name: 'Rate project', description: '' }, { cookie });
+    assert.equal((await createProject()).status, 201);
+    await assertLimited(await createProject(), 'second project this minute');
 
     // A new window starts over (real Redis, one-second window).
     const reset = { scope: `test-reset-${run}`, limit: 1, windowSeconds: 1 };

@@ -13,6 +13,8 @@ import type {
   RegistrationDto,
 } from '@quizmb/contracts';
 import { createApp } from '../src/app.js';
+import { MemoryMailbox } from '../src/infrastructure/email.js';
+import { signUpVerified } from './auth-helper.js';
 import { createLogger } from '../src/infrastructure/logger.js';
 import { AuthRepository } from '../src/modules/auth/repository.js';
 import { AuthService } from '../src/modules/auth/service.js';
@@ -45,7 +47,8 @@ async function startPublishingHarness(t: TestContext, userCount: number) {
     throw new Error('Development integration tests only');
   const config = parseAuthEnv(process.env);
   const db = createDatabase(config.DATABASE_URL, config.DATABASE_SSL_CA_BASE64);
-  const auth = new AuthService(new AuthRepository(db), config);
+  const mailbox = new MemoryMailbox();
+  const auth = new AuthService(new AuthRepository(db), config, mailbox);
   const origin = 'http://localhost:3000';
   const server = createApp({
     allowedOrigins: [origin],
@@ -94,12 +97,12 @@ async function startPublishingHarness(t: TestContext, userCount: number) {
 
   const cookies: string[] = [];
   for (const [index, email] of emails.entries()) {
-    const response = await request('/auth/signup', 'POST', {
+    const response = await signUpVerified(request, mailbox, {
       name: index ? `Participant ${index}` : 'Quiz Host',
       email,
       password: 'a strong publishing test password',
     });
-    assert.equal(response.status, 201);
+    assert.equal(response.status, 200);
     cookies.push(
       response.headers
         .getSetCookie()
@@ -353,6 +356,14 @@ test(
     });
     assert.equal(stored.status, 'DRAFT');
     assert.equal(stored.publishedAt, null);
+    // The database itself refuses a non-draft quiz without a planned start.
+    await assert.rejects(
+      db.quiz.update({
+        where: { id: quiz.id },
+        data: { status: 'PUBLISHED', publishedAt: new Date() },
+      }),
+      /quiz_planned_start_required/,
+    );
     assert.equal(
       (await request(`/public/quizzes/${quiz.publicId}`)).status,
       404,
@@ -383,6 +394,13 @@ test(
         )
       ).status,
       422,
+    );
+    await assert.rejects(
+      db.quiz.update({
+        where: { id: quiz.id },
+        data: { plannedStartAt: null },
+      }),
+      /quiz_planned_start_required/,
     );
   },
 );

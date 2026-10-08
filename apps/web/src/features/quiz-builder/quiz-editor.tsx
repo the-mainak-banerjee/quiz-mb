@@ -16,6 +16,7 @@ import {
   Folder,
 } from 'lucide-react';
 import {
+  AUTHORING_LIMITS,
   type ProjectDto,
   QUESTION_TYPE,
   EDIT_SCOPE,
@@ -32,10 +33,13 @@ import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
 import { VisuallyHidden } from '@/components/visually-hidden';
 import { Modal } from '@/components/ui/modal';
+import { ConfirmDeleteModal } from '@/components/confirm-delete-modal';
 import { apiError } from '@/lib/api/client';
 import { authoringApi } from '@/lib/api/authoring';
 import { cn } from '@/lib/utils';
+import { PromptText } from '@/components/markdown-preview';
 import { QuizForm, quizValues } from './quiz-form';
+import { EDITOR_NOTICE_TEXT, type EditorNotice } from './editor-notice';
 import {
   QuestionForm,
   questionValues,
@@ -47,9 +51,7 @@ import { ReviewPublishPanel } from '@/features/publishing/review-publish-panel';
 const MarkdownPreview = dynamic(() => import('@/components/markdown-preview'));
 type Step = 'details' | 'questions' | 'review';
 
-/** Notices passed to the editor in the URL after the quiz is created. */
-export const EDITOR_NOTICE = { COVER_FAILED: 'cover-upload-failed' } as const;
-export type EditorNotice = (typeof EDITOR_NOTICE)[keyof typeof EDITOR_NOTICE];
+export { EDITOR_NOTICE, type EditorNotice } from './editor-notice';
 function StatusBadge({ status }: { status: QuizStatus | undefined }) {
   switch (status) {
     case QUIZ_STATUS.PUBLISHED:
@@ -89,12 +91,10 @@ export function QuizEditor({
   const [revision, setRevision] = useState(0);
   const [preview, setPreview] = useState(false);
   const [deleting, setDeleting] = useState<QuestionDto | null>(null);
-  const [error, setError] = useState(
-    notice === EDITOR_NOTICE.COVER_FAILED
-      ? 'The quiz was saved, but its cover image could not be uploaded. Please add it again.'
-      : '',
-  );
+  const [deletingQuiz, setDeletingQuiz] = useState(false);
+  const [error, setError] = useState(notice ? EDITOR_NOTICE_TEXT[notice] : '');
   const [busy, setBusy] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [saved, setSaved] = useState('');
   const [dragged, setDragged] = useState<string | null>(null);
   const detailsRef = useRef<QuestionFormHandle>(null);
@@ -154,6 +154,9 @@ export function QuizEditor({
   const questionsLocked =
     readOnly || isEditLocked(status, EDIT_SCOPE.QUESTIONS);
   // A published quiz keeps at least one question (the API enforces it).
+  // The API enforces the question limit; the editor explains it up front.
+  const atQuestionLimit =
+    (quiz?.questions.length ?? 0) >= AUTHORING_LIMITS.questions;
   const keepsLastQuestion =
     status !== QUIZ_STATUS.DRAFT && (quiz?.questions.length ?? 0) <= 1;
   const steps = readOnly
@@ -189,14 +192,26 @@ export function QuizEditor({
               ? 'Questions'
               : 'Review & publish'}
         </Text>
-        <Button
-          variant="secondary"
-          icon={<Eye size={18} />}
-          disabled={!quiz?.questions.length}
-          onClick={() => setPreview(true)}
-        >
-          Preview saved quiz
-        </Button>
+        <div className="flex flex-wrap gap-space-xs">
+          {quiz?.status === QUIZ_STATUS.DRAFT && !readOnly && (
+            <Button
+              variant="outline"
+              icon={<Trash2 size={18} aria-hidden="true" />}
+              className="text-danger"
+              onClick={() => setDeletingQuiz(true)}
+            >
+              Delete quiz
+            </Button>
+          )}
+          <Button
+            variant="secondary"
+            icon={<Eye size={18} />}
+            disabled={!quiz?.questions.length}
+            onClick={() => setPreview(true)}
+          >
+            Preview saved quiz
+          </Button>
+        </div>
       </div>
       <nav
         aria-label="Quiz creation steps"
@@ -250,22 +265,28 @@ export function QuizEditor({
           ref={detailsRef}
           projectId={project.id}
           readOnly={readOnly}
+          leaving={leaving}
           {...(quiz ? { initial: quiz } : {})}
           onCancel={() => router.push(`/projects/${project.id}`)}
-          onSaved={(q, next, coverFailed) => {
+          onSaved={(q, next, coverNotice) => {
+            if (!quiz) {
+              // A new quiz continues on its own page; until it loads, the
+              // form stays disabled rather than briefly editable again.
+              setLeaving(true);
+              router.replace(
+                `/quizzes/${q.id}/edit?step=${next ? 'questions' : 'details'}${
+                  coverNotice ? `&notice=${coverNotice}` : ''
+                }`,
+              );
+              return;
+            }
             setQuiz(q);
             setSaved(
               q.status === QUIZ_STATUS.DRAFT
                 ? 'Quiz draft saved.'
                 : 'Quiz saved.',
             );
-            if (!quiz)
-              router.replace(
-                `/quizzes/${q.id}/edit?step=${next ? 'questions' : 'details'}${
-                  coverFailed ? `&notice=${EDITOR_NOTICE.COVER_FAILED}` : ''
-                }`,
-              );
-            else if (next) setStep('questions');
+            if (next) setStep('questions');
           }}
         />
       )}
@@ -275,14 +296,15 @@ export function QuizEditor({
             <Surface className="space-y-space-md">
               <div className="flex items-center justify-between">
                 <Text as="h2" variant="card-title">
-                  Questions ({quiz.questions.length})
+                  Questions ({quiz.questions.length} of{' '}
+                  {AUTHORING_LIMITS.questions})
                 </Text>
                 {!questionsLocked && (
                   <Button
                     variant="ghost"
                     className="px-space-xs"
                     icon={<Plus size={18} />}
-                    disabled={busy}
+                    disabled={busy || atQuestionLimit}
                     onClick={() => select(null)}
                   >
                     <VisuallyHidden>Add question</VisuallyHidden>
@@ -333,8 +355,8 @@ export function QuizEditor({
                       disabled={busy}
                       onClick={() => select(q.id)}
                     >
-                      <Text as="span" variant="label" className="line-clamp-2">
-                        {q.text}
+                      <Text as="span" variant="label">
+                        <PromptText text={q.text} compact />
                       </Text>
                     </Button>
                     <Text
@@ -424,11 +446,16 @@ export function QuizEditor({
                   variant="secondary"
                   className="w-full"
                   icon={<Plus size={18} />}
-                  disabled={busy}
+                  disabled={busy || atQuestionLimit}
                   onClick={() => select(null)}
                 >
                   Add question
                 </Button>
+              )}
+              {!questionsLocked && atQuestionLimit && (
+                <Text variant="caption" tone="secondary">
+                  A quiz can have up to {AUTHORING_LIMITS.questions} questions.
+                </Text>
               )}
             </Surface>
             {!questionsLocked && (
@@ -537,6 +564,27 @@ export function QuizEditor({
           ))}
         </div>
       </Modal>
+      {quiz && (
+        <ConfirmDeleteModal
+          open={deletingQuiz}
+          onOpenChange={setDeletingQuiz}
+          title="Delete draft quiz?"
+          description={`“${quiz.title}” will be permanently deleted, including its questions and images. This can’t be undone.`}
+          confirmLabel="Delete quiz"
+          onConfirm={async () => {
+            await authoringApi.deleteQuiz(quiz.id);
+            // The quiz is gone, so unsaved edits are discarded silently.
+            const back = () => {
+              router.replace(APP_LINKS.WORKSPACE.PROJECT(project.id));
+              router.refresh();
+            };
+            const form = (step === 'details' ? detailsRef : questionRef)
+              .current;
+            if (form) form.leave(back);
+            else back();
+          }}
+        />
+      )}
       <Modal
         open={!!deleting}
         onOpenChange={(open) => {

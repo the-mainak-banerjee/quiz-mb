@@ -344,11 +344,13 @@ Rules:
 - Email should be normalized before persistence.
 - Password hash is never returned from normal user queries.
 - Real name is used for MVP leaderboard display.
+- `emailVerifiedAt` is null until the email is verified. Accounts that were never verified are deleted 7 days after signup (hourly cleanup in the API, with their codes and email events); verified accounts are never deleted by it.
 
 Recommended indexes:
 
 ```text
 UNIQUE INDEX users_email_unique ON users(email)
+INDEX users_unverified_createdAt_idx ON users(createdAt) WHERE emailVerifiedAt IS NULL
 ```
 
 ---
@@ -398,6 +400,43 @@ Rules:
 - Store only a secure hash/derived representation of refresh credentials.
 - Revoked sessions remain invalid even if their original expiry has not passed.
 - Access tokens may remain short-lived/stateless while refresh sessions are persisted here.
+
+## 7.1 VerificationCode and AuthEmailEvent
+
+`VerificationCode` holds at most one live one-time code per user and purpose (`EMAIL_VERIFICATION`, `PASSWORD_RESET`): an HMAC of the code, its expiry and the wrong attempts. Issuing a new code replaces the row; a used, expired or exhausted code is deleted.
+
+`AuthEmailEvent` records one row per auth email sent (`SENT`) and per wrong code (`CODE_FAILED`), per user and purpose. Counted over rolling windows for the per-address send limits (5 per hour, 10 per 24 hours), the failure limit across resends (10 per 30 minutes, checked under the code row lock) and the daily email budget. Rows are deleted after two days by the cleanup job.
+
+```text
+AuthEmailEvent
+
+id
+userId → User.id (cascade)
+purpose
+kind (SENT | CODE_FAILED)
+createdAt
+
+INDEX (userId, purpose, kind, createdAt)
+INDEX (kind, createdAt)
+```
+
+## 7.2 UsageEvent
+
+One row per quiz created (`QUIZ_CREATED`) and per upload verified and attached (`MEDIA_UPLOADED`), counted over a rolling 24 hours for the creation and upload allowances (security design 1.5), and per live quiz started (`SESSION_STARTED`), counted per calendar month (UTC) for the hosted-session allowance (1.6.1). Rows outlive what they count, so deleting a quiz or image never gives the allowance back. Counted under a lock on the user's row; the hourly maintenance job deletes daily kinds after two days and `SESSION_STARTED` after 62 days.
+
+```text
+UsageEvent
+
+id
+userId → User.id (cascade)
+kind (QUIZ_CREATED | MEDIA_UPLOADED)
+createdAt
+
+INDEX (userId, kind, createdAt)
+INDEX (createdAt)
+```
+
+Stored media per account (5 MB) and platform-wide (warning at 600 MB, uploads paused at 800 MB) are sums of `MediaAsset.sizeBytes` over rows that are not `DELETED`, so pending uploads count as reservations. A media row is marked `DELETED` only after its file is removed from storage.
 
 ---
 
@@ -525,6 +564,7 @@ Constraints:
 UNIQUE (publicId)
 CHECK registrationLimit > 0
 CHECK defaultQuestionDurationSeconds > 0
+CHECK status = 'DRAFT' OR plannedStartAt IS NOT NULL   -- quiz_planned_start_required
 ```
 
 Relationships:
@@ -773,6 +813,8 @@ Redis may assist with fast UI counts, but PostgreSQL is the authority for capaci
 ---
 
 # 16. LiveQuizSession
+
+`hostDisconnectedAt` records when the host's last live connection dropped (null while connected; set for every started session when the API restarts). With `createdAt` (lobby expiry, 30 minutes) and `startedAt` (maximum length, 4 hours) it drives the server-enforced session deadlines (security design 1.6).
 
 Represents one live execution of a quiz.
 
@@ -1289,8 +1331,9 @@ Failed/unconfirmed objects can be cleaned later.
 
 # 34. Suggested Delete Behavior
 
-- Draft quizzes may be hard deleted.
+- Draft quizzes may be hard deleted. Only drafts can be deleted (API §8.6); their questions, media records and stored files go with them.
 - Completed quizzes should not be hard deleted through normal MVP UI.
+- A project can be deleted only while all its quizzes are drafts (API §7.5).
 - Questions may be deleted while quiz remains editable.
 - Questions cannot be deleted after live session starts.
 - Competitive answers/results should not be individually deletable through normal user actions.
@@ -1733,6 +1776,13 @@ rate:register:user:...
 ```
 
 Use counters with TTL.
+
+The wrong-password pause uses two keys per email address (hashed, never plain text):
+
+```text
+login-fail:{emailHash}    sorted set of wrong-password times, rolling 15 minutes
+login-pause:{emailHash}   set for 15 minutes when the 5th wrong password arrives
+```
 
 Exact quotas belong in Security Design.
 

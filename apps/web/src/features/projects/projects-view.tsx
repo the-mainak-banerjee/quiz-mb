@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import {
+  ACCOUNT_LIMITS,
   ACTIVE_QUIZ_STATUSES,
   QUIZ_STATUS,
   type ProjectDto,
@@ -27,6 +28,7 @@ import { APP_LINKS } from '@/config/navigation';
 import { QuizCard } from '@/features/dashboard/quiz-card';
 import type { Quiz } from '@/features/dashboard/types';
 import { ProjectForm } from '@/features/projects/project-form';
+import { DeleteDraftQuizButton } from '@/features/quiz-builder/delete-draft-quiz-button';
 import { api } from '@/lib/api/browser';
 import { apiError } from '@/lib/api/client';
 import { API_ROUTES } from '@/lib/api/routes';
@@ -152,6 +154,8 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
     );
   }
 
+  // The API enforces the limit; this explains it before anyone tries.
+  const atLimit = items.length >= ACCOUNT_LIMITS.projects;
   const totalQuizzes = items.reduce(
     (total, project) => total + project.quizCount,
     0,
@@ -176,12 +180,21 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
             recurring live sessions.
           </Text>
         </div>
-        <Button
-          icon={<Plus size={18} aria-hidden="true" />}
-          onClick={() => setCreateOpen(true)}
-        >
-          Create project
-        </Button>
+        <div className="flex flex-col items-start gap-space-xs lg:items-end">
+          <Button
+            icon={<Plus size={18} aria-hidden="true" />}
+            disabled={atLimit}
+            onClick={() => setCreateOpen(true)}
+          >
+            Create project
+          </Button>
+          {atLimit && (
+            <Text variant="caption" tone="secondary">
+              You can have up to {ACCOUNT_LIMITS.projects} projects. Delete one
+              to create a new project.
+            </Text>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-space-sm lg:flex-row lg:items-center lg:justify-between">
@@ -257,6 +270,7 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
           ))}
           <Button
             variant="outline"
+            disabled={atLimit}
             icon={
               <FolderPlus
                 className="text-accent"
@@ -292,7 +306,9 @@ export function ProjectsView({ initial }: { initial: ProjectDto[] }) {
           categorized.
         </Text>
         <div className="flex gap-space-md">
-          <Text variant="label">{items.length} total projects</Text>
+          <Text variant="label">
+            {items.length} of {ACCOUNT_LIMITS.projects} projects
+          </Text>
           <Text variant="label">{totalQuizzes} enclosed quizzes</Text>
         </div>
       </div>
@@ -366,6 +382,7 @@ export function ProjectQuizzes({
   project: ProjectDto;
   initial: QuizSummaryDto[];
 }) {
+  const router = useRouter();
   const [items, setItems] = useState(initial);
   const [filter, setFilter] = useState<QuizFilter>('all');
   const [more, setMore] = useState(initial.length === 25);
@@ -462,6 +479,22 @@ export function ProjectQuizzes({
                         ? APP_LINKS.WORKSPACE.QUIZ_RESULTS(quiz.id)
                         : APP_LINKS.WORKSPACE.MANAGE_QUIZ(quiz.id)
                 }
+                {...(quiz.status === QUIZ_STATUS.DRAFT
+                  ? {
+                      secondaryAction: (
+                        <DeleteDraftQuizButton
+                          quiz={quiz}
+                          onDeleted={() => {
+                            setItems((current) =>
+                              current.filter((q) => q.id !== quiz.id),
+                            );
+                            // The page header counts the project's quizzes.
+                            router.refresh();
+                          }}
+                        />
+                      ),
+                    }
+                  : {})}
               />
             );
           })}

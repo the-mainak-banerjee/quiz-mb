@@ -29,6 +29,7 @@ export function liveSessionRoutes(service: LiveSessionsService) {
       data: await service.issueWatchTicket(
         validate(z.uuid(), req.params.id),
         res.locals.userId as string,
+        res.locals.authFamilyId as string,
       ),
     });
   });
@@ -44,6 +45,7 @@ export function liveSessionRoutes(service: LiveSessionsService) {
       data: await service.issueTicket(
         validate(z.uuid(), req.params.id),
         res.locals.userId as string,
+        res.locals.authFamilyId as string,
       ),
     });
   });

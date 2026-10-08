@@ -21,6 +21,7 @@ import { Text } from '@/components/ui';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
 import { ProjectQuizzes } from '@/features/projects/projects-view';
+import { DeleteProjectButton } from '@/features/projects/delete-project-button';
 export default async function ProjectPage({
   params,
 }: {
@@ -127,7 +128,7 @@ export default async function ProjectPage({
               </div>
             </div>
           </div>
-          <div className="flex pl-space-2xl lg:pl-0 w-full min-w-0 flex-nowrap gap-space-xs lg:w-auto lg:shrink-0">
+          <div className="flex w-full min-w-0 flex-wrap gap-space-xs pl-space-2xl lg:w-auto lg:shrink-0 lg:pl-0">
             <NavigationItem
               href={APP_LINKS.WORKSPACE.EDIT_PROJECT(projectId)}
               icon={<Pencil size={17} aria-hidden="true" />}
@@ -135,6 +136,12 @@ export default async function ProjectPage({
             >
               Edit project
             </NavigationItem>
+            <DeleteProjectButton
+              project={project}
+              // Only the first page of quizzes is loaded; the API re-checks.
+              draftCount={project.quizCount}
+              blocked={statusCounts.draft < quizzes.length}
+            />
             <NavigationItem
               href={APP_LINKS.WORKSPACE.NEW_PROJECT_QUIZ(projectId)}
               icon={<Plus size={18} aria-hidden="true" />}

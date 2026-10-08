@@ -23,28 +23,13 @@ import type {
 // are formatted in the viewer's browser locale and time zone.
 
 export function toQuizSummary(quiz: LiveQuizInfoDto): LiveQuizSummary {
-  const planned = quiz.plannedStartAt ? new Date(quiz.plannedStartAt) : null;
   return {
     id: quiz.id,
     publicId: quiz.publicId,
     title: quiz.title,
     projectName: quiz.projectName,
     hostName: quiz.hostName,
-    plannedDate: planned
-      ? planned.toLocaleDateString(undefined, {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-        })
-      : 'Date to be announced',
-    plannedTime: planned
-      ? planned.toLocaleTimeString(undefined, {
-          hour: 'numeric',
-          minute: '2-digit',
-          timeZoneName: 'short',
-        })
-      : '',
+    plannedStartAt: quiz.plannedStartAt,
     registrationLimit: quiz.registrationLimit,
     questionCount: quiz.questionCount,
     defaultDurationSeconds: quiz.defaultQuestionDurationSeconds,

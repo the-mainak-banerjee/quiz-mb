@@ -22,6 +22,7 @@ import { HostActiveQuestion } from './host-active-question';
 import { HostConsoleHeader, HostConsoleLayout } from './host-console-layout';
 import { HostLiveIdle } from './host-live-idle';
 import { HostLobby } from './host-lobby';
+import { SessionEndingCallout, useEndingSoon } from './session-ending-notice';
 import { HostQuizCompleted } from './quiz-completed';
 import { HostLeaderboardView } from './leaderboard';
 import {
@@ -148,6 +149,18 @@ export function HostLiveConsole({
   >(null);
   const router = useRouter();
   const manageHref = APP_LINKS.WORKSPACE.MANAGE_QUIZ(quizId);
+  const lobbyExpired =
+    connection === 'failed' && failure?.code === ERROR_CODE.LOBBY_EXPIRED;
+  // An expired lobby takes the host back to quiz management.
+  useEffect(() => {
+    if (!lobbyExpired) return;
+    const timer = window.setTimeout(() => router.replace(manageHref), 5_000);
+    return () => window.clearTimeout(timer);
+  }, [lobbyExpired, manageHref, router]);
+  const endingSoon = useEndingSoon(
+    snapshot?.sessionEndsAt ?? null,
+    clockOffsetMs,
+  );
   const backToQuiz = (
     <NavigationItem href={manageHref} className="bg-surface-low">
       Back to quiz
@@ -163,6 +176,15 @@ export function HostLiveConsole({
     return ack.ok;
   }
 
+  if (connection === 'failed' && failure?.code === ERROR_CODE.LOBBY_EXPIRED)
+    return (
+      <LiveNotice
+        eyebrow="Lobby expired"
+        title="The lobby closed automatically"
+        description={`${failure.message} The quiz is still published with its registrations, and you can open the lobby again. Taking you back to the quiz…`}
+        action={backToQuiz}
+      />
+    );
   if (connection === 'failed' && failure?.code === ERROR_CODE.LOBBY_CLOSED)
     return (
       <LiveNotice
@@ -378,10 +400,15 @@ export function HostLiveConsole({
       {error}
     </Callout>
   ) : null;
+  const ending =
+    endingSoon && host.sessionEndsAt ? (
+      <SessionEndingCallout endsAt={host.sessionEndsAt} />
+    ) : null;
   const notices =
-    status || problem ? (
+    status || problem || ending ? (
       <div className="mx-auto w-full max-w-content space-y-space-xs px-margin-sm pt-space-md md:px-margin lg:px-margin-lg">
         {status}
+        {ending}
         {problem}
       </div>
     ) : null;
@@ -398,6 +425,8 @@ export function HostLiveConsole({
           publicUrl={publicUrl}
           allowLateJoin={host.allowLateJoin}
           busy={busy || connection !== 'connected'}
+          allowance={host.hostingAllowance}
+          lobbyExpiresAt={host.lobbyExpiresAt}
           onStartQuiz={() => void run(LIVE_EVENTS.quizStart)}
           onCloseLobby={() => setConfirming('close')}
           onLateJoinChange={onLateJoinChange}

@@ -1,6 +1,8 @@
+import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight, Check, Circle, PartyPopper, Zap } from 'lucide-react';
-import { Surface, Text } from '@/components/ui';
+import { ArrowRight, Circle } from 'lucide-react';
+import { Text } from '@/components/ui';
+import { MiloStage } from '@/components/milo/milo-states';
 import { Brand as Wordmark } from '@/components/brand';
 import { cn } from '@/lib/utils';
 import { APP_LINKS } from '@/config/navigation';
@@ -23,14 +25,35 @@ function StatusDot() {
   return <Circle aria-hidden="true" size={7} fill="currentColor" />;
 }
 
+/** Real product screens (captured from the app with sample data). */
+const SCREENSHOTS = {
+  login: {
+    src: '/auth/host-console.webp',
+    width: 1440,
+    height: 920,
+    alt: 'The QuizMB host console during a live question: the question list, live answer breakdown and quiz controls.',
+    caption:
+      'The host console: ask any question, watch answers arrive and decide when to show the leaderboard.',
+  },
+  signup: {
+    src: '/auth/participant-question.webp',
+    width: 1200,
+    height: 1007,
+    alt: 'A participant answering a live QuizMB question, with the countdown and answer options.',
+    caption:
+      'What participants see: one question at a time, a countdown and a single submit.',
+  },
+} as const;
+
 function Preview({ signup }: { signup: boolean }) {
   const previewTone = signup ? 'inverse' : 'primary';
+  const shot = signup ? SCREENSHOTS.signup : SCREENSHOTS.login;
 
   return (
     <aside
       aria-label="Platform introduction"
       className={cn(
-        'flex flex-col justify-between gap-space-xl rounded-feature p-space-lg md:p-space-xl',
+        'flex flex-col rounded-feature p-space-lg md:p-space-xl',
         signup ? 'bg-action-primary' : 'bg-surface-low',
       )}
     >
@@ -65,125 +88,32 @@ function Preview({ signup }: { signup: boolean }) {
         )}
       </div>
 
-      {signup ? (
-        <div className="space-y-space-md rounded-card bg-surface/10 p-space-md">
-          <div className="flex flex-wrap justify-between gap-space-xs">
-            <Text
-              as="span"
-              variant="label"
-              tone="inverse"
-              className="flex items-center gap-space-xs"
-            >
-              <StatusDot /> Friday Team Trivia #42
-            </Text>
-            <Text as="span" variant="caption" tone="inverse">
-              48 players active
-            </Text>
+      {/* Top padding leaves room for Milo above the screenshot. */}
+      <figure className="space-y-space-sm pt-space-xl md:pt-space-2xl">
+        <div className="relative">
+          <div className="overflow-hidden rounded-card border border-border-surface bg-surface shadow-floating">
+            <Image
+              src={shot.src}
+              width={shot.width}
+              height={shot.height}
+              alt={shot.alt}
+              sizes="(min-width: 1024px) 40vw, 100vw"
+              className="h-auto w-full"
+              priority
+            />
           </div>
-          <div className="grid grid-cols-2 gap-space-sm">
-            <div className="rounded-control bg-surface/5 p-space-sm">
-              <Text variant="caption" tone="inverse">
-                Active teams
-              </Text>
-              <Text variant="card-title" tone="inverse">
-                8 Groups{' '}
-                <Text as="span" variant="caption" tone="inverse">
-                  active
-                </Text>
-              </Text>
-            </div>
-            <div className="rounded-control bg-surface/5 p-space-sm">
-              <Text variant="caption" tone="inverse">
-                Current round
-              </Text>
-              <Text variant="card-title" tone="inverse">
-                Round 3 of 5
-              </Text>
-            </div>
-          </div>
-          <Text
-            variant="caption"
-            tone="inverse"
-            className="flex flex-wrap justify-between gap-space-xs"
-          >
-            <span className="flex items-center gap-space-xs">
-              <StatusDot /> Designers &amp; Writers
-            </span>
-            <span className="flex items-center gap-space-xs">
-              All locked in! <PartyPopper aria-hidden="true" size={14} />
-            </span>
-          </Text>
-          <Text
-            variant="caption"
-            tone="inverse"
-            className="flex flex-wrap justify-between gap-space-xs"
-          >
-            <span className="flex items-center gap-space-xs">
-              <StatusDot /> Frontend Crew
-            </span>
-            <span>Discussing option B...</span>
-          </Text>
+          {/* Milo greets from the corner of the product screenshot. */}
+          <MiloStage
+            pose="welcome"
+            className="absolute -top-16 right-space-sm w-24 md:-top-20 md:w-28"
+          />
         </div>
-      ) : (
-        <Surface>
-          <div className="flex justify-between gap-space-sm text-accent">
-            <Text
-              as="span"
-              variant="caption"
-              className="flex items-center gap-space-xs text-accent"
-            >
-              <StatusDot /> Live Ready
-            </Text>
-            <Text as="span" variant="caption" className="text-accent">
-              42 joined
-            </Text>
-          </div>
-          <Text as="h3" variant="card-title" className="mt-space-sm">
-            Product All-Hands Q3
+        <figcaption>
+          <Text variant="caption" tone={previewTone}>
+            {shot.caption}
           </Text>
-          <Text variant="body-secondary" tone="secondary">
-            Quarterly sync &amp; knowledge check
-          </Text>
-          <div className="mt-space-md flex justify-between gap-space-sm">
-            <Text as="span" variant="caption">
-              EM · LR · KA · +39
-            </Text>
-            <Text as="span" variant="caption" className="text-accent">
-              Session 08 / 12
-            </Text>
-          </div>
-        </Surface>
-      )}
-
-      <div className="flex flex-wrap items-center justify-between gap-space-sm">
-        {signup ? (
-          <>
-            <Text as="span" variant="caption" tone="inverse">
-              MK · DR · AS
-            </Text>
-            <Text as="span" variant="caption" tone="inverse">
-              Loved by 2,500+ teams, study groups &amp; communities
-            </Text>
-          </>
-        ) : (
-          <>
-            <Text
-              as="span"
-              variant="caption"
-              className="flex items-center gap-space-xs"
-            >
-              <Check aria-hidden="true" size={14} /> End-to-end encrypted
-            </Text>
-            <Text
-              as="span"
-              variant="caption"
-              className="flex items-center gap-space-xs"
-            >
-              <Zap aria-hidden="true" size={14} /> Instant live responses
-            </Text>
-          </>
-        )}
-      </div>
+        </figcaption>
+      </figure>
     </aside>
   );
 }

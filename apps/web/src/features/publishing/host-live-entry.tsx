@@ -11,6 +11,14 @@ import { liveApi } from '@/lib/api/live';
 import type { PublishedQuizViewModel } from './types';
 import { ERROR_CODE, QUIZ_STATUS } from '@quizmb/contracts';
 
+/** Refusals meaning the quiz changed state since this page loaded. */
+const STALE_STATUS_CODES: ReadonlySet<string> = new Set([
+  ERROR_CODE.QUIZ_COMPLETED,
+  ERROR_CODE.QUIZ_NOT_OPEN,
+]);
+/** Long enough to read the message before the page updates. */
+const STALE_REFRESH_DELAY_MS = 2_000;
+
 /**
  * Host entry to the live session. The planned time never gates this; the API
  * decides whether a lobby can open (one live quiz per host).
@@ -56,9 +64,18 @@ export function HostLiveEntry({
       router.push(APP_LINKS.WORKSPACE.LIVE_QUIZ(quizId));
     } catch (cause) {
       const problem = apiError(cause);
-      if (problem.code === ERROR_CODE.ACTIVE_SESSION_EXISTS)
+      if (problem.code === ERROR_CODE.ACTIVE_SESSION_EXISTS) {
         router.push(APP_LINKS.WORKSPACE.LIVE_CONFLICT(quizId));
-      else setError(problem.message);
+        setPending(false);
+        return;
+      }
+      setError(problem.message);
+      if (STALE_STATUS_CODES.has(problem.code)) {
+        // This page is out of date (e.g. the quiz ended in another tab):
+        // reload it so it shows the quiz's real state and actions.
+        window.setTimeout(() => router.refresh(), STALE_REFRESH_DELAY_MS);
+        return;
+      }
       setPending(false);
     }
   }

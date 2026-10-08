@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { CircleCheck, ListChecks, Lock, LockKeyhole } from 'lucide-react';
 import { Badge, Callout, Surface, Text } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { PromptText } from '@/components/markdown-preview';
 import { questionNumber, questionTypeLabels } from './format';
 import type { QueueQuestion } from './types';
 
@@ -64,9 +65,9 @@ function QueueItemBody({ question }: { question: QueueQuestion }) {
         as="span"
         variant="body-secondary"
         tone={muted ? 'secondary' : 'primary'}
-        className="line-clamp-2 font-medium"
+        className="font-medium"
       >
-        {question.text}
+        <PromptText text={question.text} compact />
       </Text>
       <Text
         as="span"

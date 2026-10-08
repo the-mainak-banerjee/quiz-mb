@@ -17,6 +17,8 @@ import {
   type SocketTicketDto,
 } from '@quizmb/contracts';
 import { createApp } from '../src/app.js';
+import { MemoryMailbox } from '../src/infrastructure/email.js';
+import { signUpVerified } from './auth-helper.js';
 import { createLogger } from '../src/infrastructure/logger.js';
 import { createRedis } from '../src/infrastructure/redis.js';
 import { DomainEvents } from '../src/infrastructure/domain-events.js';
@@ -65,6 +67,7 @@ export async function startLiveHarness<Role extends string>(
     throw new Error('Development integration tests only');
   const config = parseAuthEnv(process.env);
   const db = createDatabase(config.DATABASE_URL, config.DATABASE_SSL_CA_BASE64);
+  const mailbox = new MemoryMailbox();
   const redis = createRedis(process.env.REDIS_URL!);
   await redis.connect();
   const events = new DomainEvents();
@@ -86,7 +89,14 @@ export async function startLiveHarness<Role extends string>(
     createApp({
       allowedOrigins: [origin],
       logger,
-      auth: new AuthService(new AuthRepository(db), config),
+      // Events let logout disconnect the sign-in's sockets.
+      auth: new AuthService(
+        new AuthRepository(db),
+        config,
+        mailbox,
+        {},
+        { events },
+      ),
       users: new UsersService(db),
       database: db,
       live,
@@ -140,12 +150,12 @@ export async function startLiveHarness<Role extends string>(
   const cookies = {} as Record<Role, string>;
   const userIds = {} as Record<Role, string>;
   for (const [index, role] of roles.entries()) {
-    const response = await request('/auth/signup', 'POST', {
+    const response = await signUpVerified(request, mailbox, {
       name: `Edge ${role}`,
-      email: emails[index],
+      email: emails[index]!,
       password: 'a strong live edge case test password',
     });
-    assert.equal(response.status, 201);
+    assert.equal(response.status, 200);
     cookies[role] = response.headers
       .getSetCookie()
       .map((value) => value.split(';')[0])
@@ -214,6 +224,11 @@ export async function startLiveHarness<Role extends string>(
         ),
         201,
       );
+    // Fixture reset: tests run several sessions per host, more than the
+    // monthly allowance; its own test seeds starts after opening.
+    await db.usageEvent.deleteMany({
+      where: { userId: userIds[host], kind: 'SESSION_STARTED' },
+    });
     const session = await data<LiveSessionRefDto>(
       await request(
         `/quizzes/${quiz.id}/live-session`,
@@ -284,6 +299,9 @@ export async function startLiveHarness<Role extends string>(
 
   return {
     logs,
+    mailbox,
+    /** Each role's email address (index matches `roles`). */
+    emailOf: (role: Role) => emails[roles.indexOf(role)]!,
     db,
     redis,
     live,

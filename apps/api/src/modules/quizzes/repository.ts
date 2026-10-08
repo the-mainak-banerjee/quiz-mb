@@ -1,7 +1,12 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@quizmb/database';
 import { ApiError } from '../../http/api-error.js';
 import { lockedTransaction } from '../../infrastructure/transactions.js';
+import {
+  lockAccount,
+  recordUsage,
+  requireAllowance,
+} from '../usage/allowances.js';
 import {
   PUBLIC_QUIZ_STATUSES,
   type MediaPurpose,
@@ -76,31 +81,56 @@ export const mediaEditScope = (purpose: MediaPurpose) =>
   purpose === MEDIA_PURPOSE.QUESTION_IMAGE
     ? EDIT_SCOPE.QUESTIONS
     : EDIT_SCOPE.DETAILS;
+/**
+ * The image being attached must belong to this quiz and purpose. A PENDING
+ * upload is accepted only when its stored file was just verified
+ * (`MediaService.verifyPending`), and it becomes READY here.
+ */
 export async function validateMedia(
   tx: Prisma.TransactionClient,
   id: string | null,
   quizId: string,
   userId: string,
   purpose: MediaPurpose,
+  verified = false,
 ) {
-  if (
-    id &&
-    !(await tx.mediaAsset.findFirst({
-      where: {
-        id,
-        quizId,
-        ownerUserId: userId,
-        purpose,
-        status: MEDIA_STATUS.READY,
+  if (!id) return;
+  const asset = await tx.mediaAsset.findFirst({
+    where: {
+      id,
+      quizId,
+      ownerUserId: userId,
+      purpose,
+      status: {
+        in: verified
+          ? [MEDIA_STATUS.READY, MEDIA_STATUS.PENDING]
+          : [MEDIA_STATUS.READY],
       },
-    }))
-  )
+    },
+  });
+  if (!asset)
     throw new ApiError(
       422,
       ERROR_CODE.VALIDATION_ERROR,
-      'Choose a completed image upload belonging to this quiz.',
+      'Choose an uploaded image belonging to this quiz.',
     );
+  if (asset.status === MEDIA_STATUS.PENDING) {
+    await tx.mediaAsset.update({
+      where: { id },
+      data: { status: MEDIA_STATUS.READY, readyAt: new Date() },
+    });
+    // A successful upload, for the daily upload allowance.
+    await recordUsage(tx, userId, 'MEDIA_UPLOADED');
+  }
 }
+/** The registration limit is above what the account's plan allows. */
+export function participantLimit(maxParticipants: number) {
+  const message = `A quiz can have up to ${maxParticipants} participants.`;
+  return new ApiError(422, ERROR_CODE.VALIDATION_ERROR, message, {
+    registrationLimit: message,
+  });
+}
+
 export class QuizzesRepository {
   constructor(readonly db: PrismaClient) {}
   get(id: string, userId: string) {
@@ -121,8 +151,42 @@ export class QuizzesRepository {
       include: { _count: { select: { questions: true } } },
     });
   }
-  create(projectId: string, userId: string, input: QuizInput) {
+  /**
+   * Creates a quiz within the account's daily creation allowance (counted
+   * under a lock on the account; deleting a quiz never gives it back). A
+   * cover upload requested with it is reserved too; if its reservation is
+   * refused (storage full), the quiz is still created and `coverRefusal`
+   * says why.
+   */
+  create(
+    projectId: string,
+    userId: string,
+    input: QuizInput,
+    {
+      id = randomUUID(),
+      creationsPerDay,
+      cover,
+    }: {
+      id?: string;
+      creationsPerDay: number;
+      cover?:
+        | {
+            data: Prisma.MediaAssetUncheckedCreateInput;
+            reserve: (tx: Prisma.TransactionClient) => Promise<void>;
+          }
+        | undefined;
+    },
+  ) {
     return this.db.$transaction(async (tx) => {
+      await lockAccount(tx, userId);
+      await requireAllowance(
+        tx,
+        userId,
+        'QUIZ_CREATED',
+        creationsPerDay,
+        (wait) =>
+          `You can create up to ${creationsPerDay} quizzes a day. You can create another ${wait}.`,
+      );
       if (
         !(await tx.project.findFirst({
           where: { id: projectId, ownerUserId: userId },
@@ -135,20 +199,53 @@ export class QuizzesRepository {
           ERROR_CODE.VALIDATION_ERROR,
           'Save the quiz before uploading its cover.',
         );
-      return tx.quiz.create({
+      const quiz = await tx.quiz.create({
         data: {
           ...input,
+          id,
           projectId,
           creatorUserId: userId,
           publicId: randomBytes(12).toString('base64url'),
         },
         include: quizInclude,
       });
-    });
+      await recordUsage(tx, userId, 'QUIZ_CREATED');
+      let coverRefusal: string | null = null;
+      if (cover)
+        try {
+          await cover.reserve(tx);
+          await tx.mediaAsset.create({ data: cover.data });
+        } catch (error) {
+          if (!(error instanceof ApiError)) throw error;
+          coverRefusal = error.message;
+        }
+      return { quiz, coverRefusal };
+    }, lockedTransaction);
   }
-  update(id: string, userId: string, input: QuizInput) {
+  /**
+   * `coverVerified`: the cover is a PENDING upload whose file was checked.
+   * `maxParticipants`: the account's capacity; a quiz created before the
+   * limit keeps a higher value it already has, but cannot raise it.
+   */
+  update(
+    id: string,
+    userId: string,
+    input: QuizInput,
+    {
+      coverVerified = false,
+      maxParticipants,
+    }: {
+      coverVerified?: boolean;
+      maxParticipants: number;
+    },
+  ) {
     return this.db.$transaction(async (tx) => {
-      await lockEditableQuiz(tx, id, userId);
+      const current = await lockEditableQuiz(tx, id, userId);
+      if (
+        input.registrationLimit > maxParticipants &&
+        input.registrationLimit > current.registrationLimit
+      )
+        throw participantLimit(maxParticipants);
       // Same row lock as registration, so the count cannot change meanwhile.
       const registered = await tx.quizRegistration.count({
         where: { quizId: id, status: REGISTRATION_STATUS.REGISTERED },
@@ -165,12 +262,41 @@ export class QuizzesRepository {
         id,
         userId,
         MEDIA_PURPOSE.QUIZ_COVER,
+        coverVerified,
       );
       return tx.quiz.update({
         where: { id },
         data: input,
         include: quizInclude,
       });
+    }, lockedTransaction);
+  }
+  /**
+   * Deletes a draft quiz with its questions and media rows. Only drafts can
+   * be deleted: nobody has registered for or played them. Returns the
+   * storage paths of its files, removed after the transaction commits.
+   */
+  remove(id: string, userId: string) {
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM quizzes WHERE id = ${id}::uuid FOR UPDATE`;
+      const quiz = await tx.quiz.findFirst({
+        where: { id, creatorUserId: userId, project: { ownerUserId: userId } },
+        select: { status: true },
+      });
+      if (!quiz)
+        throw new ApiError(404, ERROR_CODE.NOT_FOUND, 'Quiz not found.');
+      if (quiz.status !== QUIZ_STATUS.DRAFT)
+        throw new ApiError(
+          409,
+          ERROR_CODE.QUIZ_LOCKED,
+          'Only draft quizzes can be deleted.',
+        );
+      const files = await tx.mediaAsset.findMany({
+        where: { quizId: id, status: { not: MEDIA_STATUS.DELETED } },
+        select: { objectPath: true },
+      });
+      await tx.quiz.delete({ where: { id } });
+      return files.map((file) => file.objectPath);
     }, lockedTransaction);
   }
   publish(id: string, userId: string) {

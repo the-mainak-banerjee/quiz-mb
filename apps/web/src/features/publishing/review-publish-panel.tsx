@@ -23,6 +23,8 @@ import { APP_LINKS } from '@/config/navigation';
 import { apiError } from '@/lib/api/client';
 import { publishingApi } from '@/lib/api/publishing';
 import { pluralize } from '@/lib/utils';
+import { PromptText } from '@/components/markdown-preview';
+import { LocalDateTime } from '@/components/local-date-time';
 
 export function ReviewPublishPanel({
   quiz,
@@ -50,16 +52,20 @@ export function ReviewPublishPanel({
       (question.durationOverrideSeconds ?? quiz.defaultQuestionDurationSeconds),
     0,
   );
-  const planned = quiz.plannedStartAt
-    ? new Date(quiz.plannedStartAt).toLocaleString(undefined, {
-        dateStyle: 'full',
-        timeStyle: 'short',
-      })
-    : 'Not scheduled';
+  const planned = quiz.plannedStartAt ? (
+    <LocalDateTime value={quiz.plannedStartAt} format="fullDateTime" />
+  ) : (
+    'Not scheduled'
+  );
 
   return (
     <div className="space-y-space-lg">
-      {publishing && <GlobalLoader label="Publishing your quiz…" />}
+      {publishing && (
+        <GlobalLoader
+          label="Publishing your quiz…"
+          hint="Opening registration and preparing the public page."
+        />
+      )}
       <Surface className="flex flex-col justify-between gap-space-md bg-action-secondary sm:flex-row sm:items-center">
         <div className="flex items-start gap-space-sm">
           <CheckCircle2
@@ -215,9 +221,11 @@ export function ReviewPublishPanel({
                       {String(index + 1).padStart(2, '0')}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <Text variant="label" className="line-clamp-2">
-                        {question.text}
-                      </Text>
+                      <PromptText
+                        text={question.text}
+                        compact
+                        className="text-label text-text-primary"
+                      />
                       <Text variant="caption" tone="secondary">
                         {QUESTION_LABELS[question.type]} ·{' '}
                         {question.type === QUESTION_TYPE.DESCRIPTIVE

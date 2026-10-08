@@ -8,6 +8,9 @@ import { createLogger } from '../src/infrastructure/logger.js';
 import { requestContext } from '../src/http/request-context.js';
 import { errorHandler } from '../src/http/error-handler.js';
 import { csrf } from '../src/http/csrf.js';
+import { ApiError } from '../src/http/api-error.js';
+import { ALERT } from '../src/infrastructure/alerts.js';
+import { ERROR_CODE } from '@quizmb/contracts';
 
 const logger = createLogger('silent');
 async function withServer(
@@ -172,9 +175,15 @@ test('a saturated database answers 503 SERVICE_BUSY with Retry-After', async () 
   app.get('/transaction', () => {
     throw Object.assign(new Error('Transaction API error'), { code: 'P2028' });
   });
+  // The Supabase pooler with all of its clients taken.
+  app.get('/pooler', () => {
+    throw new Error(
+      '(EMAXCONNSESSION) max clients reached in session mode - max clients are limited to pool_size: 15',
+    );
+  });
   app.use(errorHandler(logger));
   await withServer(app, async (url) => {
-    for (const path of ['/pool', '/transaction']) {
+    for (const path of ['/pool', '/transaction', '/pooler']) {
       const response = await fetch(`${url}${path}`);
       assert.equal(response.status, 503, path);
       assert.equal(response.headers.get('retry-after'), '2', path);
@@ -182,4 +191,33 @@ test('a saturated database answers 503 SERVICE_BUSY with Retry-After', async () 
       assert.equal(body.error.code, 'SERVICE_BUSY', path);
     }
   });
+});
+
+test('quota refusals are logged as alerts, with ids and no request body', async () => {
+  const lines: Record<string, unknown>[] = [];
+  const alerts = createLogger('info', {
+    write: (line: string) => lines.push(JSON.parse(line)),
+  });
+  const app = express();
+  app.use(requestContext(alerts));
+  app.post('/limit', (_req, res) => {
+    res.locals.userId = 'user-1';
+    throw new ApiError(409, ERROR_CODE.LIMIT_REACHED, 'You have 3 projects.');
+  });
+  app.post('/invalid', () => {
+    throw new ApiError(422, ERROR_CODE.VALIDATION_ERROR, 'Invalid.');
+  });
+  app.use(errorHandler(alerts));
+  await withServer(app, async (url) => {
+    assert.equal((await fetch(`${url}/limit`, { method: 'POST' })).status, 409);
+    assert.equal(
+      (await fetch(`${url}/invalid`, { method: 'POST' })).status,
+      422,
+    );
+  });
+  const refused = lines.filter((line) => line.alert);
+  assert.equal(refused.length, 1, 'only the limit is an alert');
+  assert.equal(refused[0]!.alert, ALERT.QUOTA_REFUSED);
+  assert.equal(refused[0]!.userId, 'user-1');
+  assert.equal(refused[0]!.code, ERROR_CODE.LIMIT_REACHED);
 });

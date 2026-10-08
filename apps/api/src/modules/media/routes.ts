@@ -14,15 +14,6 @@ export function mediaRoutes(service: MediaService) {
       ),
     });
   });
-  r.post('/media/:id/complete', async (req, res) => {
-    res.json({
-      success: true,
-      data: await service.complete(
-        validate(z.uuid(), req.params.id),
-        res.locals.userId as string,
-      ),
-    });
-  });
   r.delete('/media/:id', async (req, res) => {
     await service.remove(
       validate(z.uuid(), req.params.id),

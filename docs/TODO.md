@@ -13,36 +13,26 @@ Fix direction to evaluate:
 - Socket.IO cannot go through such a rewrite (no WebSocket upgrade), so it must keep connecting directly to the API domain. It already uses cookie-free ticket authentication for this reason (see API_DESIGN §17).
 - Update README hosting instructions and `.env.example` files, and re-run the auth integration tests against the new setup.
 
-## Show planned date/time in the viewer's time zone
-
-The planned date/time on the public quiz page (`/quiz/[publicId]`) and the published-quiz management page is formatted during server rendering in `apps/web/src/features/publishing/view-model.ts` (`toLocaleDateString`/`toLocaleTimeString` with no explicit locale or time zone). The result uses the server's locale and time zone instead of the viewer's, so production viewers (server in UTC) may see a different local time than expected. The dashboard cards in `apps/web/src/features/dashboard/quiz-data.ts` share the same pattern.
-
-Fix direction: pass the ISO `plannedStartAt` to the client and format it in the browser. The hydration-safe `components/local-date-time.tsx` (added in Phase 10 for results and history) already does this and can be reused here.
-
-## Database rule requiring `plannedStartAt` on non-draft quizzes
-
-Publishing without a planned date/time is currently blocked by the quiz service, the locked publish transaction, and the request contract, but the database itself has no constraint. Add a migration so the database also rejects it:
-
-```sql
-ALTER TABLE "quizzes" ADD CONSTRAINT "quiz_planned_start_required"
-  CHECK ("status" = 'DRAFT' OR "plannedStartAt" IS NOT NULL);
-```
-
-Before applying, confirm that no existing non-draft development rows have a null `plannedStartAt`, and extend the publishing integration test to assert the constraint.
-
-## Make question Markdown production ready
-
-Question prompts are written in Markdown, but its behaviour is not production ready yet. Review and finish it before release:
-
-- Consistent rendering everywhere a prompt appears: the builder preview and the participant live screen render Markdown (`components/markdown-preview.tsx`), while the host console (question queue, preview and live question) and the review screen still show the raw text.
-- Decide the supported syntax (headings, lists, code, links, images are currently disallowed) and how large elements such as headings look inside a prompt on each screen and on phones.
-- Confirm sanitization and link handling are safe for participant-facing content, and that long or complex prompts stay readable.
-- Improve the editor experience (toolbar, preview, character limits) as needed.
-
 ## Phase 11 — still open
 
 Done on branch `phase-11-hardening`: the rate limiting item, the Phase 10 "end during a question" item and the earlier UI issues list (all removed from this file), plus backend Segments 1–6 and their frontend work. Still open:
 
 - Segment 7: load test of a full live quiz (target participant count to be decided). On hold.
-- Loading and error screens (`loading.tsx` / `error.tsx` for the workspace, live room and public quiz page): waiting for a custom design.
-- Mobile (375px) pass on the participant live flow.
+
+
+## Load quiz relations in one query (Prisma `relationJoins`)
+
+Every authoring response reloads the full quiz with `quizInclude` (project, cover, questions, question images, options, registration count). Prisma currently runs one database round trip per relation, so with the dev database in Seoul (~180 ms per query) a reload alone costs about 1.7–2.6 s, and it follows every question save and quiz update.
+
+Fix direction: enable the `relationJoins` preview feature in `packages/database/prisma/schema.prisma` and use `relationLoadStrategy: 'join'` for `quizInclude` reads, so each reload is a single SQL query. Regenerate the client and re-run every integration test. Hosting the production API near the database (e.g. Render Singapore for the Seoul database) matters more and should be done regardless.
+
+## Before launch
+- Add proper rate limits to prevent abuse.
+- What to do for settings and workspace plan.
+- Loading and error screens (`loading.tsx` / `error.tsx` for the workspace, live room and public quiz page): waiting for a custom design. Including 404 page
+- Then work on the other todo items
+- Track egress (download bandwidth) usage (security design 1.5 and 1.11): image reads from Supabase Storage are not measured yet, so there is no warning before the platform's bandwidth allowance runs out. Decide how to measure it (Supabase usage, or counting signed read URLs) and add a log alert like the storage ones.
+
+## During deployment
+
+- Set up log alerts on Render (security design 1.11): the API writes warning lines with an `alert` field (`LIVE_COMMAND_FORBIDDEN`, `RATE_LIMITED`, `LIVE_RATE_LIMITED`, `SOCKET_FLOOD`, `QUOTA_REFUSED`, `STORAGE_HIGH`, `STORAGE_FULL`, `EMAIL_BUDGET`). Nothing notifies anyone until a log search or alert on `"alert":` is configured in Render (or a log drain). Also note the protective switch: `PAUSED_FEATURES=signup,quiz_create,upload` in Render's environment pauses those features.

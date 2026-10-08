@@ -19,6 +19,7 @@ import {
   LIVE_ROLE,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
+import { ALERT } from '../../infrastructure/alerts.js';
 import {
   DOMAIN_EVENT,
   type DomainEvents,
@@ -29,15 +30,20 @@ import {
   HOST_AWAY_GRACE_MS,
   ROOM_AUDIENCE,
   SOCKET_EVENT,
+  SOCKET_FLOOD_REFUSALS,
+  SOCKET_MAX_MESSAGE_BYTES,
   SOCKET_RATE_BUCKET,
+  authFamilyRoom,
   liveRoom,
 } from './constants.js';
-import { socketRateLimiter } from './socket-rate.js';
+import { floodCounter, socketRateLimiter } from './socket-rate.js';
 
 type SocketData = {
   userId: string;
   /** Session the handshake ticket was issued for. */
   ticketSessionId: string;
+  /** Sign-in session family the ticket was issued under. */
+  authFamilyId: string;
   role?: LiveRole | undefined;
 };
 type LiveSocket = Socket<
@@ -105,6 +111,8 @@ export function createSocketServer(
   return new Server(server, {
     cors: { origin: [...allowedOrigins] },
     serveClient: false,
+    // Larger messages close the connection (no command needs more).
+    maxHttpBufferSize: SOCKET_MAX_MESSAGE_BYTES,
     allowRequest: (request, callback) => {
       const origin = request.headers.origin;
       callback(null, origin === undefined || allowedOrigins.includes(origin));
@@ -128,8 +136,12 @@ export function attachLiveRealtime(
   nsp.use((socket, next) => {
     const auth = socket.handshake.auth as { ticket?: unknown } | undefined;
     service.tickets.verify(auth?.ticket).then(
-      ({ userId, liveSessionId }) => {
-        socket.data = { userId, ticketSessionId: liveSessionId };
+      ({ userId, liveSessionId, authFamilyId }) => {
+        socket.data = {
+          userId,
+          ticketSessionId: liveSessionId,
+          authFamilyId,
+        };
         next();
       },
       (error: ApiError) => {
@@ -225,6 +237,56 @@ export function attachLiveRealtime(
     },
   );
 
+  // Logout or a replayed refresh token ends the sign-in: its sockets go too.
+  // Told first (like other removals), so the page shows why instead of
+  // trying to reconnect.
+  events?.on(DOMAIN_EVENT.authSessionsRevoked, ({ familyIds }) => {
+    const signedOut: LiveRemovedDto = {
+      code: ERROR_CODE.UNAUTHENTICATED,
+      message:
+        'You were signed out, so you left this live quiz. Sign in again to rejoin.',
+    };
+    for (const familyId of familyIds) {
+      const room = authFamilyRoom(familyId);
+      nsp.to(room).emit(LIVE_EVENTS.removed, signedOut);
+      nsp.in(room).disconnectSockets(true);
+    }
+  });
+
+  // The server closed an unstarted lobby (it expired): like a host closing
+  // it, everyone is told why and disconnected.
+  events?.on(
+    DOMAIN_EVENT.liveSessionClosed,
+    ({ liveSessionId, code, message }) => {
+      const closed: LiveRemovedDto = { code, message };
+      nsp.to(liveRoom(liveSessionId)).emit(LIVE_EVENTS.removed, closed);
+      nsp.in(liveRoom(liveSessionId)).disconnectSockets(true);
+    },
+  );
+
+  // The server ended a started quiz (host away too long, or the maximum
+  // length): announced exactly like the host's "End quiz".
+  events?.on(DOMAIN_EVENT.liveSessionEnded, ({ liveSessionId, reason }) => {
+    announceEnded(liveSessionId).catch(() =>
+      logger.warn(
+        { liveSessionId, reason, code: ERROR_CODE.LIVE_UNAVAILABLE },
+        'Quiz end broadcast failed',
+      ),
+    );
+  });
+
+  /**
+   * Each participant gets their own final result first; the final
+   * leaderboard stays hidden until the host reveals it.
+   */
+  async function announceEnded(liveSessionId: string) {
+    for (const { socketId, result } of await service.finalResultDeliveries(
+      liveSessionId,
+    ))
+      nsp.to(socketId).emit(LIVE_EVENTS.quizEnded, result);
+    return broadcast(await service.session(liveSessionId));
+  }
+
   // A question closed (timer, recovery path or end): the host gets the new
   // snapshot and each connected participant a personal one with their own
   // answer and the shared reveal; recalculated standings follow.
@@ -293,10 +355,15 @@ export function attachLiveRealtime(
     },
   );
 
+  // Command budgets per account and session, shared by its sockets.
+  const withinBudget = socketRateLimiter();
+
   nsp.on('connection', (raw) => {
     const socket = raw as unknown as LiveSocket;
     const { userId } = socket.data;
-    const withinBudget = socketRateLimiter();
+    void socket.join(authFamilyRoom(socket.data.authFamilyId));
+    const budgetKey = `${socket.data.ticketSessionId}:${userId}`;
+    const flooding = floodCounter(SOCKET_FLOOD_REFUSALS);
 
     function on<Schema extends z.ZodType, Result>(
       event: string,
@@ -312,12 +379,29 @@ export function attachLiveRealtime(
           let response: SocketAck<Result>;
           try {
             const bucket = SOCKET_RATE_BUCKET[event];
-            const budget = bucket ? withinBudget(bucket) : null;
+            const budget = bucket ? withinBudget(budgetKey, bucket) : null;
             if (budget?.firstRefusal)
               logger.warn(
-                { event, liveSessionId: socket.data.ticketSessionId, userId },
+                {
+                  event,
+                  liveSessionId: socket.data.ticketSessionId,
+                  userId,
+                  alert: ALERT.LIVE_RATE_LIMITED,
+                },
                 'Live commands rate limited',
               );
+            if (budget && !budget.allowed && flooding()) {
+              // Keeps sending far past its budget: close the connection.
+              logger.warn(
+                {
+                  liveSessionId: socket.data.ticketSessionId,
+                  userId,
+                  alert: ALERT.SOCKET_FLOOD,
+                },
+                'Live socket disconnected for flooding',
+              );
+              socket.disconnect(true);
+            }
             if (budget && !budget.allowed)
               throw new ApiError(
                 429,
@@ -346,16 +430,27 @@ export function attachLiveRealtime(
             // Refusals are part of normal play (late answers, invalid host
             // steps); log what was refused, never what was sent. Rate-limited
             // commands were logged once above.
+            // A forbidden command (a participant sending host commands, or
+            // another session's ticket) and a used-up allowance are alerts.
+            const alert =
+              error instanceof ApiError
+                ? error.code === ERROR_CODE.FORBIDDEN
+                  ? ALERT.LIVE_COMMAND_FORBIDDEN
+                  : error.code === ERROR_CODE.LIMIT_REACHED
+                    ? ALERT.QUOTA_REFUSED
+                    : undefined
+                : undefined;
             if (
               error instanceof ApiError &&
               error.code !== ERROR_CODE.RATE_LIMITED
             )
-              logger.info(
+              logger[alert ? 'warn' : 'info'](
                 {
                   event,
                   code: error.code,
                   liveSessionId: socket.data.ticketSessionId,
                   userId,
+                  ...(alert ? { alert } : {}),
                 },
                 'Live command refused',
               );
@@ -516,7 +611,11 @@ export function attachLiveRealtime(
           ERROR_CODE.FORBIDDEN,
           'Only participants can answer questions.',
         );
-      const answer = await service.submit(userId, socket.id, command);
+      const { answer, retried } = await service.submit(
+        userId,
+        socket.id,
+        command,
+      );
       // Debug only: one line per answer is too much at info for big rooms.
       logger.debug(
         {
@@ -524,9 +623,11 @@ export function attachLiveRealtime(
           askedQuestionId: command.askedQuestionId,
           userId,
         },
-        'Live answer accepted',
+        retried ? 'Live answer resent' : 'Live answer accepted',
       );
-      publishProgress(command.liveSessionId, command.askedQuestionId);
+      // A resend changes nothing the host sees.
+      if (!retried)
+        publishProgress(command.liveSessionId, command.askedQuestionId);
       return answer;
     });
 
@@ -545,15 +646,9 @@ export function attachLiveRealtime(
       liveSessionCommandSchema,
       async ({ liveSessionId }) => {
         requireHost();
-        const session = await service.end(liveSessionId, userId);
+        await service.end(liveSessionId, userId);
         logger.info({ liveSessionId }, 'Live quiz ended');
-        // Each participant gets their own final result first; the final
-        // leaderboard stays hidden until the host reveals it.
-        for (const { socketId, result } of await service.finalResultDeliveries(
-          liveSessionId,
-        ))
-          nsp.to(socketId).emit(LIVE_EVENTS.quizEnded, result);
-        return broadcast(session);
+        return announceEnded(liveSessionId);
       },
     );
 

@@ -9,6 +9,8 @@ const UUID = /^[0-9a-f-]{36}$/;
 
 // Each ticket kind has its own audience and resource claim, so a live-room
 // ticket cannot watch quiz status and a watch ticket cannot join a live room.
+// Every ticket also names the sign-in session family it was issued under
+// (`afid`), so revoking that sign-in disconnects the socket.
 const KINDS = {
   [TICKET_KIND.LIVE]: { audience: 'quizmb-socket', claim: 'lsid' },
   [TICKET_KIND.WATCH]: { audience: 'quizmb-quiz-watch', claim: 'qid' },
@@ -30,11 +32,15 @@ export class SocketTickets {
     kind: Kind,
     userId: string,
     resourceId: string,
+    authFamilyId: string,
     now: number,
   ) {
     const { audience, claim } = KINDS[kind];
     const expiresAt = new Date(now + SOCKET_TICKET_TTL_SECONDS * 1000);
-    const ticket = await new SignJWT({ [claim]: resourceId })
+    const ticket = await new SignJWT({
+      [claim]: resourceId,
+      afid: authFamilyId,
+    })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setSubject(userId)
       .setIssuer(TOKEN_ISSUER)
@@ -54,17 +60,20 @@ export class SocketTickets {
         algorithms: ['HS256'],
         issuer: TOKEN_ISSUER,
         audience,
-        requiredClaims: ['sub', claim, 'exp', 'iat'],
+        requiredClaims: ['sub', claim, 'afid', 'exp', 'iat'],
       });
       const resourceId = payload[claim];
+      const authFamilyId = payload.afid;
       if (
         typeof payload.sub !== 'string' ||
         typeof resourceId !== 'string' ||
+        typeof authFamilyId !== 'string' ||
         !UUID.test(payload.sub) ||
-        !UUID.test(resourceId)
+        !UUID.test(resourceId) ||
+        !UUID.test(authFamilyId)
       )
         throw new Error('Invalid ticket');
-      return { userId: payload.sub, resourceId };
+      return { userId: payload.sub, resourceId, authFamilyId };
     } catch {
       throw new ApiError(
         401,
@@ -75,22 +84,44 @@ export class SocketTickets {
   }
 
   /** Ticket for joining one live session (`/quiz` namespace). */
-  issue(userId: string, liveSessionId: string, now = Date.now()) {
-    return this.sign(TICKET_KIND.LIVE, userId, liveSessionId, now);
+  issue(
+    userId: string,
+    liveSessionId: string,
+    authFamilyId: string,
+    now = Date.now(),
+  ) {
+    return this.sign(
+      TICKET_KIND.LIVE,
+      userId,
+      liveSessionId,
+      authFamilyId,
+      now,
+    );
   }
 
   async verify(ticket: unknown) {
-    const { userId, resourceId } = await this.check(TICKET_KIND.LIVE, ticket);
-    return { userId, liveSessionId: resourceId };
+    const { userId, resourceId, authFamilyId } = await this.check(
+      TICKET_KIND.LIVE,
+      ticket,
+    );
+    return { userId, liveSessionId: resourceId, authFamilyId };
   }
 
   /** Ticket for watching one quiz's lifecycle status (`/quiz-status`). */
-  issueWatch(userId: string, quizId: string, now = Date.now()) {
-    return this.sign(TICKET_KIND.WATCH, userId, quizId, now);
+  issueWatch(
+    userId: string,
+    quizId: string,
+    authFamilyId: string,
+    now = Date.now(),
+  ) {
+    return this.sign(TICKET_KIND.WATCH, userId, quizId, authFamilyId, now);
   }
 
   async verifyWatch(ticket: unknown) {
-    const { userId, resourceId } = await this.check(TICKET_KIND.WATCH, ticket);
-    return { userId, quizId: resourceId };
+    const { userId, resourceId, authFamilyId } = await this.check(
+      TICKET_KIND.WATCH,
+      ticket,
+    );
+    return { userId, quizId: resourceId, authFamilyId };
   }
 }

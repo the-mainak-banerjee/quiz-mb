@@ -11,7 +11,7 @@ import {
   type DomainEvents,
 } from '../../infrastructure/domain-events.js';
 import type { LiveSessionsService } from './service.js';
-import { statusRoom } from './constants.js';
+import { authFamilyRoom, statusRoom } from './constants.js';
 
 /**
  * Read-only lifecycle updates for the public quiz page. A socket watches the
@@ -30,8 +30,8 @@ export function attachQuizStatusRealtime(
   nsp.use((socket, next) => {
     const auth = socket.handshake.auth as { ticket?: unknown } | undefined;
     service.tickets.verifyWatch(auth?.ticket).then(
-      ({ quizId }) => {
-        socket.data = { quizId };
+      ({ quizId, authFamilyId }) => {
+        socket.data = { quizId, authFamilyId };
         next();
       },
       (error: ApiError) => {
@@ -43,12 +43,21 @@ export function attachQuizStatusRealtime(
   });
 
   nsp.on('connection', (socket) => {
-    const { quizId } = socket.data as { quizId: string };
-    void socket.join(statusRoom(quizId));
+    const { quizId, authFamilyId } = socket.data as {
+      quizId: string;
+      authFamilyId: string;
+    };
+    void socket.join([statusRoom(quizId), authFamilyRoom(authFamilyId)]);
     service.quizStatus(quizId).then(
       (status) => socket.emit(QUIZ_STATUS_EVENT, status),
       () => socket.disconnect(true),
     );
+  });
+
+  // Logout or a replayed refresh token ends the sign-in: its sockets go too.
+  events.on(DOMAIN_EVENT.authSessionsRevoked, ({ familyIds }) => {
+    for (const familyId of familyIds)
+      nsp.in(authFamilyRoom(familyId)).disconnectSockets(true);
   });
 
   events.on(DOMAIN_EVENT.quizStatusChanged, ({ quizId, status }) => {

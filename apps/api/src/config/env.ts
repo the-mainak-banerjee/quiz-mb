@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { NODE_ENV } from './constants.js';
+import { PAUSABLE_FEATURE, parsePausedFeatures } from './feature-switch.js';
 
 const origin = z.url().refine((value) => {
   if (!URL.canParse(value)) return false;
@@ -25,6 +26,24 @@ const schema = z.object({
   // Proxies in front of the API (Render adds one) whose X-Forwarded-For
   // entry is trusted for the client IP used by rate limits.
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+  // Transactional email (Resend). EMAIL_FROM must use the verified domain.
+  RESEND_API_KEY: z.string().min(1).optional(),
+  EMAIL_FROM: z.string().min(3).optional(),
+  // Shown in emails as the address people can write to.
+  SUPPORT_EMAIL: z.email().optional(),
+  // The email provider's daily allowance (Resend free plan: 100). Auth
+  // emails warn at 80% of it and refuse non-essential sends at 90%.
+  EMAIL_DAILY_LIMIT: z.coerce.number().int().min(1).default(100),
+  // Protective switch: comma-separated features to pause (signup,
+  // quiz_create, upload). Validated here so a typo fails at startup.
+  PAUSED_FEATURES: z
+    .string()
+    .optional()
+    .refine((value) =>
+      parsePausedFeatures(value).every((item) =>
+        (Object.values(PAUSABLE_FEATURE) as string[]).includes(item),
+      ),
+    ),
   // Live sessions (Redis-backed presence and locks). Upstash: rediss:// URL.
   REDIS_URL: z
     .url()
@@ -47,6 +66,12 @@ export function parseEnv(input: Record<string, string | undefined>) {
   }
   if (result.data.NODE_ENV === NODE_ENV.PRODUCTION && !result.data.REDIS_URL) {
     throw new Error('REDIS_URL must be configured in production');
+  }
+  if (
+    result.data.NODE_ENV === NODE_ENV.PRODUCTION &&
+    (!result.data.RESEND_API_KEY || !result.data.EMAIL_FROM)
+  ) {
+    throw new Error('RESEND_API_KEY and EMAIL_FROM are required in production');
   }
   return result.data;
 }

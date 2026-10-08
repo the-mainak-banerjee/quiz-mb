@@ -12,6 +12,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Badge, ProgressBar, Surface, Text } from '@/components/ui';
+import { LocalDateTime } from '@/components/local-date-time';
 import { CopyLinkButton } from '@/components/copy-link-button';
 import { APP_LINKS } from '@/config/navigation';
 import { ActionButton } from './action-button';
@@ -19,6 +20,7 @@ import { LateJoinToggle } from './late-join-toggle';
 import { ParticipantRoster } from './participant-roster';
 import { StatTile } from './stat-tile';
 import type { LiveParticipant, LiveQuizSummary } from './types';
+import type { HostingAllowanceDto } from '@quizmb/contracts';
 
 const startNotes = [
   'Starting closes registration and locks questions for this quiz.',
@@ -37,7 +39,13 @@ export function HostLobby({
   onCloseLobby,
   onLateJoinChange,
   busy = false,
+  allowance = null,
+  lobbyExpiresAt = null,
 }: {
+  /** The host's starts this month; Start is unavailable when none are left. */
+  allowance?: HostingAllowanceDto | null;
+  /** When the lobby closes automatically unless the quiz starts. */
+  lobbyExpiresAt?: string | null;
   quiz: LiveQuizSummary;
   roster: LiveParticipant[];
   connected: number;
@@ -97,12 +105,21 @@ export function HostLobby({
             <ul className="flex flex-wrap items-center gap-x-space-sm gap-y-1 pt-1 text-body-secondary text-text-secondary">
               <li className="inline-flex items-center gap-1.5">
                 <CalendarDays size={16} aria-hidden="true" />
-                {quiz.plannedDate}
+                {quiz.plannedStartAt ? (
+                  <LocalDateTime
+                    value={quiz.plannedStartAt}
+                    format="longDate"
+                  />
+                ) : (
+                  'Date to be announced'
+                )}
               </li>
-              <li className="inline-flex items-center gap-1.5">
-                <Clock3 size={16} aria-hidden="true" />
-                {quiz.plannedTime}
-              </li>
+              {quiz.plannedStartAt && (
+                <li className="inline-flex items-center gap-1.5">
+                  <Clock3 size={16} aria-hidden="true" />
+                  <LocalDateTime value={quiz.plannedStartAt} format="time" />
+                </li>
+              )}
               <li className="inline-flex items-center gap-1.5">
                 <UsersRound size={16} aria-hidden="true" />
                 Host: {quiz.hostName}
@@ -179,12 +196,29 @@ export function HostLobby({
               Starting moves everyone to the live stage. You will pick the first
               question from your console.
             </Text>
+            {allowance && (
+              <Text variant="caption" tone="inverse">
+                {allowance.used >= allowance.limit
+                  ? `You have used all ${allowance.limit} live quizzes for this month. `
+                  : `Live quizzes this month: ${allowance.used} of ${allowance.limit} used. `}
+                Resets on{' '}
+                <LocalDateTime value={allowance.resetsAt} format="date" />.
+              </Text>
+            )}
+            {lobbyExpiresAt && (
+              <Text variant="caption" tone="inverse">
+                If the quiz has not started, the lobby closes at{' '}
+                <LocalDateTime value={lobbyExpiresAt} format="time" />.
+              </Text>
+            )}
           </div>
           <div className="space-y-space-xs">
             <ActionButton
               onAction={onStartQuiz}
               preview="Starting the quiz"
-              disabled={busy}
+              disabled={
+                busy || (!!allowance && allowance.used >= allowance.limit)
+              }
               variant="outline"
               className="h-control-large w-full border-transparent text-card-title text-action-primary"
               icon={<Play size={20} aria-hidden="true" />}
