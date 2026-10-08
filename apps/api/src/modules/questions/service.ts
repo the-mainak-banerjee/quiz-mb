@@ -21,15 +21,21 @@ export class QuestionsService {
     await this.repository.save(quizId, userId, input, undefined, verified);
     return this.quizzes.get(quizId, userId);
   }
+  /** Images a save or delete detached free their quota right away. */
+  private release(quizId: string) {
+    return this.media.releaseDetached(quizId);
+  }
   async update(id: string, userId: string, input: QuestionInput) {
     const quizId = await this.repository.quizForQuestion(id, userId);
     const verified = await this.verifyImage(quizId, userId, input);
     await this.repository.save(quizId, userId, input, id, verified);
+    await this.release(quizId);
     return this.quizzes.get(quizId, userId);
   }
   async remove(id: string, userId: string) {
     const quizId = await this.repository.quizForQuestion(id, userId);
     await this.repository.remove(id, quizId, userId);
+    await this.release(quizId);
     return this.quizzes.get(quizId, userId);
   }
   async reorder(quizId: string, userId: string, ids: string[]) {

@@ -16,3 +16,11 @@ export function useSecondsUntil(availableAt: string | null | undefined) {
   const target = availableAt ? Date.parse(availableAt) : 0;
   return Math.max(0, Math.ceil((target - now) / 1000));
 }
+
+/** "Resend code in 45s", "… in 12 min", "… in 3 h" for longer limits. */
+export function resendLabel(seconds: number) {
+  if (seconds < 60) return `Resend code in ${seconds}s`;
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return `Resend code in ${minutes} min`;
+  return `Resend code in ${Math.ceil(minutes / 60)} h`;
+}

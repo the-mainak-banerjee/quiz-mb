@@ -89,7 +89,14 @@ export async function startLiveHarness<Role extends string>(
     createApp({
       allowedOrigins: [origin],
       logger,
-      auth: new AuthService(new AuthRepository(db), config, mailbox),
+      // Events let logout disconnect the sign-in's sockets.
+      auth: new AuthService(
+        new AuthRepository(db),
+        config,
+        mailbox,
+        {},
+        { events },
+      ),
       users: new UsersService(db),
       database: db,
       live,
@@ -217,6 +224,11 @@ export async function startLiveHarness<Role extends string>(
         ),
         201,
       );
+    // Fixture reset: tests run several sessions per host, more than the
+    // monthly allowance; its own test seeds starts after opening.
+    await db.usageEvent.deleteMany({
+      where: { userId: userIds[host], kind: 'SESSION_STARTED' },
+    });
     const session = await data<LiveSessionRefDto>(
       await request(
         `/quizzes/${quiz.id}/live-session`,
@@ -287,6 +299,9 @@ export async function startLiveHarness<Role extends string>(
 
   return {
     logs,
+    mailbox,
+    /** Each role's email address (index matches `roles`). */
+    emailOf: (role: Role) => emails[roles.indexOf(role)]!,
     db,
     redis,
     live,

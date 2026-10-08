@@ -34,7 +34,7 @@ import { codeProblem } from './auth-messages';
 import { CodeLimits } from './code-limits';
 import { OtpInput } from './otp-input';
 import { PasswordField } from './password-field';
-import { useSecondsUntil } from './resend-timer';
+import { resendLabel, useSecondsUntil } from './resend-timer';
 import { useResetFlow } from './use-auth-flow';
 
 const EYEBROW = 'Account recovery';
@@ -318,7 +318,7 @@ export function ResetCodeView({
             {pending === 'resend'
               ? 'Sending…'
               : resendIn > 0
-                ? `Resend code in ${resendIn}s`
+                ? resendLabel(resendIn)
                 : 'Resend code'}
           </Button>
           <Link
@@ -340,7 +340,7 @@ export function ResetCodeView({
         >
           {pending === 'verify' ? 'Checking…' : 'Verify code'}
         </Button>
-        <CodeLimits reset />
+        <CodeLimits />
       </form>
     </AuthCard>
   );

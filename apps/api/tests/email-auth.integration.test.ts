@@ -311,12 +311,17 @@ test(
     );
 
     // ---- Reset: code → token → new password; everything else signs out.
-    const token = await json<{ resetToken: string }>(
+    const token = await json<{ resetToken: string; expiresAt: string }>(
       await post('/auth/password-reset/verify', {
         email: emailOf('a'),
         code: resetCode,
       }),
       200,
+    );
+    // The reset authorization lasts 5 minutes.
+    assert.ok(
+      Date.parse(token.data.expiresAt) - Date.now() <= 5 * 60_000 + 5_000,
+      'reset authorization valid at most 5 minutes',
     );
     const weak = await json(
       await post('/auth/password-reset/complete', {
@@ -327,6 +332,7 @@ test(
     );
     assert.ok(weak.error?.details?.password, 'password policy enforced');
     const newPassword = 'a brand new sufficiently long password';
+    const sentBeforeReset = mailbox.countFor(emailOf('a'));
     await json(
       await post('/auth/password-reset/complete', {
         resetToken: token.data.resetToken,
@@ -335,6 +341,11 @@ test(
       200,
     );
     assert.equal((await me(sessionA)).status, 401, 'signed out everywhere');
+    // The owner is told, with a security email that has no code in it.
+    assert.equal(mailbox.countFor(emailOf('a')), sentBeforeReset + 1);
+    const changed = mailbox.messages.at(-1)!;
+    assert.equal(changed.subject, 'Your QuizMB password was changed');
+    assert.doesNotMatch(changed.text, /\b\d{6}\b/);
     await json(
       await post('/auth/login', { email: emailOf('a'), password }),
       401,

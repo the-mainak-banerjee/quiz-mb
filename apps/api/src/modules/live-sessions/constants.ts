@@ -16,23 +16,33 @@ export const liveRoom = (liveSessionId: string, audience?: RoomAudience) =>
 export const statusRoom = (quizId: string) => `status:${quizId}`;
 
 /**
+ * Room (in every namespace) of the sockets opened with one sign-in session
+ * family; revoking the family (logout, token replay) disconnects them.
+ */
+export const authFamilyRoom = (familyId: string) => `auth-family:${familyId}`;
+
+/**
  * How long the host may be disconnected before participants are told; a
  * page refresh or brief network drop stays invisible to them.
  */
 export const HOST_AWAY_GRACE_MS = 5_000;
 
 /**
- * Commands one socket may send per window. Counted in memory per socket:
- * a socket always talks to one API process, so this is exact and costs no
- * Redis commands; opening more sockets needs a Redis-limited ticket.
+ * Live commands one account may send per session and window (security
+ * design 1.10), counted across all its sockets in that session.
  */
-export const SOCKET_RATE_WINDOW_MS = 10_000;
+export const SOCKET_RATE_WINDOW_MS = 60_000;
 export const SOCKET_RATE_LIMITS = {
-  join: 10,
-  sync: 20,
+  join: 20,
+  sync: 30,
+  /** Answer submissions, resends included. */
   answer: 10,
-  host: 30,
+  host: 60,
 } as const;
+/** A connection with this many refused commands in a window is closed. */
+export const SOCKET_FLOOD_REFUSALS = 30;
+/** Largest incoming socket message (Socket.IO `maxHttpBufferSize`). */
+export const SOCKET_MAX_MESSAGE_BYTES = 16 * 1024;
 export type SocketRateBucket = keyof typeof SOCKET_RATE_LIMITS;
 
 /** Which budget each limited command draws from (others are unlimited). */

@@ -11,12 +11,18 @@ import {
   QUIZ_STATUS,
 } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
-import type {
-  PublicQuizRow,
-  QuizzesRepository,
-  QuizRow,
+import {
+  PAUSABLE_FEATURE,
+  requireActive,
+} from '../../config/feature-switch.js';
+import {
+  participantLimit,
+  type PublicQuizRow,
+  type QuizzesRepository,
+  type QuizRow,
 } from './repository.js';
 import type { MediaService } from '../media/service.js';
+import { limitsFor } from '../../config/account-limits.js';
 import type { ProjectsService } from '../projects/service.js';
 export class QuizzesService {
   constructor(
@@ -112,25 +118,41 @@ export class QuizzesService {
     userId: string,
     input: QuizCreateInput,
   ): Promise<QuizCreatedDto> {
+    requireActive(PAUSABLE_FEATURE.QUIZ_CREATE);
     const { cover, ...quiz } = input;
     // The id is chosen here so the cover's upload URL can be signed while
     // the quiz is created; an unused signed URL is harmless. Without
     // storage the quiz is still created and the cover reports failure.
     const id = randomUUID();
+    const limits = await limitsFor(userId);
+    if (quiz.registrationLimit > limits.participantsPerSession)
+      throw participantLimit(limits.participantsPerSession);
     const asset =
       cover && this.media.available
         ? this.media.pendingAsset(userId, id, MEDIA_PURPOSE.QUIZ_COVER, cover)
         : undefined;
     const signing = asset ? this.media.ticket(asset).catch(() => null) : null;
-    const row = await this.repository.create(
+    const { quiz: row, coverRefusal } = await this.repository.create(
       projectId,
       userId,
       quiz,
-      id,
-      asset,
+      {
+        id,
+        creationsPerDay: limits.quizCreationsPerDay,
+        cover: asset && {
+          data: asset,
+          reserve: (tx) =>
+            this.media.reserve(tx, userId, asset.sizeBytes, limits),
+        },
+      },
     );
-    const [dto, coverUpload] = await Promise.all([this.dto(row), signing]);
-    return { ...dto, coverUpload };
+    const [dto, ticket] = await Promise.all([this.dto(row), signing]);
+    // A refused cover's signed URL is simply never used.
+    return {
+      ...dto,
+      coverUpload: coverRefusal ? null : ticket,
+      coverRefusal,
+    };
   }
   async update(id: string, userId: string, input: QuizInput) {
     const verified = await this.media.verifyPending(
@@ -139,7 +161,14 @@ export class QuizzesService {
       userId,
       MEDIA_PURPOSE.QUIZ_COVER,
     );
-    return this.dto(await this.repository.update(id, userId, input, verified));
+    const { participantsPerSession } = await limitsFor(userId);
+    const row = await this.repository.update(id, userId, input, {
+      coverVerified: verified,
+      maxParticipants: participantsPerSession,
+    });
+    // A replaced or removed cover frees its quota right away.
+    await this.media.releaseDetached(id);
+    return this.dto(row);
   }
   async remove(id: string, userId: string) {
     await this.media.removeFiles(await this.repository.remove(id, userId));

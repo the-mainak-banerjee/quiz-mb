@@ -113,6 +113,8 @@ export const ERROR_CODE = {
   RATE_LIMITED: 'RATE_LIMITED',
   /** Temporarily overloaded; safe to retry after `Retry-After` seconds. */
   SERVICE_BUSY: 'SERVICE_BUSY',
+  /** Paused by the operator (signups, quiz creation or uploads); not retried. */
+  FEATURE_PAUSED: 'FEATURE_PAUSED',
   // Authentication
   UNAUTHENTICATED: 'UNAUTHENTICATED',
   TOKEN_EXPIRED: 'TOKEN_EXPIRED',
@@ -127,6 +129,8 @@ export const ERROR_CODE = {
   /** The verification or reset ticket expired; start the step again. */
   AUTH_FLOW_EXPIRED: 'AUTH_FLOW_EXPIRED',
   // Authoring and media
+  /** An account limit (ACCOUNT_LIMITS) is reached. */
+  LIMIT_REACHED: 'LIMIT_REACHED',
   QUIZ_LOCKED: 'QUIZ_LOCKED',
   INVALID_QUIZ_STATE: 'INVALID_QUIZ_STATE',
   INVALID_MEDIA: 'INVALID_MEDIA',
@@ -147,6 +151,8 @@ export const ERROR_CODE = {
   INVALID_STATE_TRANSITION: 'INVALID_STATE_TRANSITION',
   QUIZ_NOT_OPEN: 'QUIZ_NOT_OPEN',
   QUIZ_COMPLETED: 'QUIZ_COMPLETED',
+  /** The lobby was open too long without starting; the quiz is published again. */
+  LOBBY_EXPIRED: 'LOBBY_EXPIRED',
   LATE_JOIN_DISABLED: 'LATE_JOIN_DISABLED',
   NOT_JOINED: 'NOT_JOINED',
   SESSION_REPLACED: 'SESSION_REPLACED',

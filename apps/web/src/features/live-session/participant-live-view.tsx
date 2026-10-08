@@ -22,6 +22,7 @@ import {
 import { MAX_RECONNECT_ATTEMPTS, useLiveSession } from './use-live-session';
 import { toQuizSummary } from './view-models';
 import { HostAwayNotice } from './host-away-notice';
+import { SessionEndingNotice, useEndingSoon } from './session-ending-notice';
 
 const refusals: Record<string, { eyebrow: string; title: string }> = {
   [ERROR_CODE.LATE_JOIN_DISABLED]: {
@@ -40,6 +41,10 @@ const refusals: Record<string, { eyebrow: string; title: string }> = {
     eyebrow: 'Lobby closed',
     title: 'The host closed the lobby',
   },
+  [ERROR_CODE.LOBBY_EXPIRED]: {
+    eyebrow: 'Lobby expired',
+    title: 'The lobby expired before the quiz started',
+  },
   [ERROR_CODE.SESSION_NOT_FOUND]: {
     eyebrow: 'Not live',
     title: 'This quiz is not live right now',
@@ -50,6 +55,7 @@ const refusals: Record<string, { eyebrow: string; title: string }> = {
 const NEUTRAL_REFUSALS = new Set<string>([
   ERROR_CODE.QUIZ_COMPLETED,
   ERROR_CODE.LOBBY_CLOSED,
+  ERROR_CODE.LOBBY_EXPIRED,
 ]);
 
 /** Participant live experience driven by the authoritative snapshot. */
@@ -83,6 +89,10 @@ export function ParticipantLiveView({
     resync,
   } = useLiveSession(liveSessionId);
   const quiz = toQuizSummary(snapshot?.quiz ?? initialQuiz);
+  const endingSoon = useEndingSoon(
+    snapshot?.sessionEndsAt ?? null,
+    clockOffsetMs,
+  );
   const historyLink = (
     <NavigationItem
       href={APP_LINKS.WORKSPACE.HISTORY}
@@ -221,6 +231,12 @@ export function ParticipantLiveView({
   return (
     <>
       {renderScreen()}
+      {endingSoon && snapshot.sessionEndsAt && (
+        <SessionEndingNotice
+          endsAt={snapshot.sessionEndsAt}
+          raised={hostAway}
+        />
+      )}
       {hostAway && (
         <HostAwayNotice
           questionOpen={

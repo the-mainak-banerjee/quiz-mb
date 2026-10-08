@@ -1,6 +1,7 @@
 import { ERROR_CODE, type ProjectInput } from '@quizmb/contracts';
 import { ApiError } from '../../http/api-error.js';
 import type { ProjectsRepository } from './repository.js';
+import { limitsFor } from '../../config/account-limits.js';
 import type { MediaService } from '../media/service.js';
 type Row = NonNullable<Awaited<ReturnType<ProjectsRepository['get']>>>;
 function dto(p: Row) {
@@ -32,7 +33,8 @@ export class ProjectsService {
     return dto(row);
   }
   async create(userId: string, input: ProjectInput) {
-    return dto(await this.repository.create(userId, input));
+    const { projects } = await limitsFor(userId);
+    return dto(await this.repository.create(userId, input, projects));
   }
   /** Deletes the project and its draft quizzes (see the repository). */
   async remove(id: string, userId: string) {

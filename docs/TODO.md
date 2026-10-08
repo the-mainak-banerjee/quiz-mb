@@ -31,5 +31,8 @@ Fix direction: enable the `relationJoins` preview feature in `packages/database/
 - What to do for settings and workspace plan.
 - Loading and error screens (`loading.tsx` / `error.tsx` for the workspace, live room and public quiz page): waiting for a custom design. Including 404 page
 - Then work on the other todo items
+- Track egress (download bandwidth) usage (security design 1.5 and 1.11): image reads from Supabase Storage are not measured yet, so there is no warning before the platform's bandwidth allowance runs out. Decide how to measure it (Supabase usage, or counting signed read URLs) and add a log alert like the storage ones.
 
-## Extra Feature
+## During deployment
+
+- Set up log alerts on Render (security design 1.11): the API writes warning lines with an `alert` field (`LIVE_COMMAND_FORBIDDEN`, `RATE_LIMITED`, `LIVE_RATE_LIMITED`, `SOCKET_FLOOD`, `QUOTA_REFUSED`, `STORAGE_HIGH`, `STORAGE_FULL`, `EMAIL_BUDGET`). Nothing notifies anyone until a log search or alert on `"alert":` is configured in Render (or a log drain). Also note the protective switch: `PAUSED_FEATURES=signup,quiz_create,upload` in Render's environment pauses those features.

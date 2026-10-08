@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Logger } from 'pino';
 import type { RateRule } from '../config/rate-limits.js';
 import type { RedisClient } from './redis.js';
+import { ALERT } from './alerts.js';
 
 // One command per check: increment the window's counter and give a new
 // counter its expiry (TTL equals the window).
@@ -41,6 +42,16 @@ export class RateLimiter {
         await this.redis.eval(HIT_SCRIPT, 1, key, String(rule.windowSeconds)),
       );
       if (count <= rule.limit) return 0;
+      // Once per identifier and window: a flood is one line, not thousands.
+      if (count === rule.limit + 1)
+        this.logger.warn(
+          {
+            scope: rule.scope,
+            client: digest(identifier),
+            alert: ALERT.RATE_LIMITED,
+          },
+          'Rate limit reached',
+        );
       return Math.max(1, Math.ceil(((window + 1) * windowMs - now) / 1000));
     } catch {
       if (now - this.lastWarnAt >= WARN_INTERVAL_MS) {

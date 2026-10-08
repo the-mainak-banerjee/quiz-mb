@@ -206,10 +206,15 @@ UNAUTHENTICATED → 401
 FORBIDDEN → 403
 NOT_FOUND → 404
 CONFLICT → 409
+LIMIT_REACHED → 409
 QUIZ_FULL → 409
 RATE_LIMITED → 429
 INTERNAL_ERROR → 500
+SERVICE_BUSY → 503
+FEATURE_PAUSED → 503
 ```
+
+`SERVICE_BUSY` means the database is saturated (its pool, or the Supabase pooler, has no free connection); nothing changed and the request can be retried after `Retry-After`. `FEATURE_PAUSED` means the operator paused new signups (`POST /auth/signup`), quiz creation (`POST /projects/:id/quizzes`) or image uploads (upload requests, and a cover sent with a new quiz, which is then created without it) with the protective switch (`PAUSED_FEATURES`, security design 1.11); its message is shown to the user and the request is not retried.
 
 ---
 
@@ -231,16 +236,18 @@ Request:
 }
 ```
 
-Success:
+Success (`201`):
 
 ```json
 {
   "success": true,
   "data": {
-    "user": {
-      "id": "user_...",
-      "name": "Mainak Banerjee",
-      "email": "mainak@example.com"
+    "status": "VERIFICATION_REQUIRED",
+    "verification": {
+      "ticket": "...",
+      "email": "m***ak@example.com",
+      "expiresAt": "...",
+      "resendAvailableAt": "..."
     }
   }
 }
@@ -251,7 +258,32 @@ Rules:
 - normalize email before lookup/storage
 - hash password using Argon2 or equivalent
 - never return password hash
-- issue access/refresh credentials
+- no session is created: `POST /api/auth/verify-email` with the ticket and the emailed 6-digit code verifies the email and signs in
+- the answer is the same whether or not the email already has an account (no enumeration). For an existing verified account the owner is emailed a notice instead of a code, and the returned step can never sign in; for an existing unverified account a fresh code is sent. The existing account's name and password are never changed.
+
+## 6.1.1 One-time code limits
+
+Apply to email verification and password reset codes (per account and purpose):
+
+| Limit | Rule | Refusal |
+| --- | --- | --- |
+| Resend cooldown | 60 seconds | `429 RESEND_COOLDOWN`, `details.retryAfterSeconds` |
+| Code emails per address | 5 per hour and 10 per rolling 24 hours, including the first | `429 RESEND_COOLDOWN`, `details.retryAfterSeconds` |
+| Wrong attempts per code | 5, then the code is invalid | `422 INVALID_CODE` with `details.attemptsLeft`, then `410 CODE_EXPIRED` |
+| Wrong codes across resends | 10 in a rolling 30 minutes; every check is refused until older failures age out | `429 RATE_LIMITED` with a `Retry-After` header |
+| Daily email budget | From 90% of `EMAIL_DAILY_LIMIT`, repeat resends are refused; the first code and password reset still send | `429 RESEND_COOLDOWN` until the next UTC day |
+
+On signup and login the step is returned even when a limit stops the email; `resendAvailableAt` then says when a new code can be requested.
+
+## 6.1.2 Password reset
+
+```http
+POST /api/auth/password-reset            { email }
+POST /api/auth/password-reset/verify     { email, code }
+POST /api/auth/password-reset/complete   { resetToken, password }
+```
+
+The request always answers the same, whether or not the email has an account. A correct code returns a reset authorization (`resetToken`) that is valid for 5 minutes, works once and only allows setting a new password. Completing the reset revokes every session and refresh-token family, disconnects all of the user's sockets (they receive `session:removed` with `UNAUTHENTICATED`, even during a live quiz), ends any wrong-password pause, emails a "Your QuizMB password was changed" security notice, and requires logging in again.
 
 ## 6.2 Login
 
@@ -270,6 +302,8 @@ Request:
 
 Do not reveal whether an email exists.
 
+Wrong passwords are paused per email address (whether or not it has an account): 5 wrong passwords in a rolling 15 minutes pause password login for that address for 15 minutes. During the pause every login for the address is refused with `429 RATE_LIMITED` and a `Retry-After` header, without checking the password, so the pause cannot be extended. A successful login clears the count; a completed password reset also ends the pause. Existing sessions keep working.
+
 ## 6.3 Refresh
 
 ```http
@@ -285,6 +319,8 @@ POST /api/auth/logout
 ```
 
 Invalidate current refresh session.
+
+Logout revokes the whole session family. Sockets opened with that sign-in (their tickets carry the family) are sent `session:removed` with `UNAUTHENTICATED` and disconnected, and new socket tickets are refused. A replayed refresh token revokes its family the same way.
 
 ## 6.5 Current User
 
@@ -354,6 +390,8 @@ POST /api/projects
   "coverMediaId": null
 }
 ```
+
+An account can own at most `ACCOUNT_LIMITS.projects` (3) projects; beyond that the request is refused with `409 LIMIT_REACHED`. The count is taken under a lock on the owner's row, so simultaneous requests cannot pass it, and deleting a project frees a slot. Creations are also rate limited to 5 per minute per account (`429 RATE_LIMITED`).
 
 ## 7.3 Get Project
 
@@ -437,7 +475,9 @@ Success returns:
 }
 ```
 
-`coverUpload` is null when no cover was requested or image storage is unavailable; the quiz is created either way.
+`coverUpload` is null when no cover was requested, image storage is unavailable or the cover was refused by the account's image limits; the quiz is created either way. `coverRefusal` then carries the refusal message (for example storage full), otherwise null.
+
+Creation limits (per account, security design 1.5): 5 quiz creations per minute (`429 RATE_LIMITED`) and 100 per rolling 24 hours (`429 LIMIT_REACHED` with `Retry-After`). Deleting a quiz never gives a creation back. A quiz holds at most 25 questions (`422 VALIDATION_ERROR` when adding more). The registration limit (one live session's capacity) is at most 30 participants (`422 VALIDATION_ERROR` on `registrationLimit`, on create and update); a quiz created before this limit keeps a higher value but cannot raise it.
 
 ## 8.2 Get Host Quiz
 
@@ -820,10 +860,17 @@ Server validates:
 
 - authentication
 - MIME type
-- maximum size
+- maximum size (250 KB: images are optimized in the browser first, see below)
 - resource ownership
 - quiz editability
 - media purpose
+- the account's limits, under a lock on the account: 50 successful uploads per rolling 24 hours (`429 LIMIT_REACHED`) and 5 MB of stored images including pending uploads (`409 LIMIT_REACHED`, with a usage message)
+- platform storage: from 800 MB in total (pending included) new uploads are refused (`503 STORAGE_UNAVAILABLE`)
+- 5 upload requests per minute per account (`429 RATE_LIMITED`)
+
+Before uploading, the web app optimizes the picked image (at most 20 MB and 40 megapixels): it scales it to at most 1,600 px on the longest side, re-encodes it as WebP (JPEG fallback), lowering quality until it is 250 KB or less, which also drops all metadata. The original is never uploaded or stored.
+
+An image a save detaches (replaced or removed cover or question image, deleted question) is deleted right away and its quota freed. Uploads never attached are deleted after 24 hours.
 
 Response:
 
@@ -1160,11 +1207,20 @@ Server:
 
 - verifies host ownership
 - validates state
+- consumes one hosted session from the host's monthly allowance (3 per calendar month, UTC), atomically with the start under a lock on the host's account; a repeated Start fails the state check and is never counted twice. With no allowance left the start is refused with `LIMIT_REACHED` (the message gives the reset date) and the lobby stays open
 - activates session
 - initializes Redis
 - broadcasts `quiz:started`
 
 No question starts automatically.
+
+Server-enforced deadlines (security design 1.6), stored, re-armed when the API starts and also checked on every interaction:
+
+- **Lobby expiry:** an unstarted lobby expires 30 minutes after opening. It is closed like `host:lobby-close` (the quiz returns to `PUBLISHED`, registrations kept, nothing consumed); every socket in the room receives `session:removed` with `LOBBY_EXPIRED` and is disconnected, and later joins are refused with `409 LOBBY_EXPIRED`.
+- **Host disconnect grace:** when the host's last connection drops (or the API restarts) a started quiz ends after 15 minutes unless the host reconnects; it ends like `host:quiz-end`, keeping the results so far.
+- **Maximum length:** a live quiz ends 4 hours after it started, the same way. Snapshots carry `sessionEndsAt`; clients show a warning in the last 30 minutes.
+
+Snapshots also carry `lobbyExpiresAt` (in the lobby), and host snapshots carry `hostingAllowance` (`used`, `limit`, `resetsAt`) in the lobby.
 
 ---
 
@@ -1278,6 +1334,8 @@ isCorrect
 responseTime
 submittedAt
 ```
+
+One answer is accepted per participant per asked question. Resending the same answer (for example after a lost acknowledgement, even just after the deadline) is answered with the saved answer and is never scored again; a different answer is refused with `ALREADY_SUBMITTED`. Correctness and points in the acknowledgement stay hidden until the question ends.
 
 ---
 
@@ -1646,7 +1704,9 @@ host:question-start
 host:quiz-end
 ```
 
-Use Redis counters.
+Use Redis counters for REST.
+
+Live socket commands are counted per account and live session (shared by all of that account's sockets, so reconnecting never resets them), in memory on the API process. A connection that keeps sending far past its budget is disconnected, and any socket message over 16 KB closes the connection.
 
 Exact numeric limits belong in Security Design.
 

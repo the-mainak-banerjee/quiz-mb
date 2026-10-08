@@ -20,6 +20,8 @@ model User {
   updatedAt           DateTime             @updatedAt @db.Timestamptz(3)
   sessions            AuthSession[]
   verificationCodes   VerificationCode[]
+  authEmailEvents     AuthEmailEvent[]
+  usageEvents         UsageEvent[]
   projects            Project[]
   quizzes             Quiz[]
   media               MediaAsset[]
@@ -56,6 +58,22 @@ enum OtpPurpose {
   PASSWORD_RESET
 }
 
+enum UsageEventKind {
+  /// A quiz was created (counts even after it is deleted).
+  QUIZ_CREATED
+  /// An uploaded image was verified and attached.
+  MEDIA_UPLOADED
+  /// The host started a live quiz (monthly hosted-session allowance).
+  SESSION_STARTED
+}
+
+enum AuthEmailEventKind {
+  /// An auth email was sent (a code or a notice).
+  SENT
+  /// A one-time code was entered wrongly.
+  CODE_FAILED
+}
+
 /// One live code per user and purpose; replaced on resend, deleted once used.
 model VerificationCode {
   id        String     @id @default(uuid()) @db.Uuid
@@ -70,6 +88,21 @@ model VerificationCode {
   @@unique([userId, purpose])
   @@index([expiresAt])
   @@map("verification_codes")
+}
+
+/// Auth email sends and wrong codes, counted over rolling windows for the
+/// per-address limits and the daily email budget. Kept for two days.
+model AuthEmailEvent {
+  id        String             @id @default(uuid()) @db.Uuid
+  userId    String             @db.Uuid
+  purpose   OtpPurpose
+  kind      AuthEmailEventKind
+  createdAt DateTime           @default(now()) @db.Timestamptz(3)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, kind, createdAt])
+  @@index([kind, createdAt])
+  @@map("auth_email_events")
 }
 
 enum QuizStatus {
@@ -265,6 +298,9 @@ model LiveQuizSession {
   endedAt                 DateTime?            @db.Timestamptz(3)
   /// Set when the host reveals the final leaderboard to participants.
   finalLeaderboardShownAt DateTime?            @db.Timestamptz(3)
+  /// When the host's last live connection dropped (null while connected);
+  /// a started session ends after 15 minutes without the host.
+  hostDisconnectedAt      DateTime?            @db.Timestamptz(3)
   createdAt               DateTime             @default(now()) @db.Timestamptz(3)
   updatedAt               DateTime             @updatedAt @db.Timestamptz(3)
   quiz                    Quiz                 @relation(fields: [quizId], references: [id], onDelete: Cascade)
@@ -373,4 +409,19 @@ model QuizResult {
   @@index([liveSessionId, rank])
   @@index([userId, finalizedAt])
   @@map("quiz_results")
+}
+
+/// Account usage counted over rolling windows for the creation and upload
+/// allowances. Rows outlive what they count, so deleting a quiz or image
+/// never gives the allowance back. Kept for two days.
+model UsageEvent {
+  id        String         @id @default(uuid()) @db.Uuid
+  userId    String         @db.Uuid
+  kind      UsageEventKind
+  createdAt DateTime       @default(now()) @db.Timestamptz(3)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, createdAt])
+  @@index([createdAt])
+  @@map("usage_events")
 }

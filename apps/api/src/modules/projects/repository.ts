@@ -24,11 +24,26 @@ export class ProjectsRepository {
       include: { _count: { select: { quizzes: true } } },
     });
   }
-  create(ownerUserId: string, data: ProjectInput) {
-    return this.db.project.create({
-      data: { ...data, ownerUserId },
-      include: { _count: { select: { quizzes: true } } },
-    });
+  /**
+   * Creates a project unless the owner already has `maxProjects`. The
+   * owner's row is locked while counting, so simultaneous creations (other
+   * tabs, scripts) cannot pass the limit.
+   */
+  create(ownerUserId: string, data: ProjectInput, maxProjects: number) {
+    return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${ownerUserId}::uuid FOR UPDATE`;
+      const owned = await tx.project.count({ where: { ownerUserId } });
+      if (owned >= maxProjects)
+        throw new ApiError(
+          409,
+          ERROR_CODE.LIMIT_REACHED,
+          `You can have up to ${maxProjects} projects. Delete one to create a new project.`,
+        );
+      return tx.project.create({
+        data: { ...data, ownerUserId },
+        include: { _count: { select: { quizzes: true } } },
+      });
+    }, lockedTransaction);
   }
   /**
    * Deletes a project whose quizzes are all drafts, together with them.

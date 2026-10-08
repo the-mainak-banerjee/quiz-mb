@@ -42,6 +42,15 @@ export const OTP_RULES = {
   checkWindowSeconds: 15 * 60,
   /** Reset codes one email address can be sent per hour. */
   resetRequestsPerHour: 5,
+  /** Code emails one address can be sent, per purpose, including the first. */
+  sendsPerHour: 5,
+  sendsPerDay: 10,
+  /**
+   * Wrong codes per address and purpose in a rolling window. Survives
+   * resends: a new code does not restore failed attempts.
+   */
+  failuresPerWindow: 10,
+  failureWindowSeconds: 30 * 60,
 } as const;
 const otpCode = z
   .string()
@@ -120,15 +129,44 @@ export const AUTHORING_LIMITS = {
   prompt: 10000,
   option: 1000,
   options: 20,
-  questions: 200,
+  /** Questions per quiz, checked under the quiz lock when adding. */
+  questions: 25,
   duration: 3600,
+  /** Absolute bound; the account's plan sets the real one (ACCOUNT_LIMITS). */
   participants: 10000,
+} as const;
+/**
+ * Plan-shaped limits. Before payments (security design Phase 1) every account
+ * has this one fixed set; Phase 2 replaces it with a per-plan lookup.
+ */
+export const ACCOUNT_LIMITS = {
+  /** Projects an account can own at once; deleting one frees a slot. */
+  projects: 3,
+  /** Quizzes created per rolling 24 hours; deleting one never gives it back. */
+  quizCreationsPerDay: 100,
+  /** Stored images (pending uploads included), across projects and quizzes. */
+  mediaBytes: 5 * 1024 * 1024,
+  /** Successful image uploads per rolling 24 hours. */
+  uploadsPerDay: 50,
+  /**
+   * Live quizzes a host may start per calendar month (UTC). Opening a lobby
+   * is free; ending early or deleting the quiz never gives a start back.
+   */
+  hostedSessionsPerMonth: 3,
+  /** A quiz's registration limit (capacity of one live session). */
+  participantsPerSession: 30,
 } as const;
 /** Protective bound for a descriptive answer; not a product rule. */
 export const ANSWER_LIMITS = { text: 2000 } as const;
 export const MEDIA_LIMITS = {
-  maxBytes: 10 * 1024 * 1024,
+  /** A stored image: optimized in the browser to this size or less. */
+  maxBytes: 250 * 1024,
   mimeTypes: ['image/png', 'image/jpeg', 'image/webp'] as const,
+  /** Longest side of a stored image; larger ones are scaled down. */
+  maxDimension: 1600,
+  /** What may be picked before optimization (guards against image bombs). */
+  maxSelectedBytes: 20 * 1024 * 1024,
+  maxSelectedPixels: 40_000_000,
 };
 export const projectSchema = z
   .object({
@@ -295,8 +333,15 @@ export type UploadDto = {
   mediaId: string;
   upload: { url: string; token: string; path: string };
 };
-/** `coverUpload` is null when no cover was requested or storage is unavailable. */
-export type QuizCreatedDto = QuizDto & { coverUpload: UploadDto | null };
+/**
+ * `coverUpload` is null when no cover was requested or it was refused;
+ * `coverRefusal` then says why when it is the user's limit (e.g. storage
+ * full), so the quiz page can show it.
+ */
+export type QuizCreatedDto = QuizDto & {
+  coverUpload: UploadDto | null;
+  coverRefusal: string | null;
+};
 
 export type PublicQuizDto = {
   id: string;
@@ -656,6 +701,28 @@ export type HostCurrentQuestionDto = HostQuestionProgressDto & {
   ended: boolean;
 };
 
+/**
+ * Server-enforced live-session deadlines (security design 1.6): an
+ * unstarted lobby expires, a started quiz ends after the host has been
+ * disconnected for the grace period, and every live quiz has a maximum
+ * length with a final warning before it.
+ */
+export const LIVE_SESSION_LIMITS = {
+  lobbyMinutes: 30,
+  hostGraceMinutes: 15,
+  maxMinutes: 4 * 60,
+  /** The warning shows this long before the maximum is reached. */
+  warningMinutes: 30,
+} as const;
+
+/** The host's monthly hosted-session allowance (shown before starting). */
+export type HostingAllowanceDto = {
+  used: number;
+  limit: number;
+  /** When the allowance resets: the first day of next month (UTC). */
+  resetsAt: string;
+};
+
 type LiveSnapshotBase = {
   liveSessionId: string;
   /** Server clock when the snapshot was built; clients derive an offset. */
@@ -664,12 +731,18 @@ type LiveSnapshotBase = {
   allowLateJoin: boolean;
   startedAt: string | null;
   endedAt: string | null;
+  /** While in the lobby: when it expires unless the quiz starts. */
+  lobbyExpiresAt: string | null;
+  /** Once started: when the quiz ends automatically (maximum length). */
+  sessionEndsAt: string | null;
   quiz: LiveQuizInfoDto;
   counts: { connected: number; registered: number };
 };
 
 export type HostLiveSnapshotDto = LiveSnapshotBase & {
   role: typeof LIVE_ROLE.HOST;
+  /** In the lobby: how many starts the host has left this month. */
+  hostingAllowance: HostingAllowanceDto | null;
   /** First registrations by time; `counts.registered` is the full total. */
   roster: LiveRosterEntryDto[];
   questions: HostLiveQuestionDto[];

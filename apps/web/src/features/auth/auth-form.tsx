@@ -277,6 +277,13 @@ export function AuthForm({
           >
             Privacy Policy
           </Link>
+          , and the{' '}
+          <Link
+            href={APP_LINKS.LEGAL.FAIR_USE}
+            className="ds-focus text-accent underline"
+          >
+            fair-use limits
+          </Link>
           .
         </Text>
       )}

@@ -2,12 +2,20 @@ import { randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@quizmb/database';
 import { OTP_RULES, type OtpPurpose } from '@quizmb/contracts';
 import type { CodeHasher } from './one-time-codes.js';
+import {
+  DAY_MS,
+  HOUR_MS,
+  windowReopens,
+} from '../../infrastructure/rolling-window.js';
 
 /** Result of checking a one-time code. */
 export type CodeCheck =
   | { ok: true }
   | { ok: false; reason: 'missing' | 'expired' | 'exhausted' }
-  | { ok: false; reason: 'wrong'; attemptsLeft: number };
+  | { ok: false; reason: 'wrong'; attemptsLeft: number }
+  /** Too many wrong codes recently (across resends); retry at `retryAt`. */
+  | { ok: false; reason: 'locked'; retryAt: Date };
+
 export type SessionInput = {
   id: string;
   familyId: string;
@@ -15,6 +23,7 @@ export type SessionInput = {
   expiresAt: Date;
   userAgent: string | null;
 };
+
 export class AuthRepository {
   constructor(readonly db: PrismaClient) {}
   findByEmail(email: string) {
@@ -104,6 +113,26 @@ export class AuthRepository {
       >`SELECT id, "codeHash", "expiresAt", attempts FROM verification_codes
         WHERE "userId" = ${userId}::uuid AND purpose = ${purpose}::"OtpPurpose"
         FOR UPDATE`;
+      // Wrong codes are counted per address and purpose across resends, under
+      // the code's row lock, so parallel guesses cannot pass the limit.
+      const failures = await tx.authEmailEvent.findMany({
+        where: {
+          userId,
+          purpose,
+          kind: 'CODE_FAILED',
+          createdAt: {
+            gt: new Date(Date.now() - OTP_RULES.failureWindowSeconds * 1000),
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      });
+      const retryAt = windowReopens(
+        failures.map((failure) => failure.createdAt),
+        OTP_RULES.failuresPerWindow,
+        OTP_RULES.failureWindowSeconds * 1000,
+      );
+      if (retryAt) return { ok: false, reason: 'locked', retryAt } as const;
       if (!row) return { ok: false, reason: 'missing' } as const;
       const remove = () =>
         tx.verificationCode.delete({ where: { id: row.id } });
@@ -115,6 +144,9 @@ export class AuthRepository {
         await remove();
         return { ok: true } as const;
       }
+      await tx.authEmailEvent.create({
+        data: { userId, purpose, kind: 'CODE_FAILED' },
+      });
       const attempts = row.attempts + 1;
       if (attempts >= OTP_RULES.maxAttempts) {
         await remove();
@@ -132,13 +164,19 @@ export class AuthRepository {
     });
   }
 
-  /** Marks the email verified and starts the first session. */
+  /**
+   * Marks the email verified and starts the first session. Only an
+   * unverified account: a verification step shown for an existing verified
+   * account (signup never reveals that it exists) can never sign in. Returns
+   * null in that case.
+   */
   verifyAndSignIn(userId: string, session: SessionInput) {
     return this.db.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: userId },
+      const { count } = await tx.user.updateMany({
+        where: { id: userId, emailVerifiedAt: null },
         data: { emailVerifiedAt: new Date() },
       });
+      if (!count) return null;
       return tx.authSession.create({
         data: { userId, ...session },
         include: { user: true },
@@ -147,26 +185,100 @@ export class AuthRepository {
   }
 
   /**
+   * When the per-address send limits allow the next email for this purpose
+   * (5 per hour and 10 per rolling 24 hours, including the first): null
+   * when they already do.
+   */
+  async sendAllowedAt(userId: string, purpose: OtpPurpose) {
+    const now = Date.now();
+    const sends = (
+      await this.db.authEmailEvent.findMany({
+        where: {
+          userId,
+          purpose,
+          kind: 'SENT',
+          createdAt: { gt: new Date(now - DAY_MS) },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      })
+    ).map((send) => send.createdAt);
+    const lastHour = sends.filter((time) => time.getTime() > now - HOUR_MS);
+    const reopen = [
+      windowReopens(lastHour, OTP_RULES.sendsPerHour, HOUR_MS),
+      windowReopens(sends, OTP_RULES.sendsPerDay, DAY_MS),
+    ].filter((time): time is Date => time !== null);
+    return reopen.length
+      ? new Date(Math.max(...reopen.map((time) => time.getTime())))
+      : null;
+  }
+
+  /** Records an auth email sent to this account (a code or a notice). */
+  async recordSend(userId: string, purpose: OtpPurpose) {
+    await this.db.authEmailEvent.create({
+      data: { userId, purpose, kind: 'SENT' },
+    });
+  }
+
+  /** Auth emails sent since `since`, across every account. */
+  sentSince(since: Date) {
+    return this.db.authEmailEvent.count({
+      where: { kind: 'SENT', createdAt: { gte: since } },
+    });
+  }
+
+  /**
+   * Deletes accounts that never verified their email and were created
+   * before `before`, with their codes and email events (cascade). The
+   * condition is checked by the DELETE itself, so an account verified at
+   * that moment is kept. Verified accounts are never deleted.
+   */
+  async deleteNeverVerified(before: Date) {
+    const { count } = await this.db.user.deleteMany({
+      where: { emailVerifiedAt: null, createdAt: { lt: before } },
+    });
+    return count;
+  }
+
+  /** Drops email events no rolling window needs any more. */
+  async deleteEmailEventsBefore(before: Date) {
+    const { count } = await this.db.authEmailEvent.deleteMany({
+      where: { createdAt: { lt: before } },
+    });
+    return count;
+  }
+
+  /**
    * Saves a new password, signs out every session and treats the email as
    * verified (the person proved they receive mail there).
    */
   async resetPassword(userId: string, passwordHash: string) {
     const now = new Date();
-    await this.db.$transaction([
-      this.db.user.update({
+    return this.db.$transaction(async (tx) => {
+      // Families still signed in: their sockets are disconnected afterwards.
+      const active = await tx.authSession.findMany({
+        where: { userId, revokedAt: null },
+        select: { familyId: true },
+        distinct: ['familyId'],
+      });
+      const user = await tx.user.update({
         where: { id: userId },
         data: { passwordHash },
-      }),
-      this.db.user.updateMany({
+      });
+      await tx.user.updateMany({
         where: { id: userId, emailVerifiedAt: null },
         data: { emailVerifiedAt: now },
-      }),
-      this.db.authSession.updateMany({
+      });
+      await tx.authSession.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: now },
-      }),
-      this.db.verificationCode.deleteMany({ where: { userId } }),
-    ]);
+      });
+      await tx.verificationCode.deleteMany({ where: { userId } });
+      return {
+        user,
+        revokedFamilyIds: active.map((session) => session.familyId),
+      };
+    });
   }
   async createAccount(
     input: { name: string; email: string; passwordHash: string },
@@ -191,12 +303,21 @@ export class AuthRepository {
       include: { user: true },
     });
   }
+  /**
+   * Exchanges a refresh token for the next one in its family. A reused
+   * (already rotated) token revokes the whole family: `revokedFamilyId` says
+   * which, so its open sockets can be disconnected.
+   */
   async rotate(hash: string, nextHash: string, now: Date) {
+    const refused = (revokedFamilyId: string | null = null) => ({
+      session: null,
+      revokedFamilyId,
+    });
     return this.db.$transaction(async (tx) => {
       const current = await tx.authSession.findUnique({
         where: { refreshTokenHash: hash },
       });
-      if (!current) return null;
+      if (!current) return refused();
       // Serialize rotations, logout and replay revocation on the family's root.
       await tx.$queryRaw`SELECT id FROM auth_sessions WHERE id = ${current.familyId}::uuid FOR UPDATE`;
       const row = await tx.authSession.findUniqueOrThrow({
@@ -207,14 +328,15 @@ export class AuthRepository {
           where: { familyId: row.familyId, revokedAt: null },
           data: { revokedAt: now },
         });
-        return null; // Commit revocation before reporting the invalid credential.
+        // Commit revocation before reporting the invalid credential.
+        return refused(row.familyId);
       }
-      if (row.expiresAt <= now) return null;
+      if (row.expiresAt <= now) return refused();
       await tx.authSession.update({
         where: { id: row.id },
         data: { revokedAt: now, lastUsedAt: now },
       });
-      return tx.authSession.create({
+      const session = await tx.authSession.create({
         data: {
           userId: row.userId,
           familyId: row.familyId,
@@ -224,19 +346,22 @@ export class AuthRepository {
         },
         include: { user: true },
       });
+      return { session, revokedFamilyId: null };
     });
   }
+  /** Revokes the refresh token's family; returns its id (null if unknown). */
   async revokeFamily(hash: string) {
-    await this.db.$transaction(async (tx) => {
+    return this.db.$transaction(async (tx) => {
       const row = await tx.authSession.findUnique({
         where: { refreshTokenHash: hash },
       });
-      if (!row) return;
+      if (!row) return null;
       await tx.$queryRaw`SELECT id FROM auth_sessions WHERE id = ${row.familyId}::uuid FOR UPDATE`;
       await tx.authSession.updateMany({
         where: { familyId: row.familyId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+      return row.familyId;
     });
   }
   activeSession(id: string, userId: string) {

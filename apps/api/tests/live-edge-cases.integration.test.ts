@@ -280,10 +280,13 @@ test(
           (error: { code?: string }) =>
             error.code === ERROR_CODE.SESSION_REPLACED,
         );
-        ok(await second.emit(LIVE_EVENTS.answerSubmit, command));
-        assert.equal(
-          errorCode(await second.emit(LIVE_EVENTS.answerSubmit, command)),
-          ERROR_CODE.ALREADY_SUBMITTED,
+        const accepted = ok(
+          await second.emit(LIVE_EVENTS.answerSubmit, command),
+        );
+        // A resend (lost acknowledgement) gets the saved answer back.
+        assert.deepEqual(
+          ok(await second.emit(LIVE_EVENTS.answerSubmit, command)),
+          accepted,
         );
         await end(host);
       },
@@ -432,8 +435,19 @@ test(
     )!.id;
     const answer = { askedQuestionId: asked, selectedOptionIds: [right] };
     ok(await p1.emit(LIVE_EVENTS.answerSubmit, answer));
+    // The same answer again is a resend: answered from the saved one.
+    ok(await p1.emit(LIVE_EVENTS.answerSubmit, answer));
+    // A different answer is refused: one accepted answer per question.
+    const wrong = view.questions[0]!.options.find(
+      (option) => option.text !== 'Right',
+    )!.id;
     assert.equal(
-      errorCode(await p1.emit(LIVE_EVENTS.answerSubmit, answer)),
+      errorCode(
+        await p1.emit(LIVE_EVENTS.answerSubmit, {
+          askedQuestionId: asked,
+          selectedOptionIds: [wrong],
+        }),
+      ),
       ERROR_CODE.ALREADY_SUBMITTED,
     );
     const burst = await Promise.all(
@@ -459,6 +473,7 @@ test(
       [asked],
     );
     assert.equal(lines('Live answer accepted').length, 1);
+    assert.equal(lines('Live answer resent').length, 1);
     assert.deepEqual(
       lines('Live command refused').map((line) => [line.event, line.code]),
       [[LIVE_EVENTS.answerSubmit, ERROR_CODE.ALREADY_SUBMITTED]],

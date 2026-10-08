@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.tests.json",
     "test": "node --import tsx --test tests/*.test.ts",
-    "test:integration": "node --env-file=.env --import tsx --test tests/*.integration.test.ts",
+    "test:integration": "node --env-file=.env --import tsx --test --test-concurrency=1 tests/*.integration.test.ts",
     "storage:setup": "node --env-file=.env --import tsx scripts/setup-storage.ts"
   },
   "dependencies": {

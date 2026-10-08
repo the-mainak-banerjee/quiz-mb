@@ -3,6 +3,11 @@ import { Prisma, type PrismaClient } from '@quizmb/database';
 import { ApiError } from '../../http/api-error.js';
 import { lockedTransaction } from '../../infrastructure/transactions.js';
 import {
+  lockAccount,
+  recordUsage,
+  requireAllowance,
+} from '../usage/allowances.js';
+import {
   PUBLIC_QUIZ_STATUSES,
   type MediaPurpose,
   type QuizInput,
@@ -109,12 +114,23 @@ export async function validateMedia(
       ERROR_CODE.VALIDATION_ERROR,
       'Choose an uploaded image belonging to this quiz.',
     );
-  if (asset.status === MEDIA_STATUS.PENDING)
+  if (asset.status === MEDIA_STATUS.PENDING) {
     await tx.mediaAsset.update({
       where: { id },
       data: { status: MEDIA_STATUS.READY, readyAt: new Date() },
     });
+    // A successful upload, for the daily upload allowance.
+    await recordUsage(tx, userId, 'MEDIA_UPLOADED');
+  }
 }
+/** The registration limit is above what the account's plan allows. */
+export function participantLimit(maxParticipants: number) {
+  const message = `A quiz can have up to ${maxParticipants} participants.`;
+  return new ApiError(422, ERROR_CODE.VALIDATION_ERROR, message, {
+    registrationLimit: message,
+  });
+}
+
 export class QuizzesRepository {
   constructor(readonly db: PrismaClient) {}
   get(id: string, userId: string) {
@@ -135,15 +151,42 @@ export class QuizzesRepository {
       include: { _count: { select: { questions: true } } },
     });
   }
-  /** `cover` is the PENDING row for a cover upload requested with it. */
+  /**
+   * Creates a quiz within the account's daily creation allowance (counted
+   * under a lock on the account; deleting a quiz never gives it back). A
+   * cover upload requested with it is reserved too; if its reservation is
+   * refused (storage full), the quiz is still created and `coverRefusal`
+   * says why.
+   */
   create(
     projectId: string,
     userId: string,
     input: QuizInput,
-    id: string = randomUUID(),
-    cover?: Prisma.MediaAssetUncheckedCreateInput,
+    {
+      id = randomUUID(),
+      creationsPerDay,
+      cover,
+    }: {
+      id?: string;
+      creationsPerDay: number;
+      cover?:
+        | {
+            data: Prisma.MediaAssetUncheckedCreateInput;
+            reserve: (tx: Prisma.TransactionClient) => Promise<void>;
+          }
+        | undefined;
+    },
   ) {
     return this.db.$transaction(async (tx) => {
+      await lockAccount(tx, userId);
+      await requireAllowance(
+        tx,
+        userId,
+        'QUIZ_CREATED',
+        creationsPerDay,
+        (wait) =>
+          `You can create up to ${creationsPerDay} quizzes a day. You can create another ${wait}.`,
+      );
       if (
         !(await tx.project.findFirst({
           where: { id: projectId, ownerUserId: userId },
@@ -166,14 +209,43 @@ export class QuizzesRepository {
         },
         include: quizInclude,
       });
-      if (cover) await tx.mediaAsset.create({ data: cover });
-      return quiz;
-    });
+      await recordUsage(tx, userId, 'QUIZ_CREATED');
+      let coverRefusal: string | null = null;
+      if (cover)
+        try {
+          await cover.reserve(tx);
+          await tx.mediaAsset.create({ data: cover.data });
+        } catch (error) {
+          if (!(error instanceof ApiError)) throw error;
+          coverRefusal = error.message;
+        }
+      return { quiz, coverRefusal };
+    }, lockedTransaction);
   }
-  /** `coverVerified`: the cover is a PENDING upload whose file was checked. */
-  update(id: string, userId: string, input: QuizInput, coverVerified = false) {
+  /**
+   * `coverVerified`: the cover is a PENDING upload whose file was checked.
+   * `maxParticipants`: the account's capacity; a quiz created before the
+   * limit keeps a higher value it already has, but cannot raise it.
+   */
+  update(
+    id: string,
+    userId: string,
+    input: QuizInput,
+    {
+      coverVerified = false,
+      maxParticipants,
+    }: {
+      coverVerified?: boolean;
+      maxParticipants: number;
+    },
+  ) {
     return this.db.$transaction(async (tx) => {
-      await lockEditableQuiz(tx, id, userId);
+      const current = await lockEditableQuiz(tx, id, userId);
+      if (
+        input.registrationLimit > maxParticipants &&
+        input.registrationLimit > current.registrationLimit
+      )
+        throw participantLimit(maxParticipants);
       // Same row lock as registration, so the count cannot change meanwhile.
       const registered = await tx.quizRegistration.count({
         where: { quizId: id, status: REGISTRATION_STATUS.REGISTERED },

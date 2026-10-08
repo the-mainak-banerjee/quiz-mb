@@ -10,11 +10,13 @@ export function authenticate(
 ): RequestHandler {
   const cookies = authCookies(production, auth.config.AUTH_COOKIE_DOMAIN);
   return async (req, res, next) => {
-    const user = await auth.authenticate(
+    const { user, familyId } = await auth.authenticateSession(
       cookies.read(req).access ??
         req.get(HTTP_HEADER.AUTHORIZATION)?.replace(BEARER_PREFIX, ''),
     );
     res.locals.userId = user.id;
+    // Socket tickets carry it, so revoking the sign-in closes those sockets.
+    res.locals.authFamilyId = familyId;
     res.setHeader(HTTP_HEADER.CACHE_CONTROL, CACHE_NO_STORE);
     next();
   };
