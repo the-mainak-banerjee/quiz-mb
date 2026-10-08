@@ -523,6 +523,7 @@ export function ResetDoneView({
       title="Password reset"
       description="Your password has been updated. Sign in with your new password."
       panel={panel}
+      milo="celebrate"
     >
       <div className="flex flex-col gap-space-md">
         <Callout icon={<ShieldCheck size={16} aria-hidden="true" />}>

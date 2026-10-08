@@ -2,13 +2,16 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Badge, Text } from '@/components/ui';
 import { Brand } from '@/components/brand';
+import { MiloStage } from '@/components/milo/milo-states';
+import type { MiloPose } from '@/components/milo/milo';
 import { APP_LINKS } from '@/config/navigation';
 
 export type AuthPanelPoint = { icon: ReactNode; title: string; detail: string };
 
 /**
  * Split card shared by the verification and password-recovery screens: the
- * step on the left, a short explanation of what happens on the right.
+ * step on the left, a short explanation of what happens on the right, with
+ * Milo at the foot of the panel (as on the sign-in and sign-up pages).
  */
 export function AuthCard({
   eyebrow,
@@ -17,6 +20,7 @@ export function AuthCard({
   children,
   footer,
   panel,
+  milo = 'welcome',
 }: {
   eyebrow: string;
   title: string;
@@ -24,6 +28,8 @@ export function AuthCard({
   children: ReactNode;
   footer?: ReactNode;
   panel: { eyebrow: string; title: string; points: AuthPanelPoint[] };
+  /** Milo's pose in the panel. */
+  milo?: MiloPose;
 }) {
   return (
     <main className="flex min-h-screen items-center justify-center px-margin-sm py-space-xl md:px-margin">
@@ -87,6 +93,10 @@ export function AuthCard({
               </li>
             ))}
           </ul>
+          <MiloStage
+            pose={milo}
+            className="mt-auto w-24 self-end md:w-28"
+          />
         </aside>
       </div>
     </main>
