@@ -10,7 +10,7 @@ Quiz MB is a host-controlled live quiz platform designed for creating quizzes wi
 - **Realtime design:** Socket.IO with Upstash Redis coordination.
 - **Media storage design:** Supabase Storage.
 - **Workspace:** pnpm and Turborepo.
-- **Hosting:** Web on Vercel; the API (REST + Socket.IO) as a long-running Node service on Render. Both use their free platform domains, which are different sites (see [TODO](docs/TODO.md) for the cross-domain auth follow-up).
+- **Hosting:** Web on Vercel; the API (REST + Socket.IO) as a long-running Node service on Render. Both run on subdomains of one parent domain (`quizmb.themainakb.com` and `api.quizmb.themainakb.com`), so the access cookie is shared between them.
 
 The backend follows a modular monolith architecture. The web application accesses business data through the API rather than connecting directly to the database. Backend services remain independent of Next.js to support a future React Native client.
 
@@ -109,11 +109,11 @@ Browser requests go directly to Express using the global [API client](apps/web/s
 - `ALLOWED_ORIGINS` — comma-separated exact HTTP(S) origins, without paths or trailing slashes. Defaults locally to `http://localhost:3000` and must be explicitly configured in production.
 - `LOG_LEVEL` — structured logging level; defaults to `info`.
 - `DATABASE_URL` — Supabase PostgreSQL connection for the API; prefer the transaction pooler on port 6543 for Vercel.
-- `DATABASE_SSL_CA_BASE64` — optional base64 PEM for the official Supabase CA when the local trust store cannot validate the pooler certificate. TLS certificate verification remains enabled.
+- `DATABASE_SSL_CA_BASE64` — base64 PEM for the official Supabase CA when the trust store cannot validate the pooler certificate; optional locally, required on Render. TLS certificate verification remains enabled.
 - `AUTH_ACCESS_SECRET` — random signing secret, at least 43 characters; keep separate for each environment.
 - `AUTH_ACCESS_TTL_SECONDS` — access credential lifetime, default 900 seconds (15 minutes).
 - `AUTH_SESSION_TTL_SECONDS` — absolute refresh-session lifetime, default 2592000 seconds (30 days).
-- `AUTH_COOKIE_DOMAIN` — required in production: `quizmb.com`. Shares only the access cookie across web/API; omit on localhost.
+- `AUTH_COOKIE_DOMAIN` — required in production: the parent domain shared by web and API (`quizmb.themainakb.com`). Shares only the access cookie across web/API; omit on localhost.
 - `SUPABASE_URL` — development Supabase project origin for private image storage.
 - `SUPABASE_SERVICE_ROLE_KEY` — server-only Storage credential. Never expose it to the web application.
 - `SUPABASE_STORAGE_BUCKET` — private image bucket, default `quizmb-media`.
@@ -153,7 +153,7 @@ Keep development resources separate from production, and never commit credential
 
 ## Hosting configuration
 
-Planned hosting (not yet deployed): the web app on Vercel and the API on Render, both on free platform domains. Socket.IO needs a persistent process, so the API cannot run as Vercel functions. Until the cross-domain auth item in [docs/TODO.md](docs/TODO.md) is done, the cookie settings below only work when web and API share a site.
+Production: the web app on Vercel at `https://quizmb.themainakb.com` and the API on Render at `https://api.quizmb.themainakb.com` (Singapore, next to the Supabase and Upstash databases). Socket.IO needs a persistent process, so the API cannot run as Vercel functions. Web and API must share a parent domain: the access cookie is set for `AUTH_COOKIE_DOMAIN`, and the web server reads it to render signed-in pages. The free `*.vercel.app` and `*.onrender.com` domains cannot share cookies, so login does not work on them (including Vercel previews). DNS: a CNAME per subdomain at the domain's DNS provider, pointing at the target Vercel or Render shows.
 
 Use Node.js 24 and the repository's pnpm lockfile. Allow access to workspace files outside each project's root directory so shared configuration resolves.
 
@@ -162,14 +162,17 @@ Use Node.js 24 and the repository's pnpm lockfile. Allow access to workspace fil
 - Root directory: `apps/web`.
 - Framework preset: Next.js.
 - Build command: `pnpm --filter @quizmb/web... build` (includes shared contracts).
-- Production environment: `NEXT_PUBLIC_API_URL` set to the Render API origin. The browser connects Socket.IO directly to this origin.
+- Production environment: `NEXT_PUBLIC_API_URL` set to the API origin (`https://api.quizmb.themainakb.com`). It is built into the bundle, so redeploy after changing it. The browser connects Socket.IO directly to this origin.
+- Node.js 24.x and the function region next to the API (Singapore, `sin1`) in the project settings.
 
 ### API service (Render)
 
 - Root directory: repository root (workspace install), Node.js 24.
-- Build command: `pnpm install --frozen-lockfile && pnpm --filter @quizmb/api... build` (includes the database package and generated Prisma client).
+- Build command: `pnpm install --frozen-lockfile --prod=false && pnpm --filter @quizmb/api... build` (includes the database package and generated Prisma client). `--prod=false` is required: with `NODE_ENV=production` set, pnpm would otherwise skip the build tools (TypeScript, Prisma).
 - Start command: `pnpm --filter @quizmb/api start` (runs `dist/server.js`, which serves REST and Socket.IO on one port).
-- Production environment: `NODE_ENV=production`, `ALLOWED_ORIGINS` (the web origin), `LOG_LEVEL=info`, `DATABASE_URL`, `AUTH_ACCESS_SECRET`, `REDIS_URL`, `TRUST_PROXY_HOPS=1`, Storage variables, and optional `DATABASE_SSL_CA_BASE64`. `AUTH_COOKIE_DOMAIN` depends on the pending cross-domain auth change. Apply migrations separately with the tooling connection before release; builds do not migrate databases.
+- Health check path: `/api/health`.
+- Production environment: `NODE_VERSION=24`, `NODE_ENV=production`, `HOST=0.0.0.0` (the default `localhost` is unreachable on Render; do not set `PORT`, Render provides it), `ALLOWED_ORIGINS` (the web origin), `AUTH_COOKIE_DOMAIN` (the shared parent domain), `TRUST_PROXY_HOPS=1`, `LOG_LEVEL=info`, `DATABASE_URL` (transaction pooler, port 6543), `DATABASE_SSL_CA_BASE64`, `AUTH_ACCESS_SECRET`, `REDIS_URL`, Storage variables, `RESEND_API_KEY`, `EMAIL_FROM` and optionally `SUPPORT_EMAIL`. Apply migrations separately with the tooling connection (session pooler, port 5432) before merging them to `main`; builds do not migrate databases.
+- `DATABASE_SSL_CA_BASE64` is required on Render: Node does not trust Supabase's CA, so without it the pooler's TLS certificate cannot be verified and startup fails on the first database query. Set it to the base64-encoded PEM of the public "Supabase Root 2021 CA" (Supabase Database Settings → SSL configuration), for example `base64 -w0 prod-ca-2021.crt`.
 - The free Render tier sleeps when idle; the first request after a pause can take up to a minute. It runs a single instance, so no Socket.IO Redis adapter is configured yet.
 
 `src/app.ts` constructs the Express application, `src/index.ts` wires dependencies (and still exports the app for serverless REST-only use), and `src/server.ts` starts the long-running HTTP + Socket.IO server.
