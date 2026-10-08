@@ -2,7 +2,8 @@
 import { useId } from 'react';
 import { cn } from '@/lib/utils';
 
-export type MiloPose = 'welcome' | 'loading' | 'error' | 'celebrate';
+export type MiloPose =
+  'welcome' | 'loading' | 'error' | 'celebrate' | 'message';
 
 const INK = 'var(--color-milo-ink)';
 const SPARK = 'var(--color-milo-spark)';
@@ -136,6 +137,49 @@ export function Milo({
             {eyes([92, 116], [130, 116])}
             <path d="M80 99q8-7 17-2M121 94q8-5 16 1" {...stroke} />
             <path d="M100 137q10 9 20 0" {...stroke} />
+          </g>
+        </>
+      )}
+
+      {pose === 'message' && (
+        <>
+          {ground()}
+          <g className="milo-bob">
+            {feet}
+            {egg}
+            {head}
+            {eyes([92, 116], [130, 116])}
+            <path d="M80 99q8-7 17-2M121 94q8-5 16 1" {...stroke} />
+            <path d="M100 137q10 9 20 0" {...stroke} />
+            <g transform="rotate(-8 110 170)">
+              <rect
+                x="66"
+                y="150"
+                width="88"
+                height="48"
+                rx="8"
+                fill="var(--color-surface)"
+                stroke="var(--color-milo-limb)"
+                strokeWidth="3"
+              />
+              <path
+                d="m68 154 42 28 42-28M68 194l25-20M152 194l-25-20"
+                fill="none"
+                stroke="var(--color-milo-limb)"
+                strokeWidth="3"
+                strokeLinejoin="round"
+              />
+            </g>
+            <ellipse cx="65" cy="171" rx="13" ry="11" fill={limb} />
+            <ellipse cx="155" cy="159" rx="13" ry="11" fill={limb} />
+            <g
+              className="milo-spark"
+              stroke={SPARK}
+              strokeWidth="4"
+              strokeLinecap="round"
+            >
+              <path d="m182 138 12-7m-14-5 6-12m-3 38 13 2" />
+            </g>
           </g>
         </>
       )}

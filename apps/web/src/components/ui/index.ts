@@ -13,3 +13,9 @@ export {
   type SegmentedControlProps,
 } from './segmented-control';
 export { Callout, type CalloutProps } from './callout';
+export {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from './accordion';
