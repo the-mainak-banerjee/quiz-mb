@@ -10,6 +10,7 @@ import { LiveSessionShell } from '@/features/live-session/live-session-shell';
 import { ApiError } from '@/lib/api/client';
 import { API_ROUTES } from '@/lib/api/routes';
 import { loadApi, serverApi } from '@/lib/api/server';
+import { redirectUnauthenticated } from '@/lib/auth/recovery';
 import { getAppOrigin } from '@/lib/app-origin';
 
 // Host live console. The session itself is loaded over Socket.IO; this page
@@ -30,7 +31,7 @@ export default async function HostLivePage({
     if (error instanceof ApiError && [403, 404].includes(error.status))
       redirect(manageHref);
     if (error instanceof ApiError && error.status === 401)
-      redirect(APP_LINKS.AUTH.LOGIN);
+      await redirectUnauthenticated(error.code);
     throw error;
   }
   if (session.role !== LIVE_ROLE.HOST) notFound();

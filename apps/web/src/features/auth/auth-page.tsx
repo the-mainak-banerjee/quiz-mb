@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, Circle } from 'lucide-react';
-import { Text } from '@/components/ui';
+import { Callout, Text } from '@/components/ui';
 import { MiloStage } from '@/components/milo/milo-states';
 import { Brand as Wordmark } from '@/components/brand';
 import { cn } from '@/lib/utils';
@@ -121,9 +121,12 @@ function Preview({ signup }: { signup: boolean }) {
 export function AuthPage({
   mode,
   returnTo,
+  sessionEnded = false,
 }: {
   mode: 'login' | 'signup';
   returnTo: string;
+  /** The session could not be renewed: say why sign-in is needed. */
+  sessionEnded?: boolean;
 }) {
   const signup = mode === 'signup';
 
@@ -156,6 +159,11 @@ export function AuthPage({
                 : 'Enter your credentials to access your live quiz sessions and workspaces.'}
             </Text>
           </div>
+          {sessionEnded && (
+            <Callout role="status" className="mb-space-md">
+              Your session has ended. Please sign in again to continue.
+            </Callout>
+          )}
           <AuthForm mode={mode} returnTo={returnTo} />
           <Text
             variant="body-secondary"

@@ -7,6 +7,7 @@ import { ApiError } from '@/lib/api/client';
 import { API_ROUTES } from '@/lib/api/routes';
 import { loadApi, serverApi } from '@/lib/api/server';
 import { authLink } from '@/lib/auth/return-to';
+import { redirectUnauthenticated } from '@/lib/auth/recovery';
 import { currentUser } from '@/lib/auth/session';
 
 // Participant live room. Registration, late-join and one-device rules are
@@ -33,6 +34,8 @@ export default async function ParticipantLivePage({
   } catch (error) {
     if (error instanceof ApiError && [403, 404].includes(error.status))
       redirect(quizHref);
+    if (error instanceof ApiError && error.status === 401)
+      await redirectUnauthenticated(error.code);
     throw error;
   }
 
