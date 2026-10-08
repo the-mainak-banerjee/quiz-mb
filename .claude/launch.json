@@ -1,0 +1,25 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "quizmb-api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@quizmb/api",
+        "dev"
+      ],
+      "port": 4000
+    },
+    {
+      "name": "quizmb-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@quizmb/web",
+        "dev"
+      ],
+      "port": 3000
+    }
+  ]
+}

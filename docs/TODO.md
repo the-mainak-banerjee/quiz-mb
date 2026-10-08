@@ -31,13 +31,12 @@ Fix direction: enable the `relationJoins` preview feature in `packages/database/
 - Handle session expire automatically => Done
 - Create Home page/Landing page
 - QA testing and issues fixes   
-- Pages of footer
+- Pages of footer => Done
 - Load Test of Phase 11
 - Track egress (download bandwidth) usage (security design 1.5 and 1.11): image reads from Supabase Storage are not measured yet, so there is no warning before the platform's bandwidth allowance runs out. Decide how to measure it (Supabase usage, or counting signed read URLs) and add a log alert like the storage ones.
 
-## During deployment
-- Email footer on render
-- Set up log alerts on Render (security design 1.11): the API writes warning lines with an `alert` field (`LIVE_COMMAND_FORBIDDEN`, `RATE_LIMITED`, `LIVE_RATE_LIMITED`, `SOCKET_FLOOD`, `QUOTA_REFUSED`, `STORAGE_HIGH`, `STORAGE_FULL`, `EMAIL_BUDGET`). Nothing notifies anyone until a log search or alert on `"alert":` is configured in Render (or a log drain). Also note the protective switch: `PAUSED_FEATURES=signup,quiz_create,upload` in Render's environment pauses those features.
+## BE checks
+- Check the cron job for unverified account deletation.
 
 ## UI QA Issues
 

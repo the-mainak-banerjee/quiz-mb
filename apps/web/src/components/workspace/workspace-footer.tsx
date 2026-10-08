@@ -10,7 +10,16 @@ export function WorkspaceFooter() {
       <div className="mx-auto flex max-w-content flex-wrap items-center justify-between gap-space-sm px-margin-sm md:px-margin lg:px-space-xl">
         <div>
           <Text variant="caption" tone="secondary">
-            © {currentYear} QuizMB. Crafted for intellectual clarity.
+            © {currentYear} QuizMB. Crafted by{' '}
+            <a
+              href="http://themainakb.com/work-with-me?ref=quizmb"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent underline transition-colors hover:text-accent-hover font-semibold underline-offset-2"
+            >
+              Mainak Banerjee
+            </a>
+            .
           </Text>
         </div>
         <div className="flex flex-wrap gap-space-xs">
