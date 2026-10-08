@@ -36,5 +36,3 @@ Fix direction: enable the `relationJoins` preview feature in `packages/database/
 ## During deployment
 
 - Set up log alerts on Render (security design 1.11): the API writes warning lines with an `alert` field (`LIVE_COMMAND_FORBIDDEN`, `RATE_LIMITED`, `LIVE_RATE_LIMITED`, `SOCKET_FLOOD`, `QUOTA_REFUSED`, `STORAGE_HIGH`, `STORAGE_FULL`, `EMAIL_BUDGET`). Nothing notifies anyone until a log search or alert on `"alert":` is configured in Render (or a log drain). Also note the protective switch: `PAUSED_FEATURES=signup,quiz_create,upload` in Render's environment pauses those features.
-
-## Extra Feature
