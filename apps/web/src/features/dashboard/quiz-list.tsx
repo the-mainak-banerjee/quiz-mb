@@ -15,9 +15,11 @@ import { DeleteDraftQuizButton } from '@/features/quiz-builder/delete-draft-quiz
 export function QuizList({
   quizzes,
   showViewAll = true,
+  displayHeaders = true,
 }: {
   quizzes: Quiz[];
   showViewAll?: boolean;
+  displayHeaders?: boolean;
 }) {
   const router = useRouter();
   const [filter, setFilter] = useState<'all' | 'host' | 'participant'>('all');
@@ -58,14 +60,16 @@ export function QuizList({
       className="scroll-mt-space-2xl space-y-space-md"
     >
       <div className="flex items-start justify-between gap-space-sm">
-        <div>
-          <Text as="h2" id="quizzes-heading" variant="section-heading">
-            My quizzes
-          </Text>
-          <Text variant="caption" tone="secondary">
-            Every quiz you host or participate in, across all statuses
-          </Text>
-        </div>
+        {displayHeaders && (
+          <div>
+            <Text as="h2" id="quizzes-heading" variant="section-heading">
+              My quizzes
+            </Text>
+            <Text variant="caption" tone="secondary">
+              Every quiz you host or participate in, across all statuses
+            </Text>
+          </div>
+        )}
         {showViewAll && (
           <NavigationItem
             href={APP_LINKS.WORKSPACE.QUIZZES}
