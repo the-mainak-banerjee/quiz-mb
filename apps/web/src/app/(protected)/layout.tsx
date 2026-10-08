@@ -1,14 +1,18 @@
 import type { ReactNode } from 'react';
-import { requireUser } from '@/lib/auth/session';
+import { accessLifetime, requireUser } from '@/lib/auth/session';
 import { CurrentUserProvider } from '@/contexts/current-user-context';
+import { SessionKeeper } from '@/features/auth/session-keeper';
 
 export default async function ProtectedLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  const user = await requireUser();
+  const [user, lifetime] = await Promise.all([requireUser(), accessLifetime()]);
   return (
-    <CurrentUserProvider initialUser={user}>{children}</CurrentUserProvider>
+    <CurrentUserProvider initialUser={user}>
+      {lifetime && <SessionKeeper {...lifetime} />}
+      {children}
+    </CurrentUserProvider>
   );
 }

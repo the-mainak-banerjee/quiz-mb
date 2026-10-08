@@ -66,7 +66,11 @@ const BODYLESS_METHODS: readonly string[] = [HTTP_METHOD.GET, HTTP_METHOD.HEAD];
 type Options = {
   headers?: HeadersInit;
   signal?: AbortSignal;
-  /** Only enable when authentication is checked before any mutation occurs. */
+  /**
+   * Renew and retry on any 401 (also for a missing access token). Only
+   * enable when authentication is checked before any mutation occurs. An
+   * expired access token (TOKEN_EXPIRED) is renewed and retried either way.
+   */
   authenticated?: boolean;
   /** Called before each automatic retry of a busy server, e.g. for a label. */
   onBusyRetry?: () => void;
@@ -244,10 +248,12 @@ export function createApiClient(config: Config) {
     try {
       return await sendWhenFree();
     } catch (error) {
+      // An expired access token is always renewed and retried: the API
+      // checks the token before doing anything, so nothing was changed.
       if (
         !(error instanceof ApiError) ||
         error.status !== 401 ||
-        !options.authenticated ||
+        !(options.authenticated || error.code === ERROR_CODE.TOKEN_EXPIRED) ||
         !config.refresh ||
         options.signal?.aborted
       )
