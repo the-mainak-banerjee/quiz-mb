@@ -93,10 +93,7 @@ export function AuthCard({
               </li>
             ))}
           </ul>
-          <MiloStage
-            pose={milo}
-            className="mt-auto w-24 self-end md:w-28"
-          />
+          <MiloStage pose={milo} className="mt-auto w-24 self-end md:w-28" />
         </aside>
       </div>
     </main>
