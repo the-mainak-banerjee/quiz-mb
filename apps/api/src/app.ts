@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import type { Logger } from 'pino';
 import { requestContext } from './http/request-context.js';
-import { health } from './http/health.js';
+import { HEALTH_PATH, health } from './http/health.js';
 import { authRoutes } from './modules/auth/routes.js';
 import type { AuthService } from './modules/auth/service.js';
 import type { UsersService } from './modules/users/service.js';
@@ -63,7 +63,7 @@ export function createApp({
       exposedHeaders: [HTTP_HEADER.REQUEST_ID],
     }),
   );
-  app.get('/api/health', health);
+  app.get(HEALTH_PATH, health);
   app.use(express.json({ limit: '128kb' }));
   if (rateLimiter) app.use('/api', authRateLimits(rateLimiter, rateLimits));
   if (auth && users)
