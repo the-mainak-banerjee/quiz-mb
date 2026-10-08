@@ -13,6 +13,14 @@ const denied = () =>
     },
     401,
   );
+const unauthenticated = () =>
+  json(
+    {
+      success: false,
+      error: { code: 'UNAUTHENTICATED', message: 'Wrong email or password.' },
+    },
+    401,
+  );
 
 test('all HTTP methods use the API origin, credentials, JSON and typed envelope data', async () => {
   const calls = [];
@@ -164,6 +172,40 @@ test('concurrent protected calls coordinate one refresh and retry once', async (
   assert.equal(requests, 4);
 });
 
+test('an expired access token is renewed and retried on every call', async () => {
+  let refreshed = false,
+    refreshes = 0;
+  const api = createApiClient({
+    baseUrl,
+    refresh: async () => {
+      refreshes++;
+      refreshed = true;
+    },
+    fetcher: async () =>
+      refreshed ? json({ success: true, data: 'saved' }) : denied(),
+  });
+  // No `authenticated` option: TOKEN_EXPIRED alone is enough.
+  assert.equal(await api.patch(API_ROUTES.AUTH.ME, { name: 'A' }), 'saved');
+  assert.equal(refreshes, 1);
+});
+
+test('other 401s renew only for calls marked authenticated', async () => {
+  let refreshes = 0;
+  const api = createApiClient({
+    baseUrl,
+    refresh: async () => {
+      refreshes++;
+    },
+    fetcher: async () => unauthenticated(),
+  });
+  await assert.rejects(api.get(API_ROUTES.AUTH.ME), { status: 401 });
+  assert.equal(refreshes, 0);
+  await assert.rejects(api.get(API_ROUTES.AUTH.ME, { authenticated: true }), {
+    status: 401,
+  });
+  assert.equal(refreshes, 1, 'renewed once, retried once, then refused');
+});
+
 test('login does not refresh; refresh failure and repeated 401 cannot loop', async () => {
   let refreshes = 0,
     calls = 0;
@@ -172,9 +214,12 @@ test('login does not refresh; refresh failure and repeated 401 cannot loop', asy
     refresh: async () => {
       refreshes++;
     },
-    fetcher: async () => {
+    fetcher: async (url) => {
       calls++;
-      return denied();
+      // Login answers a wrong password with UNAUTHENTICATED, never TOKEN_EXPIRED.
+      return String(url).endsWith(API_ROUTES.AUTH.LOGIN)
+        ? unauthenticated()
+        : denied();
     },
   });
   await assert.rejects(api.post(API_ROUTES.AUTH.LOGIN, {}), { status: 401 });

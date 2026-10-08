@@ -221,3 +221,47 @@ test('quota refusals are logged as alerts, with ids and no request body', async 
   assert.equal(refused[0]!.userId, 'user-1');
   assert.equal(refused[0]!.code, ERROR_CODE.LIMIT_REACHED);
 });
+
+test('request logs name the route pattern, never the raw URL, and skip healthy checks', async () => {
+  const lines: Record<string, unknown>[] = [];
+  const requests = createLogger('info', {
+    write: (line: string) => lines.push(JSON.parse(line)),
+  });
+  const app = express();
+  app.use(requestContext(requests));
+  const api = express.Router();
+  api.get('/quizzes/:id', (_req, res) => {
+    res.json({ ok: true });
+  });
+  api.post('/quizzes/:id/register', () => {
+    throw new ApiError(409, ERROR_CODE.CONFLICT, 'Taken.');
+  });
+  app.use('/api', api);
+  app.get('/api/health', (_req, res) => {
+    res.json({ status: 'ok' });
+  });
+  app.use((_req, res) => {
+    res.status(404).json({});
+  });
+  app.use(errorHandler(requests));
+  const id = '5b8f1c2e-0000-4000-8000-000000000001';
+  await withServer(app, async (url) => {
+    await fetch(`${url}/api/quizzes/${id}?secret=1`);
+    await fetch(`${url}/api/quizzes/${id}/register`, { method: 'POST' });
+    await fetch(`${url}/api/health`);
+    await fetch(`${url}/api/unknown/${id}`);
+  });
+  const completed = lines.filter((line) => line.msg === 'Request completed');
+  assert.deepEqual(
+    completed.map((line) => [line.method, line.route, line.statusCode]),
+    [
+      ['GET', '/api/quizzes/:id', 200],
+      ['POST', '/api/quizzes/:id/register', 409],
+      ['GET', undefined, 404],
+    ],
+    'healthy health checks are not logged',
+  );
+  const text = JSON.stringify(lines);
+  assert.ok(!text.includes(id), 'no ids from the URL');
+  assert.ok(!text.includes('secret'), 'no query strings');
+});

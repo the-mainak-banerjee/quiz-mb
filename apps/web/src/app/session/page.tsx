@@ -1,18 +1,19 @@
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/auth/session';
-import { ContinueSession } from '@/features/auth/continue-session';
-import { APP_LINKS } from '@/config/navigation';
-import { Text } from '@/components/ui';
+import { safeReturnTo } from '@/lib/auth/return-to';
+import { SessionRecovery } from '@/features/auth/session-recovery';
 
-export default async function SessionPage() {
-  if (await currentUser(false)) redirect(APP_LINKS.WORKSPACE.DASHBOARD);
-  return (
-    <main className="mx-auto max-w-content px-margin-sm py-space-2xl space-y-space-md">
-      <Text as="h1" variant="page-title">
-        Continue your session
-      </Text>
-      <Text tone="secondary">Securely renew your session to continue.</Text>
-      <ContinueSession />
-    </main>
-  );
+/**
+ * Where a page that found the access token expired sends the visitor: the
+ * browser renews the session and goes straight back to `returnTo`.
+ */
+export default async function SessionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ returnTo?: string }>;
+}) {
+  const returnTo = safeReturnTo((await searchParams).returnTo);
+  // Renewed in another tab meanwhile: nothing to do.
+  if (await currentUser(false)) redirect(returnTo);
+  return <SessionRecovery returnTo={returnTo} />;
 }
