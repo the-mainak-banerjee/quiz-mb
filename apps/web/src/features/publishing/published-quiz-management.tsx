@@ -13,6 +13,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import { Badge, Button, Surface, Text } from '@/components/ui';
+import { EmptyStateIllustration } from '@/components/empty-state-illustration';
 import { LocalDateTime } from '@/components/local-date-time';
 import { Modal } from '@/components/ui/modal';
 import { NavigationItem } from '@/components/workspace/navigation-item';
@@ -346,7 +347,12 @@ export function PublishedQuizManagement({
             {participantPreview.length > 0 ? (
               <ParticipantRoster participants={participantPreview} />
             ) : (
-              <Text tone="secondary">No participants have registered yet.</Text>
+              <div className="flex flex-col items-center gap-space-xs text-center">
+                <EmptyStateIllustration kind="registration" />
+                <Text tone="secondary">
+                  No participants have registered yet.
+                </Text>
+              </div>
             )}
             <div className="flex flex-wrap items-center justify-between gap-space-xs border-t border-border-surface pt-space-sm">
               <Text variant="caption" tone="secondary">

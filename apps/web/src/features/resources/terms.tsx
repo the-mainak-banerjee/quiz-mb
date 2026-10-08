@@ -141,7 +141,11 @@ const sections: ResourceSection[] = [
         </Text>
         <Callout>
           <Text variant="label">Read the current limits</Text>
-          <Text variant="body-secondary" tone="secondary" className="mb-space-xs">
+          <Text
+            variant="body-secondary"
+            tone="secondary"
+            className="mb-space-xs"
+          >
             Opening a lobby is free. A hosted session counts when the host
             starts the quiz, before the first question is asked.
           </Text>

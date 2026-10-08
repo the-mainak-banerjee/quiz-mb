@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { ProjectDto } from '@quizmb/contracts';
 import { Button, Surface, Text } from '@/components/ui';
+import { EmptyStateIllustration } from '@/components/empty-state-illustration';
 import { Modal } from '@/components/ui/modal';
 import { ProjectForm } from '@/features/projects/project-form';
 import { api } from '@/lib/api/browser';
@@ -111,9 +112,7 @@ export function ProjectSelection({
         </div>
       ) : (
         <Surface className="mx-auto max-w-prose space-y-space-lg text-center">
-          <div className="mx-auto flex size-16 items-center justify-center rounded-card bg-action-secondary text-accent">
-            <FolderPlus size={32} />
-          </div>
+          <EmptyStateIllustration kind="project" className="mx-auto" />
           <div className="space-y-space-xs">
             <Text as="h2" variant="section-heading">
               Create your first project

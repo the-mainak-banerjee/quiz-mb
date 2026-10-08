@@ -1,5 +1,6 @@
 import { ClipboardList, Plus } from 'lucide-react';
 import { Surface, Text } from '@/components/ui';
+import { EmptyStateIllustration } from '@/components/empty-state-illustration';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
 
@@ -14,9 +15,13 @@ export function EmptyState({
 }) {
   return (
     <Surface className="flex flex-col items-center gap-space-md py-space-xl text-center md:py-space-2xl">
-      <div className="rounded-card bg-surface-low p-space-md text-accent">
-        <ClipboardList size={32} aria-hidden="true" />
-      </div>
+      {create ? (
+        <EmptyStateIllustration kind="quiz" />
+      ) : (
+        <div className="rounded-card bg-surface-low p-space-md text-accent">
+          <ClipboardList size={32} aria-hidden="true" />
+        </div>
+      )}
       <Text as="h3" variant="section-heading">
         {title}
       </Text>

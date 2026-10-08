@@ -133,7 +133,10 @@ const sections: ResourceSection[] = [
             ),
           )}
         </ol>
-        <Callout icon={<ShieldCheck size={20} aria-hidden="true" />} className="lg:items-center">
+        <Callout
+          icon={<ShieldCheck size={20} aria-hidden="true" />}
+          className="lg:items-center"
+        >
           The host opens the lobby, starts the quiz, and chooses each question.
           The planned start time is an announcement, not an automatic start.
         </Callout>
@@ -183,7 +186,10 @@ const sections: ResourceSection[] = [
             },
           ]}
         />
-        <Callout icon={<CheckCircle2 size={20} aria-hidden="true" />} className="md:items-center">
+        <Callout
+          icon={<CheckCircle2 size={20} aria-hidden="true" />}
+          className="md:items-center"
+        >
           Selecting an answer does not submit it. An answer that is not
           submitted before the deadline receives no points.
         </Callout>
@@ -229,7 +235,10 @@ const sections: ResourceSection[] = [
           join during an active question does not allow an answer to that
           question.
         </Text>
-        <Callout icon={<Clock3 size={20} aria-hidden="true" />} className="lg:items-center">
+        <Callout
+          icon={<Clock3 size={20} aria-hidden="true" />}
+          className="lg:items-center"
+        >
           Reconnecting does not restart the timer, add answering time, or allow
           another answer after a submission was accepted.
         </Callout>

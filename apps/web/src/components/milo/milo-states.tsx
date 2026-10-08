@@ -110,3 +110,41 @@ export function MiloMessage({
     </main>
   );
 }
+
+/**
+ * A small Milo moment inside a page: no search results, waiting and other
+ * personality states. Structural empty states (no projects, quizzes,
+ * questions or participants) use the product illustrations instead.
+ */
+export function MiloEmpty({
+  pose,
+  title,
+  description,
+  children,
+  className,
+}: {
+  pose: MiloPose;
+  title: string;
+  description?: ReactNode;
+  /** Actions under the message. */
+  children?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'milo-enter flex flex-col items-center gap-space-sm py-space-lg text-center',
+        className,
+      )}
+    >
+      <MiloStage pose={pose} className="w-28 md:w-32" />
+      <div className="space-y-space-xs">
+        <Text as="h2" variant="section-heading">
+          {title}
+        </Text>
+        {description && <Text tone="secondary">{description}</Text>}
+      </div>
+      {children}
+    </div>
+  );
+}
