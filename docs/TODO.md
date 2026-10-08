@@ -31,6 +31,7 @@ Fix direction: enable the `relationJoins` preview feature in `packages/database/
 - Handle session expire automatically
 - Create Home page/Landing page
 - QA testing and issues fixes   
+- Pages of footer
 - Load Test of Phase 11
 - Track egress (download bandwidth) usage (security design 1.5 and 1.11): image reads from Supabase Storage are not measured yet, so there is no warning before the platform's bandwidth allowance runs out. Decide how to measure it (Supabase usage, or counting signed read URLs) and add a log alert like the storage ones.
 
