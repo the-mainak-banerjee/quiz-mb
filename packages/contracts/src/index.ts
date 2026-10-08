@@ -187,15 +187,21 @@ export const quizSchema = z
       .max(AUTHORING_LIMITS.quizTitle),
     description: z.string().trim().max(AUTHORING_LIMITS.description),
     registrationLimit: z
-      .number()
-      .int()
-      .min(1)
-      .max(AUTHORING_LIMITS.participants),
+      .number({ error: 'Enter the maximum number of participants.' })
+      .int('Enter a whole number.')
+      .min(1, 'Allow at least 1 participant.')
+      .max(
+        AUTHORING_LIMITS.participants,
+        `Allow at most ${AUTHORING_LIMITS.participants} participants.`,
+      ),
     defaultQuestionDurationSeconds: z
-      .number()
-      .int()
-      .min(1)
-      .max(AUTHORING_LIMITS.duration),
+      .number({ error: 'Enter a default duration in seconds.' })
+      .int('Enter a whole number of seconds.')
+      .min(1, 'Use at least 1 second.')
+      .max(
+        AUTHORING_LIMITS.duration,
+        `Use at most ${AUTHORING_LIMITS.duration} seconds.`,
+      ),
     allowLateJoin: z.boolean(),
     coverMediaId: z.uuid().nullable(),
     // Participant-facing metadata only. Saving a date never publishes or starts a quiz.
@@ -215,10 +221,13 @@ export const questionSchema = z
       .max(AUTHORING_LIMITS.prompt),
     imageMediaId: z.uuid().nullable(),
     durationOverrideSeconds: z
-      .number()
-      .int()
-      .min(1)
-      .max(AUTHORING_LIMITS.duration)
+      .number({ error: 'Enter a duration in seconds, or leave it empty.' })
+      .int('Enter a whole number of seconds.')
+      .min(1, 'Use at least 1 second.')
+      .max(
+        AUTHORING_LIMITS.duration,
+        `Use at most ${AUTHORING_LIMITS.duration} seconds.`,
+      )
       .nullable(),
     options: z
       .array(

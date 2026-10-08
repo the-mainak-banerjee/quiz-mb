@@ -4,6 +4,31 @@
 
 :root {
   color-scheme: light;
+  /* Reserve the scrollbar's space on every page, so content does not shift
+     sideways when navigating between short and long pages. */
+  scrollbar-gutter: stable;
+  /* Themed scrollbars (Firefox, Chrome and Edge 121+). */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-surface-dim) transparent;
+}
+
+/* Safari and older Chromium, which do not support scrollbar-color. */
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-dim) padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-secondary) padding-box;
+  }
 }
 body {
   margin: 0;
