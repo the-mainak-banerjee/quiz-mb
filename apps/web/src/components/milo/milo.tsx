@@ -431,11 +431,9 @@ export function Milo({
             </g>
             {egg}
             {head}
-            <path
-              d="M84 118q8-11 16 0M122 118q8-11 16 0"
-              {...stroke}
-              strokeWidth={3.6}
-            />
+            {/* Bright open eyes under raised, happy brows. */}
+            {eyes([92, 118], [130, 118])}
+            <path d="M80 99q8-8 17-3M121 96q9-5 17 3" {...stroke} />
             <path d="M98 134q12 15 24 0Z" fill={INK} />
             <g
               className="milo-spark"
@@ -520,11 +518,9 @@ export function Milo({
             </g>
             {egg}
             {head}
-            <path
-              d="M84 118q8-11 16 0M122 118q8-11 16 0"
-              {...stroke}
-              strokeWidth={3.6}
-            />
+            {/* Bright open eyes under raised, happy brows. */}
+            {eyes([92, 118], [130, 118])}
+            <path d="M80 99q8-8 17-3M121 96q9-5 17 3" {...stroke} />
             <path d="M97 134q13 19 26 0Z" fill={INK} />
           </g>
         </>
