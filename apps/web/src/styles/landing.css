@@ -1,0 +1,207 @@
+/* Landing page motion (features/landing). Everything is still when the
+ * viewer prefers reduced motion. */
+
+/* Dotted frame sides extend beyond the band and fade away at both ends. */
+.lp-dotted-side {
+  position: absolute;
+  top: calc(-1 * var(--spacing-space-md));
+  bottom: calc(-1 * var(--spacing-space-md));
+  z-index: 1;
+  width: 2px;
+  border-inline-start: 2px dotted var(--color-border-surface);
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 20%,
+    #000 80%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* A faint grid behind the hero, drawn with the surface border token. */
+.lp-grid {
+  background-image:
+    linear-gradient(var(--color-border-surface) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-border-surface) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at 50% 30%, #000 25%, transparent 70%);
+}
+.lp-grid-inverse {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 6%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 6%) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at 70% 40%, #000 20%, transparent 70%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Answer bars fill in, one after another. */
+  .lp-fill {
+    transform-origin: left;
+    animation: lp-fill 1.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  /* The hero phone drifts gently. */
+  .lp-float {
+    animation: lp-float 6s ease-in-out infinite;
+  }
+}
+
+@keyframes lp-fill {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes lp-float {
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* Logo cloud: each mark blurs and slides in as the band scrolls into view
+ * (scroll-driven where supported; otherwise the logos are simply shown). */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .lp-logo {
+      animation: lp-logo-in linear both;
+      animation-timeline: view();
+      /* Staggered by starting each mark a little later in the scroll. */
+      animation-range: entry var(--lp-logo-start, 0%) entry 100%;
+    }
+  }
+}
+@keyframes lp-logo-in {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(10px);
+  }
+}
+
+/* Landing cards (features/landing/card.tsx): the hero's grid, finer. */
+.lp-grid-card {
+  background-image:
+    linear-gradient(var(--color-border-surface) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-border-surface) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse at 50% 0%, #000 20%, transparent 75%);
+}
+
+/* Step skeletons play once their card is in view (features/landing/in-view).
+ * Hidden only while waiting to play, and only when motion is allowed. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal]:not([data-inview]) .lp-seq {
+    opacity: 0;
+  }
+  [data-reveal]:not([data-inview]) .lp-grow {
+    transform: scaleX(0);
+  }
+  [data-inview] .lp-seq {
+    animation: lp-seq-in 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: var(--lp-at, 0s);
+  }
+  [data-inview] .lp-grow {
+    transform-origin: left;
+    animation: lp-fill 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: var(--lp-at, 0s);
+  }
+}
+@keyframes lp-seq-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Step 2: a pointer glides to Copy and clicks; the icon becomes a check.
+ * One 4.5s loop shared by all three parts so they stay in step. With
+ * reduced motion the button simply reads Copy and no pointer shows. */
+.lp-copy-done {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-pointer {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal]:not([data-inview]) .lp-pointer {
+    opacity: 0;
+  }
+  [data-inview] .lp-pointer {
+    animation: lp-pointer 4.5s ease-in-out 0.6s infinite;
+  }
+  [data-inview] .lp-copy-idle {
+    animation: lp-copy-idle 4.5s ease-in-out 0.6s infinite;
+  }
+  [data-inview] .lp-copy-done {
+    animation: lp-copy-done 4.5s ease-in-out 0.6s infinite;
+  }
+}
+@keyframes lp-pointer {
+  0% {
+    opacity: 0;
+    transform: translate(-110px, 56px);
+  }
+  10% {
+    opacity: 1;
+    transform: translate(-110px, 56px);
+  }
+  35% {
+    transform: translate(0, 0) scale(1);
+  }
+  40% {
+    transform: translate(0, 0) scale(0.82);
+  }
+  45%,
+  75% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  90%,
+  100% {
+    opacity: 0;
+    transform: translate(18px, 22px);
+  }
+}
+@keyframes lp-copy-idle {
+  0%,
+  40% {
+    opacity: 1;
+    transform: none;
+  }
+  45%,
+  88% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  95%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes lp-copy-done {
+  0%,
+  41% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  46%,
+  86% {
+    opacity: 1;
+    transform: none;
+  }
+  92%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Answer bars inside an InView block replay when it scrolls into view. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal]:not([data-inview]) .lp-fill {
+    animation: none;
+    transform: scaleX(0);
+  }
+}
