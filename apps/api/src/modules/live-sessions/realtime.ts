@@ -4,6 +4,7 @@ import type { Logger } from 'pino';
 import type { z } from 'zod';
 import {
   LIVE_EVENTS,
+  LIVE_SESSION_LIMITS,
   LIVE_SOCKET_NAMESPACE,
   answerSubmitCommandSchema,
   lateJoinCommandSchema,
@@ -277,14 +278,57 @@ export function attachLiveRealtime(
 
   /**
    * Each participant gets their own final result first; the final
-   * leaderboard stays hidden until the host reveals it.
+   * leaderboard stays hidden until the host reveals it. The room stays open
+   * for that reveal until the host closes it, or the server does after a
+   * while.
    */
   async function announceEnded(liveSessionId: string) {
     for (const { socketId, result } of await service.finalResultDeliveries(
       liveSessionId,
     ))
       nsp.to(socketId).emit(LIVE_EVENTS.quizEnded, result);
+    scheduleRoomClose(liveSessionId);
     return broadcast(await service.session(liveSessionId));
+  }
+
+  // Completed rooms the server will close if the host does not. In memory:
+  // after a restart the sockets are gone anyway.
+  const roomTimers = new Map<string, NodeJS.Timeout>();
+  const COMPLETED_ROOM_MS = LIVE_SESSION_LIMITS.completedRoomMinutes * 60_000;
+
+  function scheduleRoomClose(liveSessionId: string) {
+    if (roomTimers.has(liveSessionId)) return;
+    const timer = setTimeout(() => {
+      roomTimers.delete(liveSessionId);
+      service
+        .closeRoom(liveSessionId)
+        .catch(() =>
+          logger.warn(
+            { liveSessionId, code: ERROR_CODE.LIVE_UNAVAILABLE },
+            'Closed room presence not cleared',
+          ),
+        );
+      closeRoom(liveSessionId, 'This session has closed.');
+      logger.info(
+        { liveSessionId },
+        'Completed live room closed by the server',
+      );
+    }, COMPLETED_ROOM_MS);
+    timer.unref();
+    roomTimers.set(liveSessionId, timer);
+  }
+
+  /** Tells everyone in a completed room it closed, then disconnects them. */
+  function closeRoom(liveSessionId: string, message: string, except?: string) {
+    clearTimeout(roomTimers.get(liveSessionId));
+    roomTimers.delete(liveSessionId);
+    const closed: LiveRemovedDto = { code: ERROR_CODE.SESSION_CLOSED, message };
+    const room = liveRoom(liveSessionId);
+    const others = except ? nsp.to(room).except(except) : nsp.to(room);
+    others.emit(LIVE_EVENTS.removed, closed);
+    (except ? nsp.in(room).except(except) : nsp.in(room)).disconnectSockets(
+      true,
+    );
   }
 
   // A question closed (timer, recovery path or end): the host gets the new
@@ -663,6 +707,20 @@ export function attachLiveRealtime(
         );
         logger.info({ liveSessionId }, 'Final leaderboard shown');
         return broadcast(session);
+      },
+    );
+
+    on(
+      LIVE_EVENTS.sessionClose,
+      liveSessionCommandSchema,
+      async ({ liveSessionId }) => {
+        requireHost();
+        await service.closeRoom(liveSessionId, userId);
+        logger.info({ liveSessionId }, 'Live session closed by the host');
+        // The closing socket gets the ack and leaves on its own.
+        closeRoom(liveSessionId, 'The host closed this session.', socket.id);
+        socket.data.role = undefined;
+        return null;
       },
     );
 

@@ -1,8 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, CircleX, DoorClosed, WifiOff } from 'lucide-react';
+import { useNavigationGuard } from 'nextjs-nav-guard';
+import {
+  AlertTriangle,
+  CircleX,
+  DoorClosed,
+  Eye,
+  LogOut,
+  WifiOff,
+} from 'lucide-react';
 import {
   LIVE_EVENTS,
   type HostCurrentQuestionDto,
@@ -11,6 +19,7 @@ import {
   type LeaderboardDto,
   ERROR_CODE,
   LIVE_ROLE,
+  LIVE_SESSION_LIMITS,
   LIVE_SESSION_STATE,
   QUESTION_TYPE,
 } from '@quizmb/contracts';
@@ -147,8 +156,45 @@ export function HostLiveConsole({
   const [confirming, setConfirming] = useState<
     keyof typeof confirmations | null
   >(null);
+  /** The host asked to close before revealing the final leaderboard. */
+  const [confirmClose, setConfirmClose] = useState(false);
+  /** Set once the session is closed, so leaving is no longer guarded. */
+  const leaving = useRef(false);
   const router = useRouter();
   const manageHref = APP_LINKS.WORKSPACE.MANAGE_QUIZ(quizId);
+  const resultsHref = APP_LINKS.WORKSPACE.QUIZ_RESULTS(quizId);
+  const hostSnapshot = snapshot?.role === LIVE_ROLE.HOST ? snapshot : null;
+  const state = hostSnapshot?.state ?? null;
+  const unavailable = connection === 'failed' && !!failure;
+  // Leaving mid-quiz asks first; the quiz keeps running without the host.
+  const quizLive =
+    !unavailable &&
+    state !== null &&
+    state !== LIVE_SESSION_STATE.LOBBY &&
+    state !== LIVE_SESSION_STATE.COMPLETED;
+  // After the end, leaving closes the room for everyone.
+  const roomOpen =
+    !unavailable &&
+    connection === 'connected' &&
+    state === LIVE_SESSION_STATE.COMPLETED &&
+    !!hostSnapshot?.final;
+  const revealed = !!hostSnapshot?.final?.leaderboardShown;
+  // Exit and browser Back only: a refresh just reconnects.
+  const guard = useNavigationGuard({
+    enabled: ({ type }) =>
+      (type === 'push' || type === 'replace' || type === 'popstate') &&
+      !leaving.current &&
+      (quizLive || roomOpen),
+  });
+  const sessionClosed =
+    connection === 'failed' && failure?.code === ERROR_CODE.SESSION_CLOSED;
+  // Closed elsewhere (another tab, or by the server after a while).
+  useEffect(() => {
+    if (!sessionClosed) return;
+    leaving.current = true;
+    const timer = window.setTimeout(() => router.replace(resultsHref), 3_000);
+    return () => window.clearTimeout(timer);
+  }, [sessionClosed, resultsHref, router]);
   const lobbyExpired =
     connection === 'failed' && failure?.code === ERROR_CODE.LOBBY_EXPIRED;
   // An expired lobby takes the host back to quiz management.
@@ -157,6 +203,14 @@ export function HostLiveConsole({
     const timer = window.setTimeout(() => router.replace(manageHref), 5_000);
     return () => window.clearTimeout(timer);
   }, [lobbyExpired, manageHref, router]);
+  // Exit or Back after the end: close the room instead of just leaving it.
+  const exitAfterEnd = guard.active && roomOpen;
+  useEffect(() => {
+    if (!exitAfterEnd) return;
+    guard.reject();
+    requestClose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per attempt
+  }, [exitAfterEnd]);
   const endingSoon = useEndingSoon(
     snapshot?.sessionEndsAt ?? null,
     clockOffsetMs,
@@ -176,6 +230,28 @@ export function HostLiveConsole({
     return ack.ok;
   }
 
+  /** Closes the room for everyone, then shows the full results. */
+  async function closeSession(reveal = false) {
+    if (reveal && !(await run(LIVE_EVENTS.finalLeaderboardShow))) return;
+    if (!(await run(LIVE_EVENTS.sessionClose))) return;
+    setConfirmClose(false);
+    leaving.current = true;
+    router.replace(resultsHref);
+  }
+  /** Close session (or Exit after the end): asks first if not revealed. */
+  function requestClose() {
+    if (revealed) void closeSession();
+    else setConfirmClose(true);
+  }
+
+  if (sessionClosed)
+    return (
+      <LiveNotice
+        eyebrow="Session closed"
+        title="This live session has closed"
+        description={`${failure.message} Taking you to the full results…`}
+      />
+    );
   if (connection === 'failed' && failure?.code === ERROR_CODE.LOBBY_EXPIRED)
     return (
       <LiveNotice
@@ -227,6 +303,66 @@ export function HostLiveConsole({
       />
     );
 
+  const dialogs = (
+    <>
+      <Modal
+        open={confirmClose}
+        onOpenChange={(open) => !open && setConfirmClose(false)}
+        title="Close without the final leaderboard?"
+        description="Participants haven't seen the final leaderboard yet. Closing the session disconnects everyone; they keep their own result."
+      >
+        <div className="flex flex-col-reverse gap-space-xs sm:flex-row sm:justify-end">
+          <Button variant="ghost" onClick={() => setConfirmClose(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="outline"
+            disabled={busy}
+            icon={<DoorClosed size={18} aria-hidden="true" />}
+            onClick={() => void closeSession()}
+          >
+            Close without revealing
+          </Button>
+          <Button
+            disabled={busy}
+            icon={<Eye size={18} aria-hidden="true" />}
+            onClick={() => void closeSession(true)}
+          >
+            Reveal and close
+          </Button>
+        </div>
+        {error && (
+          <Text
+            role="alert"
+            variant="caption"
+            className="mt-space-sm text-danger"
+          >
+            {error}
+          </Text>
+        )}
+      </Modal>
+      <Modal
+        open={guard.active && quizLive}
+        onOpenChange={(open) => !open && guard.reject()}
+        title="Leave the live quiz?"
+        description={`The quiz keeps running without you. Participants are told you're away, and if you don't return within ${LIVE_SESSION_LIMITS.hostGraceMinutes} minutes the quiz ends automatically with the results so far.`}
+      >
+        <div className="flex flex-col-reverse gap-space-xs sm:flex-row sm:justify-end">
+          <Button variant="ghost" onClick={guard.reject}>
+            Stay in the quiz
+          </Button>
+          <Button
+            variant="danger"
+            icon={<LogOut size={18} aria-hidden="true" />}
+            onClick={guard.accept}
+          >
+            Leave
+          </Button>
+        </div>
+      </Modal>
+    </>
+  );
+
   const host: HostLiveSnapshotDto = snapshot;
   if (host.state === LIVE_SESSION_STATE.COMPLETED)
     return host.final ? (
@@ -249,9 +385,9 @@ export function HostLiveConsole({
           shown={host.final.leaderboardShown}
           busy={busy || connection !== 'connected'}
           onReveal={() => void run(LIVE_EVENTS.finalLeaderboardShow)}
-          resultsHref={APP_LINKS.WORKSPACE.QUIZ_RESULTS(quizId)}
-          dashboardHref={APP_LINKS.WORKSPACE.DASHBOARD}
+          onClose={requestClose}
         />
+        {dialogs}
       </>
     ) : (
       <LiveNotice
@@ -537,6 +673,7 @@ export function HostLiveConsole({
           </Text>
         )}
       </Modal>
+      {dialogs}
     </>
   );
 }
