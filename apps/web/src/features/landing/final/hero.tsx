@@ -111,7 +111,7 @@ export function FinalHero({ signedIn = false }: { signedIn?: boolean }) {
           {/* The participant's phone flanks the window on wide screens. */}
           <div className="lp-float absolute -right-36 top-16 hidden xl:block">
             <IPhone onLight className="w-56">
-              <ParticipantShot />
+              <ParticipantShot hero />
             </IPhone>
           </div>
         </div>

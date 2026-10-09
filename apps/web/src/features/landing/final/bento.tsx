@@ -1,4 +1,3 @@
-import Image from 'next/image';
 import type { ReactNode } from 'react';
 import { ArrowRight, Clock3, FolderOpen, Link2, X } from 'lucide-react';
 import { Brand } from '@/components/brand';
@@ -10,6 +9,7 @@ import { AnswerBreakdownMock } from '../mocks';
 import { LandingQrCode } from '../invitation';
 import { SHARE_LINK } from '../content';
 import { Eyebrow } from '../sections';
+import { LandingScreenshot, type ScreenshotName } from '../screenshot';
 
 /**
  * A feature card. `visual-top`: the visual, then the text. `text-top`: the
@@ -100,22 +100,18 @@ const HOVER_LIFT =
  * edge on wider screens.
  */
 function CornerShot({
-  src,
+  name,
   alt,
-  width,
-  height,
   fit,
   displayWidth,
   areaHeight = 'h-64 md:h-72',
   phone,
 }: {
-  src: string;
+  name: ScreenshotName;
   alt: string;
-  width: number;
-  height: number;
   fit: 'bleed' | 'inset';
   /** A narrower capture shown below md instead, so nothing is cut off. */
-  phone?: { src: string; width: number; height: number };
+  phone?: { name: ScreenshotName; sizes: string };
   /** Width from md up for `bleed`; wider than the card runs it off the side. */
   displayWidth?: string;
   areaHeight?: string;
@@ -130,24 +126,16 @@ function CornerShot({
           fit === 'bleed' && cn('md:right-auto', displayWidth),
         )}
       >
-        <Image
-          src={src}
+        <LandingScreenshot
+          name={name}
           alt={alt}
-          width={width}
-          height={height}
-          sizes="(min-width: 768px) 32rem, 90vw"
-          className={cn('h-auto w-full', phone && 'max-md:hidden')}
+          sizes={
+            fit === 'bleed'
+              ? '(min-width: 768px) 526px, calc(100vw - 114px)'
+              : '(min-width: 1280px) 308px, (min-width: 768px) calc(33.333vw - 119.333px), calc(100vw - 114px)'
+          }
+          {...(phone ? { mobile: phone } : {})}
         />
-        {phone && (
-          <Image
-            src={phone.src}
-            alt={alt}
-            width={phone.width}
-            height={phone.height}
-            sizes="90vw"
-            className="h-auto w-full md:hidden"
-          />
-        )}
       </ShotFrame>
     </div>
   );
@@ -275,13 +263,11 @@ function JoinVisual() {
           HOVER_LIFT,
         )}
       >
-        <Image
-          src="/landing/bento-lobby.png"
+        <LandingScreenshot
+          name="bento-lobby"
           alt="A learner in the lobby after joining: Milo reading, Connected to live room, You're in the lobby, waiting for the host to start the quiz, with the quiz title and host."
-          width={780}
-          height={1568}
-          sizes="17rem"
-          className="h-auto w-full"
+          sizes="262px"
+          minWidth="48rem"
         />
       </ShotFrame>
     </div>
@@ -354,10 +340,8 @@ export function FeatureBento() {
           description="Show it after a tough question, or save it for the finale."
         >
           <CornerShot
-            src="/landing/bento-leaderboard.png"
+            name="bento-leaderboard"
             alt="The leaderboard as the host sees it: the top players with ranks, names and total points, and a button to hide it from participants."
-            width={1052}
-            height={1680}
             fit="inset"
             areaHeight="min-h-64 flex-1 md:min-h-72"
           />
@@ -368,10 +352,8 @@ export function FeatureBento() {
           description="When the timer ends, each learner sees the right answer and the points they earned."
         >
           <CornerShot
-            src="/landing/bento-result.png"
+            name="bento-result"
             alt="A participant's result on a phone: Correct, plus 820 points, with the share of answers for each option."
-            width={712}
-            height={1200}
             fit="inset"
             areaHeight="h-72 md:h-96"
           />
@@ -398,16 +380,13 @@ export function FeatureBento() {
           description="Learners keep their final score and rank for every quiz they join."
         >
           <CornerShot
-            src="/landing/bento-history.png"
+            name="bento-history"
             alt="A participant's history: completed quizzes with the final score, correct and incorrect answers, and final rank."
-            width={1840}
-            height={1080}
             fit="bleed"
             displayWidth="md:w-[34rem]"
             phone={{
-              src: '/landing/bento-history-phone.png',
-              width: 780,
-              height: 1120,
+              name: 'bento-history-phone',
+              sizes: 'calc(100vw - 114px)',
             }}
           />
         </BentoCard>
