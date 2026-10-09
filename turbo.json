@@ -11,6 +11,9 @@
         "ALLOWED_ORIGINS",
         "LOG_LEVEL",
         "NEXT_PUBLIC_API_URL",
+        "SITE_URL",
+        "DEPLOYMENT_ENV",
+        "VERCEL_ENV",
         "AUTH_COOKIE_DOMAIN",
         "DATABASE_URL",
         "DATABASE_SSL_CA_BASE64",
@@ -26,7 +29,7 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**", "src/generated/**"],
-      "env": ["NEXT_PUBLIC_API_URL"]
+      "env": ["NEXT_PUBLIC_API_URL", "SITE_URL", "DEPLOYMENT_ENV", "VERCEL_ENV"]
     },
     "lint": {
       "dependsOn": ["^lint"]

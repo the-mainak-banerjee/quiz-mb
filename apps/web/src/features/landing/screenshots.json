@@ -1,0 +1,176 @@
+{
+  "host-console": {
+    "width": 2880,
+    "height": 1800,
+    "variants": [
+      {
+        "src": "/landing/optimized/host-console-320-610b99bc828e.webp",
+        "width": 320
+      },
+      {
+        "src": "/landing/optimized/host-console-480-7fd7bdaf19cb.webp",
+        "width": 480
+      },
+      {
+        "src": "/landing/optimized/host-console-640-dda7c498089c.webp",
+        "width": 640
+      },
+      {
+        "src": "/landing/optimized/host-console-960-ce587c2dad50.webp",
+        "width": 960
+      },
+      {
+        "src": "/landing/optimized/host-console-1440-bae46d8f8035.webp",
+        "width": 1440
+      },
+      {
+        "src": "/landing/optimized/host-console-2048-114351a0cde5.webp",
+        "width": 2048
+      }
+    ]
+  },
+  "participant-answer": {
+    "width": 780,
+    "height": 1688,
+    "variants": [
+      {
+        "src": "/landing/optimized/participant-answer-320-b2cf7d1b0e5b.webp",
+        "width": 320
+      },
+      {
+        "src": "/landing/optimized/participant-answer-480-1f872146e964.webp",
+        "width": 480
+      },
+      {
+        "src": "/landing/optimized/participant-answer-640-b31aa09858c4.webp",
+        "width": 640
+      },
+      {
+        "src": "/landing/optimized/participant-answer-780-79ddd6fd359c.webp",
+        "width": 780
+      }
+    ]
+  },
+  "bento-leaderboard": {
+    "width": 1052,
+    "height": 1680,
+    "variants": [
+      {
+        "src": "/landing/optimized/bento-leaderboard-320-47134f490c3d.webp",
+        "width": 320
+      },
+      {
+        "src": "/landing/optimized/bento-leaderboard-480-6367ad7cba3c.webp",
+        "width": 480
+      },
+      {
+        "src": "/landing/optimized/bento-leaderboard-640-324c5b11079b.webp",
+        "width": 640
+      },
+      {
+        "src": "/landing/optimized/bento-leaderboard-960-92e7d6b6dfd9.webp",
+        "width": 960
+      },
+      {
+        "src": "/landing/optimized/bento-leaderboard-1052-6daef14f9fd3.webp",
+        "width": 1052
+      }
+    ]
+  },
+  "bento-result": {
+    "width": 712,
+    "height": 1200,
+    "variants": [
+      {
+        "src": "/landing/optimized/bento-result-320-775eaf8b86c1.webp",
+        "width": 320
+      },
+      {
+        "src": "/landing/optimized/bento-result-480-bd53a0cbf554.webp",
+        "width": 480
+      },
+      {
+        "src": "/landing/optimized/bento-result-640-d11138c6848e.webp",
+        "width": 640
+      },
+      {
+        "src": "/landing/optimized/bento-result-712-849379c4b88d.webp",
+        "width": 712
+      }
+    ]
+  },
+  "bento-lobby": {
+    "width": 780,
+    "height": 1568,
+    "variants": [
+      {
+        "src": "/landing/optimized/bento-lobby-320-bf41f96e61b0.webp",
+        "width": 320
+      },
+      {
+        "src": "/landing/optimized/bento-lobby-480-baa2364b3dd6.webp",
+        "width": 480
+      },
+      {
+        "src": "/landing/optimized/bento-lobby-640-348f7fe9a45a.webp",
+        "width": 640
+      },
+      {
+        "src": "/landing/optimized/bento-lobby-780-a27c7130b1e0.webp",
+        "width": 780
+      }
+    ]
+  },
+  "bento-history": {
+    "width": 1840,
+    "height": 1080,
+    "variants": [
+      {
+        "src": "/landing/optimized/bento-history-320-881637321a4d.webp",
+        "width": 320
+      },
+      {
+        "src": "/landing/optimized/bento-history-480-620fd84dc677.webp",
+        "width": 480
+      },
+      {
+        "src": "/landing/optimized/bento-history-640-add9f75ebe67.webp",
+        "width": 640
+      },
+      {
+        "src": "/landing/optimized/bento-history-960-de31df138df5.webp",
+        "width": 960
+      },
+      {
+        "src": "/landing/optimized/bento-history-1440-5d8f21ebb5c4.webp",
+        "width": 1440
+      },
+      {
+        "src": "/landing/optimized/bento-history-1840-13d55694aa1e.webp",
+        "width": 1840
+      }
+    ]
+  },
+  "bento-history-phone": {
+    "width": 780,
+    "height": 1120,
+    "variants": [
+      {
+        "src": "/landing/optimized/bento-history-phone-320-de233075f6bd.webp",
+        "width": 320
+      },
+      {
+        "src": "/landing/optimized/bento-history-phone-480-50b39368126a.webp",
+        "width": 480
+      },
+      {
+        "src": "/landing/optimized/bento-history-phone-640-038dff6d7c51.webp",
+        "width": 640
+      },
+      {
+        "src": "/landing/optimized/bento-history-phone-780-76e314c33547.webp",
+        "width": 780
+      }
+    ]
+  }
+}

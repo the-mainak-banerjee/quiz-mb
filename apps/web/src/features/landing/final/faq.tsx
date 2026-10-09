@@ -40,7 +40,7 @@ export function FinalFaq() {
             href={APP_LINKS.FOOTER.HELP}
             target="_blank"
             rel="noopener noreferrer"
-            className="ds-focus mt-space-xs inline-flex items-center gap-1 text-label text-accent underline-offset-4 hover:underline"
+            className="ds-focus mt-space-xs inline-flex min-h-6 items-center gap-1 py-1 text-label text-accent underline-offset-4 hover:underline"
           >
             Visit the Help Center
             <ArrowUpRight size={16} aria-hidden="true" />
