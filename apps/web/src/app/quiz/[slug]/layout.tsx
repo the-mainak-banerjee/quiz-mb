@@ -29,7 +29,12 @@ export default async function PublicQuizLayout({
   try {
     await getPublicQuiz(slug);
   } catch (error) {
-    if (error instanceof ApiError && error.status === 404) notFound();
+    // 422: a malformed link, which can never be a quiz.
+    if (
+      error instanceof ApiError &&
+      (error.status === 404 || error.status === 422)
+    )
+      notFound();
     // Other failures surface from the page's own error handling.
   }
   const lifetime = await accessLifetime();
