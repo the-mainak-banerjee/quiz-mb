@@ -1,11 +1,12 @@
 import { redirect } from 'next/navigation';
-import type { LiveSessionRefDto, PublicQuizDto } from '@quizmb/contracts';
+import type { LiveSessionRefDto } from '@quizmb/contracts';
 import { APP_LINKS } from '@/config/navigation';
 import { LiveSessionShell } from '@/features/live-session/live-session-shell';
 import { ParticipantLiveView } from '@/features/live-session/participant-live-view';
 import { ApiError } from '@/lib/api/client';
 import { API_ROUTES } from '@/lib/api/routes';
-import { loadApi, serverApi } from '@/lib/api/server';
+import { serverApi } from '@/lib/api/server';
+import { getPublicQuiz } from '@/lib/api/public-quiz';
 import { authLink } from '@/lib/auth/return-to';
 import { redirectUnauthenticated } from '@/lib/auth/recovery';
 import { currentUser } from '@/lib/auth/session';
@@ -22,7 +23,7 @@ export default async function ParticipantLivePage({
   const user = await currentUser();
   if (!user)
     redirect(authLink(APP_LINKS.AUTH.LOGIN, APP_LINKS.PUBLIC_QUIZ_LIVE(slug)));
-  const quiz = await loadApi<PublicQuizDto>(API_ROUTES.PUBLIC_QUIZ(slug));
+  const quiz = await getPublicQuiz(slug);
   if (quiz.host.id === user.id)
     redirect(APP_LINKS.WORKSPACE.LIVE_QUIZ(quiz.id));
 
