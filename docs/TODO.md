@@ -18,7 +18,8 @@ Fix direction: enable the `relationJoins` preview feature in `packages/database/
 ## Before launch
 - What to do for settings. => Done
 - Handle session expire automatically => Done
-- Create Home page/Landing page
+- Create Home page/Landing page => Done
+- SEO Meta Data and SEO related pages
 - QA testing and issues fixes   
 - Pages of footer => Done
 - Load Test of Phase 11
