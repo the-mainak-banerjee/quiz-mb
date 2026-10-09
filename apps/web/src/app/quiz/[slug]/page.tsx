@@ -2,23 +2,49 @@ import { PublicQuizView } from '@/features/publishing/public-quiz-view';
 import type { PublicQuizState } from '@/features/publishing/types';
 import { toPublishedQuizViewModel } from '@/features/publishing/view-model';
 import { currentUser } from '@/lib/auth/session';
-import { loadApi, serverApi } from '@/lib/api/server';
+import type { Metadata } from 'next';
+import { serverApi } from '@/lib/api/server';
+import { getPublicQuiz } from '@/lib/api/public-quiz';
+import { NO_INDEX, sharingMetadata } from '@/config/seo';
 import { getAppOrigin } from '@/lib/app-origin';
 import { API_ROUTES } from '@/lib/api/routes';
-import {
-  type PublicQuizDto,
-  QUIZ_STATUS,
-  type RegistrationDto,
-} from '@quizmb/contracts';
+import { QUIZ_STATUS, type RegistrationDto } from '@quizmb/contracts';
 
-export default async function PublicQuizPage({
+type QuizPageProps = { params: Promise<{ slug: string }> };
+
+export async function generateMetadata({
   params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+}: QuizPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  let title = 'Quiz Invitation';
+  let description =
+    'View a shared QuizMB quiz invitation. Sign in to register and participate.';
+  try {
+    const quiz = await getPublicQuiz(slug);
+    // Whitelist public copy only: never questions, answers, or roster data.
+    title = quiz.title;
+    description =
+      quiz.description.trim().replace(/\s+/g, ' ').slice(0, 200) || description;
+  } catch {
+    // The layout already sends unknown quizzes to a 404; on an API hiccup
+    // the preview keeps the generic invitation text.
+  }
+  return {
+    title,
+    description,
+    robots: NO_INDEX,
+    ...sharingMetadata({
+      title: `${title} | QuizMB`,
+      description,
+      path: `/quiz/${encodeURIComponent(slug)}`,
+    }),
+  };
+}
+
+export default async function PublicQuizPage({ params }: QuizPageProps) {
   const { slug } = await params;
   const [quiz, user, appOrigin] = await Promise.all([
-    loadApi<PublicQuizDto>(API_ROUTES.PUBLIC_QUIZ(slug)),
+    getPublicQuiz(slug),
     currentUser(false),
     getAppOrigin(),
   ]);
