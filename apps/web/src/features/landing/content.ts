@@ -22,7 +22,8 @@ export const NAV_LINKS = [
 
 /** The app's domain, and the links shown in the page's illustrations. */
 const SITE_HOST = 'quizmb.themainakb.com';
-export const SHARE_LINK = `${SITE_HOST}/quiz/cohort-3-week-4`;
+export const PREVIEW_JOIN_PATH = '/preview/join';
+export const SHARE_LINK = `${SITE_HOST}${PREVIEW_JOIN_PATH}`;
 export const HOST_LINK = `${SITE_HOST}/quizzes/cohort-3-week-4/live`;
 
 export const STEPS = [

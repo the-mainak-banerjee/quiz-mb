@@ -9,6 +9,7 @@ import { FinalFaq } from './faq';
 import { FinalHero } from './hero';
 import { ForLearners } from './learners';
 import { HowItWorksSteps } from './steps';
+import { GoToTop } from '../go-to-top';
 
 /** The landing page, top to bottom. */
 export function LandingFinal({ user = null }: { user?: CurrentUser | null }) {
@@ -26,6 +27,7 @@ export function LandingFinal({ user = null }: { user?: CurrentUser | null }) {
         <FinalCta signedIn={Boolean(user)} />
       </main>
       <WorkspaceFooter />
+      <GoToTop />
     </div>
   );
 }

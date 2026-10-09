@@ -6,7 +6,8 @@ import { Avatar, Badge, Surface, Text } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { LandingCard } from '../card';
 import { InView } from '../in-view';
-import { AnswerBreakdownMock, QrPattern } from '../mocks';
+import { AnswerBreakdownMock } from '../mocks';
+import { LandingQrCode } from '../invitation';
 import { SHARE_LINK } from '../content';
 import { Eyebrow } from '../sections';
 
@@ -177,7 +178,7 @@ function ProjectCards() {
       <div
         aria-hidden="true"
         className={cn(
-          'absolute inset-x-space-lg top-0 flex flex-col gap-gutter md:right-auto md:w-[52rem] md:flex-row',
+          'absolute inset-x-space-lg top-0 flex flex-col gap-gutter md:right-auto md:w-208 md:flex-row',
           HOVER_LIFT,
         )}
       >
@@ -241,7 +242,7 @@ function JoinVisual() {
         className="absolute left-space-lg top-0 w-60 space-y-space-sm"
       >
         <div className="w-fit rounded-card border border-border-surface bg-surface p-space-sm shadow-raised">
-          <QrPattern className="size-24" />
+          <LandingQrCode />
         </div>
         <span className="flex items-center gap-1.5 rounded-control border border-border-surface bg-surface-low px-2.5 py-2 text-caption">
           <Link2
@@ -270,7 +271,7 @@ function JoinVisual() {
       </div>
       <ShotFrame
         className={cn(
-          'absolute left-[46%] top-0 w-[17.5rem] max-md:hidden',
+          'absolute left-[46%] top-0 w-70 max-md:hidden',
           HOVER_LIFT,
         )}
       >

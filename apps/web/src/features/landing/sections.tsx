@@ -8,6 +8,7 @@ import { CurrentUserProvider } from '@/contexts/current-user-context';
 import { AccountMenu } from '@/components/workspace/account-menu';
 import type { CurrentUser } from '@/lib/auth/session';
 import { NAV_LINKS, SIGN_IN_HREF, START_HREF } from './content';
+import { ArrowRight } from 'lucide-react';
 
 /** The width and side margins every landing section shares. */
 export const LANDING_CONTAINER =
@@ -82,9 +83,10 @@ export function LandingNav({ user = null }: { user?: CurrentUser | null }) {
               <CtaLink
                 href={APP_LINKS.WORKSPACE.DASHBOARD}
                 variant="ghost"
-                className="h-control px-control-x"
+                className="h-control shrink-0 whitespace-nowrap px-control-x"
               >
-                Go to dashboard
+                <span className="sm:hidden">Dashboard</span>
+                <span className="hidden sm:inline">Go to dashboard</span>
               </CtaLink>
               <CurrentUserProvider initialUser={user}>
                 <AccountMenu />
@@ -98,7 +100,10 @@ export function LandingNav({ user = null }: { user?: CurrentUser | null }) {
               >
                 Sign in
               </Link>
-              <CtaLink className="h-control px-control-x">Start free</CtaLink>
+              <CtaLink className="h-control px-control-x">
+                Start free
+                <ArrowRight size={18} aria-hidden="true" />
+              </CtaLink>
             </>
           )}
         </div>

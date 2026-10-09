@@ -7,10 +7,10 @@ import {
 } from '@/features/live-session/question-parts';
 import { cn } from '@/lib/utils';
 import { LandingCard } from '../card';
-import { SHARE_LINK, STEPS } from '../content';
+import { STEPS, SHARE_LINK } from '../content';
 import { InView } from '../in-view';
 import { Eyebrow } from '../sections';
-import { QrPattern } from '../mocks';
+import { LandingQrCode } from '../invitation';
 
 /** Appears in sequence once its card scrolls into view (landing.css). */
 function Seq({
@@ -109,7 +109,7 @@ function ShareSkeleton() {
           />
           <span className="truncate">{SHARE_LINK}</span>
         </span>
-        <span className="relative inline-flex h-9 w-[5.25rem] shrink-0 items-center justify-center rounded-control bg-action-secondary text-caption font-semibold text-accent">
+        <span className="relative inline-flex h-9 w-21 shrink-0 items-center justify-center rounded-control bg-action-secondary text-caption font-semibold text-accent">
           <span className="lp-copy-idle inline-flex items-center gap-1">
             <Copy size={13} aria-hidden="true" />
             Copy
@@ -130,7 +130,7 @@ function ShareSkeleton() {
       </div>
       <div className="flex items-center gap-space-sm">
         <div className="shrink-0 rounded-control border border-border-surface bg-surface p-1.5">
-          <QrPattern className="size-16" />
+          <LandingQrCode className="size-16" />
         </div>
         <div className="min-w-0 space-y-1.5">
           <Text variant="caption" tone="secondary">
