@@ -1,36 +1,31 @@
-import Image from 'next/image';
+import { LandingScreenshot } from './screenshot';
 
 /*
- * Real product screenshots (public/landing, captured from the live screens
- * by scripts/capture-landing-shots.mjs). Shown in the BrowserFrame from
+ * Real product screenshots captured from the live screens, with responsive
+ * WebP assets in public/landing/optimized. Shown in the BrowserFrame from
  * ./mocks and the IPhone from ./iphone.
  */
 
 /** The host console mid-question, as hosts see it on a laptop. */
 export function HostConsoleShot({ priority = false }: { priority?: boolean }) {
   return (
-    <Image
-      src="/landing/host-console.png"
+    <LandingScreenshot
+      name="host-console"
       alt="The QuizMB host console during a live question: the live answer breakdown with the correct answer highlighted, participation at 77%, the question list and the controls to end the quiz or show the leaderboard."
-      width={2880}
-      height={1800}
-      sizes="(min-width: 1280px) 1024px, 92vw"
+      sizes="(min-width: 1280px) 896px, (min-width: 1088px) 1024px, (min-width: 768px) calc(100vw - 64px), calc(100vw - 32px)"
       priority={priority}
-      className="h-auto w-full"
     />
   );
 }
 
 /** A participant answering a question on their phone. */
-export function ParticipantShot() {
+export function ParticipantShot({ hero = false }: { hero?: boolean }) {
   return (
-    <Image
-      src="/landing/participant-answer.png"
+    <LandingScreenshot
+      name="participant-answer"
       alt="A participant answering on a phone: the question, a countdown and four lettered options with one selected."
-      width={780}
-      height={1688}
-      sizes="240px"
-      className="h-auto w-full"
+      sizes={hero ? '206px' : '(min-width: 768px) 238px, 222px'}
+      {...(hero ? { minWidth: '80rem' as const } : {})}
     />
   );
 }
