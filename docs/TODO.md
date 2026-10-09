@@ -24,6 +24,7 @@ Fix direction: enable the `relationJoins` preview feature in `packages/database/
 - Pages of footer => Done
 - Load Test of Phase 11
 - Track egress (download bandwidth) usage (security design 1.5 and 1.11): image reads from Supabase Storage are not measured yet, so there is no warning before the platform's bandwidth allowance runs out. Decide how to measure it (Supabase usage, or counting signed read URLs) and add a log alert like the storage ones.
+- Integrate Vercel Analytics
 
 ## BE checks
 - Check the cron job for unverified account deletation.

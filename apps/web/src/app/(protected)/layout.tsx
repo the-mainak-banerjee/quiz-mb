@@ -1,7 +1,16 @@
 import type { ReactNode } from 'react';
+import type { Metadata } from 'next';
+import { NO_INDEX } from '@/config/seo';
 import { accessLifetime, requireUser } from '@/lib/auth/session';
 import { CurrentUserProvider } from '@/contexts/current-user-context';
 import { SessionKeeper } from '@/features/auth/session-keeper';
+
+export const metadata: Metadata = {
+  title: 'Workspace',
+  description:
+    'Manage your QuizMB projects, quizzes, registrations, and results.',
+  robots: NO_INDEX,
+};
 
 export default async function ProtectedLayout({
   children,
