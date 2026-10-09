@@ -68,6 +68,15 @@
   --color-milo-ink: var(--color-text-primary);
   --color-milo-spark: #8fa882;
 
+  /* Marketing hero only (landing page); product screens use display. */
+  --text-hero: 60px;
+  --text-hero--line-height: 64px;
+  --text-hero--font-weight: 700;
+  --text-hero--letter-spacing: -0.035em;
+  --text-hero-mobile: 38px;
+  --text-hero-mobile--line-height: 44px;
+  --text-hero-mobile--font-weight: 700;
+  --text-hero-mobile--letter-spacing: -0.03em;
   --text-display: 40px;
   --text-display--line-height: 48px;
   --text-display--font-weight: 600;
@@ -122,6 +131,10 @@
   --spacing-space-lg: 2rem;
   --spacing-space-xl: 3rem;
   --spacing-space-2xl: 4rem;
+  /* Space between page sections (landing page): phones, tablets, desktops. */
+  --spacing-section-sm: 4rem;
+  --spacing-section: 6rem;
+  --spacing-section-lg: 8rem;
   --spacing-control: 44px;
   --spacing-control-large: 48px;
   --spacing-control-x: 16px;
