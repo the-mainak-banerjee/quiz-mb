@@ -527,8 +527,6 @@ export function LivePreviewScreen({
             summary={previewFinalSummary}
             board={previewFinalBoard}
             shown={screen === 'host-quiz-completed-revealed'}
-            resultsHref="/dev/live/host-results"
-            dashboardHref={APP_LINKS.WORKSPACE.DASHBOARD}
           />
         </LiveSessionShell>
       );
@@ -547,8 +545,6 @@ export function LivePreviewScreen({
             }}
             board={{ ...previewFinalBoard, entries: [] }}
             shown={false}
-            resultsHref="/dev/live/host-results"
-            dashboardHref={APP_LINKS.WORKSPACE.DASHBOARD}
           />
         </LiveSessionShell>
       );
@@ -565,7 +561,6 @@ export function LivePreviewScreen({
               incorrectCount: 0,
               notAttemptedCount: 0,
             }}
-            historyHref="/dev/live/history"
           />
         </LiveSessionShell>
       );
@@ -575,7 +570,6 @@ export function LivePreviewScreen({
           <ParticipantQuizEnded
             quizTitle={liveQuiz.title}
             result={previewFinalResult}
-            historyHref="/dev/live/history"
           />
         </LiveSessionShell>
       );

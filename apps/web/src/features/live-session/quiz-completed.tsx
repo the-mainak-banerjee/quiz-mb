@@ -2,12 +2,11 @@
 
 import {
   CloudCheck,
+  DoorClosed,
   Eye,
   Info,
-  LayoutGrid,
   LockKeyhole,
   Radio,
-  Table2,
   Trophy,
 } from 'lucide-react';
 import type {
@@ -17,7 +16,6 @@ import type {
 } from '@quizmb/contracts';
 import { LocalDateTime } from '@/components/local-date-time';
 import { Avatar, Badge, Callout, Surface, Text } from '@/components/ui';
-import { NavigationItem } from '@/components/workspace/navigation-item';
 import { cn } from '@/lib/utils';
 import {
   AnswerOutcomes,
@@ -128,7 +126,8 @@ function FinalPodium({
 
 /**
  * Host console after End quiz: totals and the final Top 10, privately at
- * first; the host decides when participants see it.
+ * first; the host decides when participants see it, then closes the
+ * session. Exit in the header is the only way out.
  */
 export function HostQuizCompleted({
   quiz,
@@ -137,8 +136,7 @@ export function HostQuizCompleted({
   shown,
   busy = false,
   onReveal,
-  resultsHref,
-  dashboardHref,
+  onClose,
 }: {
   quiz: Pick<LiveQuizSummary, 'title' | 'projectName'>;
   summary: FinalSummaryDto;
@@ -146,8 +144,8 @@ export function HostQuizCompleted({
   shown: boolean;
   busy?: boolean;
   onReveal?: (() => void) | undefined;
-  resultsHref: string;
-  dashboardHref: string;
+  /** Closes the room for everyone (asks first if not revealed yet). */
+  onClose?: (() => void) | undefined;
 }) {
   const unused = summary.quizQuestionCount - summary.askedQuestionCount;
   const rest: LeaderboardDto = { ...board, entries: board.entries.slice(3) };
@@ -216,15 +214,26 @@ export function HostQuizCompleted({
       )}
 
       {shown ? (
-        <Callout
-          role="status"
-          icon={<Radio size={16} aria-hidden="true" />}
-          className="bg-status-live-surface text-status-live-text"
-        >
-          <strong className="font-semibold">On participant screens.</strong>{' '}
-          Everyone still connected now sees the final Top 10 with their own
-          rank.
-        </Callout>
+        <div className="flex flex-col gap-space-sm sm:flex-row sm:items-center">
+          <Callout
+            role="status"
+            icon={<Radio size={16} aria-hidden="true" />}
+            className="flex-1 bg-status-live-surface text-status-live-text"
+          >
+            <strong className="font-semibold">On participant screens.</strong>{' '}
+            Everyone still connected now sees the final Top 10 with their own
+            rank.
+          </Callout>
+          <ActionButton
+            preview="Closing the session"
+            onAction={onClose}
+            disabled={busy}
+            className="shrink-0"
+            icon={<DoorClosed size={18} aria-hidden="true" />}
+          >
+            Close session
+          </ActionButton>
+        </div>
       ) : (
         <Surface className="flex flex-col gap-space-md">
           <div className="flex items-start gap-space-sm">
@@ -247,13 +256,6 @@ export function HostQuizCompleted({
           </div>
           {/* Actions sit under the explanation. */}
           <div className="flex flex-col gap-space-xs sm:flex-row">
-            <NavigationItem
-              href={resultsHref}
-              icon={<Table2 size={18} aria-hidden="true" />}
-              className="h-control min-h-0 border border-border-surface bg-surface text-text-primary hover:border-accent hover:bg-canvas"
-            >
-              View full results
-            </NavigationItem>
             {!empty && (
               <ActionButton
                 preview="Revealing the final leaderboard"
@@ -264,6 +266,15 @@ export function HostQuizCompleted({
                 Reveal final leaderboard
               </ActionButton>
             )}
+            <ActionButton
+              preview="Closing the session"
+              onAction={onClose}
+              disabled={busy}
+              variant="outline"
+              icon={<DoorClosed size={18} aria-hidden="true" />}
+            >
+              Close session
+            </ActionButton>
           </div>
         </Surface>
       )}
@@ -305,25 +316,6 @@ export function HostQuizCompleted({
           />
         )}
       </Surface>
-
-      {shown && (
-        <div className="flex flex-col-reverse gap-space-xs sm:flex-row sm:justify-end">
-          <NavigationItem
-            href={dashboardHref}
-            icon={<LayoutGrid size={18} aria-hidden="true" />}
-            className="bg-surface-low"
-          >
-            Return to dashboard
-          </NavigationItem>
-          <NavigationItem
-            href={resultsHref}
-            icon={<Table2 size={18} aria-hidden="true" />}
-            className="bg-action-primary text-action-on-primary hover:bg-action-primary-hover hover:text-action-on-primary"
-          >
-            View full results
-          </NavigationItem>
-        </div>
-      )}
     </main>
   );
 }
@@ -332,11 +324,12 @@ export function HostQuizCompleted({
 export function ParticipantQuizEnded({
   quizTitle,
   result,
-  historyHref,
+  closed = false,
 }: {
   quizTitle: string;
   result: ParticipantFinalResultDto | null;
-  historyHref: string;
+  /** The host closed the session: nothing more is coming. */
+  closed?: boolean;
 }) {
   return (
     <ParticipantStage className="md:py-space-2xl">
@@ -363,13 +356,15 @@ export function ParticipantQuizEnded({
               title="Saving your final result…"
             />
           )}
-          <StatusStrip
-            icon={
-              <span className="ds-live-dot block size-status-dot rounded-pill bg-accent" />
-            }
-            title="Waiting for the host…"
-            detail="The host may reveal the final leaderboard."
-          />
+          {!closed && (
+            <StatusStrip
+              icon={
+                <span className="ds-live-dot block size-status-dot rounded-pill bg-accent" />
+              }
+              title="Waiting for the host…"
+              detail="The host may reveal the final leaderboard."
+            />
+          )}
         </Surface>
         <Text
           variant="caption"
@@ -378,12 +373,6 @@ export function ParticipantQuizEnded({
         >
           <CloudCheck size={14} aria-hidden="true" />
           Your result is saved to your history.
-          <NavigationItem
-            href={historyHref}
-            className="min-h-0 px-1 text-caption text-accent underline"
-          >
-            Open history
-          </NavigationItem>
         </Text>
       </div>
     </ParticipantStage>

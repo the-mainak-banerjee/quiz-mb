@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { NavigationGuardLink } from 'nextjs-nav-guard';
 import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { Brand } from '@/components/brand';
@@ -22,21 +22,19 @@ export function LiveSessionShell({
       <div className="flex min-h-screen flex-col bg-canvas">
         <header className="sticky top-0 z-30 border-b border-border-surface bg-canvas/95 backdrop-blur-sm">
           <div className="mx-auto grid h-14 max-w-content grid-cols-[1fr_auto_1fr] items-center gap-space-xs sm:gap-space-sm px-margin-sm md:px-margin lg:px-margin-lg">
-            <Link
-              href={APP_LINKS.HOME}
-              aria-label="QuizMB home"
-              className="ds-focus justify-self-start [&_svg]:h-space-md sm:[&_svg]:h-space-lg"
-            >
+            {/* Not a link: Exit is the only way out of a live session. */}
+            <span className="justify-self-start [&_svg]:h-space-md sm:[&_svg]:h-space-lg">
               <Brand />
-            </Link>
+            </span>
             <Badge variant="live" label="Live session" className="uppercase" />
-            <Link
+            {/* Guarded: the host console may confirm before leaving. */}
+            <NavigationGuardLink
               href={exitHref}
               className="ds-focus ds-control-motion inline-flex items-center gap-1 justify-self-end rounded-control px-space-xs py-1.5 sm:px-3 text-caption text-danger hover:bg-danger-surface hover:text-danger-on-surface"
             >
               <X size={18} aria-hidden="true" />
               Exit
-            </Link>
+            </NavigationGuardLink>
           </div>
         </header>
         <main
