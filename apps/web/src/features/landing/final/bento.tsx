@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { ArrowRight, Clock3, FolderOpen, Link2, X } from 'lucide-react';
+import { Link2, X } from 'lucide-react';
 import { Brand } from '@/components/brand';
-import { Avatar, Badge, Surface, Text } from '@/components/ui';
+import { Avatar, Badge, Text } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { LandingCard } from '../card';
 import { InView } from '../in-view';
@@ -141,81 +141,81 @@ function CornerShot({
   );
 }
 
-const PROJECTS = [
-  {
-    name: 'Cohort 3 · Product Design',
-    description: 'Weekly recaps for the autumn cohort.',
-    quizzes: 8,
-    updated: 'Oct 8, 2026',
-  },
-  {
-    name: 'Friday community challenge',
-    description: 'One topic quiz every Friday.',
-    quizzes: 21,
-    updated: 'Oct 3, 2026',
-  },
-];
+// const PROJECTS = [
+//   {
+//     name: 'Cohort 3 · Product Design',
+//     description: 'Weekly recaps for the autumn cohort.',
+//     quizzes: 8,
+//     updated: 'Oct 8, 2026',
+//   },
+//   {
+//     name: 'Friday community challenge',
+//     description: 'One topic quiz every Friday.',
+//     quizzes: 21,
+//     updated: 'Oct 3, 2026',
+//   },
+// ];
 
 /**
  * Project cards exactly as the Projects page draws them: stacked and whole
  * on phones, a row running off the right edge from md up.
  */
-function ProjectCards() {
-  return (
-    <div className="relative mt-auto h-80 overflow-hidden md:h-72">
-      <div
-        aria-hidden="true"
-        className={cn(
-          'absolute inset-x-space-lg top-0 flex flex-col gap-gutter md:right-auto md:w-208 md:flex-row',
-          HOVER_LIFT,
-        )}
-      >
-        {PROJECTS.map((project) => (
-          <Surface
-            key={project.name}
-            as="article"
-            className="flex shrink-0 flex-col gap-space-md shadow-raised md:w-96"
-          >
-            <div className="flex items-start justify-between gap-space-sm">
-              <div className="flex size-control shrink-0 items-center justify-center rounded-control bg-action-secondary text-accent">
-                <FolderOpen size={20} aria-hidden="true" />
-              </div>
-              <Text
-                as="span"
-                variant="caption"
-                tone="secondary"
-                className="rounded-pill bg-surface-muted px-badge-x py-badge-y"
-              >
-                {project.quizzes} quizzes
-              </Text>
-            </div>
-            <div className="flex-1 space-y-space-xs">
-              <Text variant="section-heading">{project.name}</Text>
-              <Text variant="body-secondary" tone="secondary">
-                {project.description}
-              </Text>
-            </div>
-            <div className="flex items-center justify-between gap-space-sm border-t border-border-surface pt-space-sm">
-              <Text
-                as="span"
-                variant="caption"
-                tone="secondary"
-                className="inline-flex items-center gap-space-xs"
-              >
-                <Clock3 size={15} aria-hidden="true" />
-                Updated {project.updated}
-              </Text>
-              <span className="inline-flex items-center gap-space-xs px-space-xs text-label text-accent">
-                Open project
-                <ArrowRight size={16} aria-hidden="true" />
-              </span>
-            </div>
-          </Surface>
-        ))}
-      </div>
-    </div>
-  );
-}
+// function ProjectCards() {
+//   return (
+//     <div className="relative mt-auto h-80 overflow-hidden md:h-72">
+//       <div
+//         aria-hidden="true"
+//         className={cn(
+//           'absolute inset-x-space-lg top-0 flex flex-col gap-gutter md:right-auto md:w-208 md:flex-row',
+//           HOVER_LIFT,
+//         )}
+//       >
+//         {PROJECTS.map((project) => (
+//           <Surface
+//             key={project.name}
+//             as="article"
+//             className="flex shrink-0 flex-col gap-space-md shadow-raised md:w-96"
+//           >
+//             <div className="flex items-start justify-between gap-space-sm">
+//               <div className="flex size-control shrink-0 items-center justify-center rounded-control bg-action-secondary text-accent">
+//                 <FolderOpen size={20} aria-hidden="true" />
+//               </div>
+//               <Text
+//                 as="span"
+//                 variant="caption"
+//                 tone="secondary"
+//                 className="rounded-pill bg-surface-muted px-badge-x py-badge-y"
+//               >
+//                 {project.quizzes} quizzes
+//               </Text>
+//             </div>
+//             <div className="flex-1 space-y-space-xs">
+//               <Text variant="section-heading">{project.name}</Text>
+//               <Text variant="body-secondary" tone="secondary">
+//                 {project.description}
+//               </Text>
+//             </div>
+//             <div className="flex items-center justify-between gap-space-sm border-t border-border-surface pt-space-sm">
+//               <Text
+//                 as="span"
+//                 variant="caption"
+//                 tone="secondary"
+//                 className="inline-flex items-center gap-space-xs"
+//               >
+//                 <Clock3 size={15} aria-hidden="true" />
+//                 Updated {project.updated}
+//               </Text>
+//               <span className="inline-flex items-center gap-space-xs px-space-xs text-label text-accent">
+//                 Open project
+//                 <ArrowRight size={16} aria-hidden="true" />
+//               </span>
+//             </div>
+//           </Surface>
+//         ))}
+//       </div>
+//     </div>
+//   );
+// }
 
 /**
  * Joining: the share link and QR code, and the real lobby a learner lands
@@ -348,34 +348,6 @@ export function FeatureBento() {
         </BentoCard>
         <BentoCard
           layout="text-top"
-          title="Faster correct answers score more"
-          description="When the timer ends, each learner sees the right answer and the points they earned."
-        >
-          <CornerShot
-            name="bento-result"
-            alt="A participant's result on a phone: Correct, plus 820 points, with the share of answers for each option."
-            fit="inset"
-            areaHeight="h-72 md:h-96"
-          />
-        </BentoCard>
-        <BentoCard
-          layout="text-top"
-          title="Join from any phone"
-          description="Share a link or QR code before class. Learners register once and are ready when you start."
-          className="md:col-span-2"
-        >
-          <JoinVisual />
-        </BentoCard>
-        <BentoCard
-          layout="text-top"
-          title="A project for every cohort"
-          description="Keep each course, cohort or community’s quizzes together, week after week."
-          className="md:col-span-2"
-        >
-          <ProjectCards />
-        </BentoCard>
-        <BentoCard
-          layout="text-top"
           title="Everyone keeps their history"
           description="Learners keep their final score and rank for every quiz they join."
         >
@@ -390,6 +362,34 @@ export function FeatureBento() {
             }}
           />
         </BentoCard>
+        {/* <BentoCard
+          layout="text-top"
+          title="Faster correct answers score more"
+          description="When the timer ends, each learner sees the right answer and the points they earned."
+        >
+          <CornerShot
+            name="bento-result"
+            alt="A participant's result on a phone: Correct, plus 820 points, with the share of answers for each option."
+            fit="inset"
+            areaHeight="h-72 md:h-96"
+          />
+        </BentoCard> */}
+        <BentoCard
+          layout="text-top"
+          title="Join from any phone"
+          description="Share a link or QR code before class. Learners register once and are ready when you start."
+          className="md:col-span-2"
+        >
+          <JoinVisual />
+        </BentoCard>
+        {/* <BentoCard
+          layout="text-top"
+          title="A project for every cohort"
+          description="Keep each course, cohort or community’s quizzes together, week after week."
+          className="md:col-span-2"
+        >
+          <ProjectCards />
+        </BentoCard> */}
       </div>
     </section>
   );
