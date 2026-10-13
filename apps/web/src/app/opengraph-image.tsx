@@ -61,8 +61,38 @@ export default async function OpengraphImage() {
         >
           Turn your next live session into a quiz challenge.
         </div>
-        <div style={{ marginTop: 24, fontSize: 26, color: MUTED }}>
+        <div style={{ marginTop: 20, fontSize: 26, color: MUTED }}>
           Live quizzes for classes and communities.
+        </div>
+        {/* The call to action, styled like the site's main button. */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            alignSelf: 'flex-start',
+            gap: 12,
+            marginTop: 32,
+            padding: '16px 28px',
+            borderRadius: 14,
+            background: INK,
+            color: '#fff',
+            fontSize: 26,
+            fontWeight: 700,
+          }}
+        >
+          Create your first quiz, free
+          <svg
+            width="26"
+            height="26"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#fff"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
         </div>
       </div>
       <div

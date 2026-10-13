@@ -5,7 +5,7 @@ import { currentUser } from '@/lib/auth/session';
 import type { Metadata } from 'next';
 import { serverApi } from '@/lib/api/server';
 import { getPublicQuiz } from '@/lib/api/public-quiz';
-import { NO_INDEX, sharingMetadata } from '@/config/seo';
+import { NO_INDEX, previewDescription, sharingMetadata } from '@/config/seo';
 import { getAppOrigin } from '@/lib/app-origin';
 import { API_ROUTES } from '@/lib/api/routes';
 import { QUIZ_STATUS, type RegistrationDto } from '@quizmb/contracts';
@@ -23,8 +23,7 @@ export async function generateMetadata({
     const quiz = await getPublicQuiz(slug);
     // Whitelist public copy only: never questions, answers, or roster data.
     title = quiz.title;
-    description =
-      quiz.description.trim().replace(/\s+/g, ' ').slice(0, 200) || description;
+    description = previewDescription(quiz.description) || description;
   } catch {
     // The layout already sends unknown quizzes to a 404; on an API hiccup
     // the preview keeps the generic invitation text.
