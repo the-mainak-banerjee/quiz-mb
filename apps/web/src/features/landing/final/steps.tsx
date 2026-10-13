@@ -249,7 +249,9 @@ export function HowItWorksSteps() {
           Host your first live quiz in three steps.
         </Text>
       </div>
-      <ol className="grid gap-gutter md:grid-cols-3">
+      {/* Three columns from xl: narrower cards would clip the illustrations,
+          so smaller screens get one centred column. */}
+      <ol className="mx-auto grid max-w-xl gap-gutter xl:max-w-none xl:grid-cols-3">
         {STEPS.map((step, index) => {
           const Skeleton = SKELETONS[index]!;
           return (

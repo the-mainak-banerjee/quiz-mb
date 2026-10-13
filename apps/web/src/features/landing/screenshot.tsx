@@ -24,6 +24,7 @@ export function LandingScreenshot({
   name: ScreenshotName;
   alt: string;
   sizes: string;
+  /** Shown below 64rem (phones and tablets) instead of `name`. */
   mobile?: { name: ScreenshotName; sizes: string };
   minWidth?: '48rem' | '80rem';
   priority?: boolean;
@@ -33,7 +34,7 @@ export function LandingScreenshot({
     <picture>
       {mobile && (
         <source
-          media="(width < 48rem)"
+          media="(width < 64rem)"
           srcSet={srcSet(mobile.name)}
           sizes={mobile.sizes}
           width={screenshots[mobile.name].width}

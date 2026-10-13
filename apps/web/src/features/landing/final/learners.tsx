@@ -31,10 +31,10 @@ export function ForLearners() {
           aria-hidden="true"
           className="absolute -top-32 left-1/2 -z-10 h-80 w-[70%] -translate-x-1/2 rounded-pill bg-accent opacity-45 blur-3xl"
         />
-        {/* On phones Milo reads in the top-right corner instead. */}
+        {/* Below lg (no phone shown) Milo reads in the top-right corner. */}
         <MiloStage
           pose="waiting"
-          className="absolute right-space-sm top-space-md w-20 sm:hidden"
+          className="absolute right-space-sm top-space-md w-20 md:w-24 lg:hidden"
         />
         <div className="grid items-center gap-space-xl px-space-lg py-space-2xl md:px-space-2xl lg:grid-cols-[1.1fr_1fr]">
           <div className="space-y-space-md">
@@ -43,7 +43,7 @@ export function ForLearners() {
               as="h2"
               id="learners-title"
               variant="display"
-              className="text-balance text-action-on-primary max-sm:pr-space-xl"
+              className="text-balance text-action-on-primary max-lg:pr-space-2xl"
             >
               A game on their phone, not another tool to learn.
             </Text>
@@ -65,13 +65,14 @@ export function ForLearners() {
               ))}
             </ul>
           </div>
-          <div className="relative flex justify-center">
+          {/* The phone shows from lg up; the text tells the story below. */}
+          <div className="relative hidden justify-center lg:flex">
             <IPhone className="w-60 md:w-64">
               <ParticipantShot />
             </IPhone>
             <MiloStage
               pose="waiting"
-              className="absolute bottom-6 left-0 hidden w-32 sm:grid lg:-left-4"
+              className="absolute bottom-6 -left-4 w-32"
             />
           </div>
         </div>

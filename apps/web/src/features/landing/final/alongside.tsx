@@ -9,7 +9,7 @@ import {
 
 /**
  * Where QuizMB fits: next to the host's usual call. A single-row logo cloud
- * (label on the left on desktop, above the row on phones); the logos blur
+ * (label on the left on desktop, above the row on phones and tablets); the logos blur
  * and slide in as the band scrolls into view. The note makes clear nothing
  * is installed or connected.
  */
@@ -19,7 +19,7 @@ export function AlongsideLogos() {
       aria-labelledby="alongside-title"
       className="mx-auto -mb-space-lg w-full max-w-content px-margin-sm md:mb-0 md:px-margin lg:px-space-xl"
     >
-      <div className="group relative isolate grid grid-cols-1 justify-items-center gap-space-sm border-y border-dotted border-border-surface bg-surface px-space-md py-space-md text-center md:grid-cols-[minmax(0,1fr)_auto] md:justify-items-stretch md:gap-x-space-xl md:gap-y-space-xs md:px-space-lg md:py-space-lg md:text-left">
+      <div className="group relative isolate grid grid-cols-1 justify-items-center gap-space-sm border-y border-dotted border-border-surface bg-surface px-space-md py-space-md text-center md:px-space-lg md:py-space-lg xl:grid-cols-[minmax(0,1fr)_auto] xl:justify-items-stretch xl:gap-x-space-xl xl:gap-y-space-xs xl:text-left">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 bottom-full h-space-2xl"
@@ -33,10 +33,10 @@ export function AlongsideLogos() {
           <FadingFrameSides direction="down" />
         </div>
         <FrameHoverBackground />
-        <FrameCorner className="-left-[7px] -top-[7px]" />
-        <FrameCorner className="-right-[7px] -top-[7px]" />
-        <FrameCorner className="-bottom-[7px] -left-[7px]" />
-        <FrameCorner className="-bottom-[7px] -right-[7px]" />
+        <FrameCorner className="-left-1.75 -top-1.75" />
+        <FrameCorner className="-right-1.75 -top-1.75" />
+        <FrameCorner className="-bottom-1.75 -left-1.75" />
+        <FrameCorner className="-bottom-1.75 -right-1.75" />
         <span
           aria-hidden="true"
           className="pointer-events-none absolute inset-y-0 left-0 w-px bg-border-surface"
@@ -49,11 +49,11 @@ export function AlongsideLogos() {
           as="h2"
           id="alongside-title"
           variant="card-title"
-          className="row-start-1 max-w-sm text-balance md:col-start-1 md:row-start-1"
+          className="row-start-1 max-w-sm text-balance xl:col-start-1 xl:row-start-1"
         >
           Runs alongside your session on
         </Text>
-        <ul className="row-start-2 flex flex-wrap items-center justify-center gap-x-space-xl gap-y-space-md md:col-start-2 md:row-span-2 md:row-start-1 md:justify-end">
+        <ul className="row-start-2 flex flex-wrap items-center justify-center gap-x-space-xl gap-y-space-md xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:justify-end">
           {MEETING_TOOLS.map((tool, index) => (
             <li
               key={tool.name}
@@ -88,10 +88,10 @@ export function AlongsideLogos() {
         <Text
           variant="body-secondary"
           tone="secondary"
-          className="row-start-3 max-w-sm text-pretty md:col-start-1 md:row-start-2"
+          className="row-start-3 max-w-sm text-pretty xl:col-start-1 xl:row-start-2"
         >
-          Nothing to install or connect. Just share the quiz link in your
-          call’s chat.
+          Nothing to install or connect. Just share the quiz link in your call’s
+          chat.
         </Text>
       </div>
     </section>
