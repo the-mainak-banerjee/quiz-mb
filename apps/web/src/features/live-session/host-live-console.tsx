@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   CircleX,
   DoorClosed,
-  Eye,
   LogOut,
   WifiOff,
 } from 'lucide-react';
@@ -39,7 +38,7 @@ import {
   ParticipantsPanel,
   QuizProgressPanel,
 } from './host-rail';
-import { LiveNotice } from './participant-screens';
+import { LiveConnecting, LiveNotice } from './participant-screens';
 import { QuestionQueue } from './question-queue';
 import type { QueueQuestion } from './types';
 import { useRemainingSeconds } from './use-countdown';
@@ -111,7 +110,7 @@ const confirmations = {
   end: {
     title: 'End this quiz?',
     description:
-      'The live session closes for everyone and the quiz is marked completed. This cannot be undone.',
+      'Questions stop and the quiz is marked completed. Everyone stays in the room so you can reveal the final leaderboard, then close the session. This cannot be undone.',
     cancel: 'Keep quiz live',
     confirm: 'End quiz',
     event: LIVE_EVENTS.quizEnd,
@@ -158,6 +157,8 @@ export function HostLiveConsole({
   >(null);
   /** The host asked to close before revealing the final leaderboard. */
   const [confirmClose, setConfirmClose] = useState(false);
+  /** Closing the session, then on the way to the results. */
+  const [closing, setClosing] = useState(false);
   /** Set once the session is closed, so leaving is no longer guarded. */
   const leaving = useRef(false);
   const router = useRouter();
@@ -231,10 +232,16 @@ export function HostLiveConsole({
   }
 
   /** Closes the room for everyone, then shows the full results. */
-  async function closeSession(reveal = false) {
-    if (reveal && !(await run(LIVE_EVENTS.finalLeaderboardShow))) return;
-    if (!(await run(LIVE_EVENTS.sessionClose))) return;
+  async function closeSession() {
     setConfirmClose(false);
+    // Shown until the results page replaces this one, which can take a
+    // moment (it renders the workspace first).
+    setClosing(true);
+    if (!(await run(LIVE_EVENTS.sessionClose))) {
+      setClosing(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     leaving.current = true;
     router.replace(resultsHref);
   }
@@ -244,6 +251,13 @@ export function HostLiveConsole({
     else setConfirmClose(true);
   }
 
+  if (closing)
+    return (
+      <LiveConnecting
+        title="Closing the session…"
+        description="Everyone is disconnected. Taking you to the full results."
+      />
+    );
   if (sessionClosed)
     return (
       <LiveNotice
@@ -281,25 +295,18 @@ export function HostLiveConsole({
       />
     );
   if (!snapshot || snapshot.role !== LIVE_ROLE.HOST)
-    return (
+    return connection === 'failed' ? (
       <LiveNotice
-        eyebrow={connection === 'failed' ? 'Connection lost' : 'Connecting'}
-        tone={connection === 'failed' ? 'danger' : 'neutral'}
-        title={
-          connection === 'failed'
-            ? 'The live room is not responding'
-            : 'Opening your live room…'
-        }
-        description={
-          connection === 'failed'
-            ? 'Check your connection and try again.'
-            : 'Connecting to the live session server.'
-        }
-        action={
-          connection === 'failed' ? (
-            <Button onClick={reconnect}>Try again</Button>
-          ) : undefined
-        }
+        eyebrow="Connection lost"
+        tone="danger"
+        title="The live room is not responding"
+        description="Check your connection and try again."
+        action={<Button onClick={reconnect}>Try again</Button>}
+      />
+    ) : (
+      <LiveConnecting
+        title="Opening your live room…"
+        description="Connecting to the live session server."
       />
     );
 
@@ -316,19 +323,12 @@ export function HostLiveConsole({
             Cancel
           </Button>
           <Button
-            variant="outline"
+            variant="danger"
             disabled={busy}
             icon={<DoorClosed size={18} aria-hidden="true" />}
             onClick={() => void closeSession()}
           >
             Close without revealing
-          </Button>
-          <Button
-            disabled={busy}
-            icon={<Eye size={18} aria-hidden="true" />}
-            onClick={() => void closeSession(true)}
-          >
-            Reveal and close
           </Button>
         </div>
         {error && (

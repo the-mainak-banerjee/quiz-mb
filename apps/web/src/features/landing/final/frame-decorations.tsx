@@ -6,10 +6,10 @@ export function FrameCorner({ className }: { className: string }) {
   return (
     <Plus
       size={14}
-      strokeWidth={1.5}
+      strokeWidth={2}
       aria-hidden="true"
       className={cn(
-        'pointer-events-none absolute text-text-secondary/60',
+        'pointer-events-none absolute z-10 text-text-secondary',
         className,
       )}
     />

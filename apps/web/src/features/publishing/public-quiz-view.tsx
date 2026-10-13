@@ -210,12 +210,6 @@ function RegistrationPanel({
           )}
         </div>
         <div className="flex flex-wrap gap-space-xs">
-          <Button
-            variant="secondary"
-            icon={<CalendarDays size={18} aria-hidden="true" />}
-          >
-            Add to calendar
-          </Button>
           {quiz.status !== QUIZ_STATUS.LIVE && (
             <Button
               variant="ghost"

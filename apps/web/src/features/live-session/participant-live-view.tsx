@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import {
   ERROR_CODE,
@@ -14,6 +16,7 @@ import { APP_LINKS } from '@/config/navigation';
 import { ParticipantLiveQuestion } from './participant-live-question';
 import { ParticipantQuizEnded } from './quiz-completed';
 import {
+  LiveConnecting,
   LiveNotice,
   ParticipantLiveIdle,
   ParticipantLobby,
@@ -55,6 +58,9 @@ const refusals: Record<string, { eyebrow: string; title: string }> = {
   },
 };
 
+/** How long the "session closed" note shows before the result opens. */
+const CLOSED_REDIRECT_MS = 4_000;
+
 /** Refusals that are an expected end state, not a fault. */
 const NEUTRAL_REFUSALS = new Set<string>([
   ERROR_CODE.QUIZ_COMPLETED,
@@ -94,6 +100,18 @@ export function ParticipantLiveView({
     resync,
   } = useLiveSession(liveSessionId);
   const quiz = toQuizSummary(snapshot?.quiz ?? initialQuiz);
+  const router = useRouter();
+  const sessionClosed = failure?.code === ERROR_CODE.SESSION_CLOSED;
+  // The room closed: after a moment to read the note, open this
+  // participant's saved result for the session.
+  useEffect(() => {
+    if (!sessionClosed) return;
+    const timer = window.setTimeout(
+      () => router.replace(APP_LINKS.WORKSPACE.HISTORY_RESULT(liveSessionId)),
+      CLOSED_REDIRECT_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [sessionClosed, liveSessionId, router]);
   const endingSoon = useEndingSoon(
     snapshot?.sessionEndsAt ?? null,
     clockOffsetMs,
@@ -135,7 +153,7 @@ export function ParticipantLiveView({
   // the room closes, the screen stays with a note.
   if (snapshot?.state === LIVE_SESSION_STATE.COMPLETED) {
     const closed =
-      failure?.code === ERROR_CODE.SESSION_CLOSED ? (
+      sessionClosed && failure ? (
         <SessionClosedNotice message={failure.message} />
       ) : null;
     if (snapshot.role === LIVE_ROLE.PARTICIPANT && snapshot.leaderboard)
@@ -198,8 +216,7 @@ export function ParticipantLiveView({
         onRetry={reconnect}
       />
     ) : (
-      <LiveNotice
-        eyebrow="Connecting"
+      <LiveConnecting
         title="Joining the live room…"
         description={`Connecting you to ${quiz.title}.`}
       />

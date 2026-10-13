@@ -19,7 +19,7 @@ import { Modal } from '@/components/ui/modal';
 import { ProjectForm } from '@/features/projects/project-form';
 import { api } from '@/lib/api/browser';
 import { apiError } from '@/lib/api/client';
-import { cn } from '@/lib/utils';
+import { cn, pluralize } from '@/lib/utils';
 
 export function ProjectSelection({
   initialProjects,
@@ -88,7 +88,8 @@ export function ProjectSelection({
                 {project.description || 'Your project workspace.'}
               </Text>
               <Text variant="caption" tone="secondary">
-                {project.quizCount} quizzes
+                {project.quizCount}{' '}
+                {pluralize(project.quizCount, 'quiz', 'quizzes')}
               </Text>
               <Button
                 variant="secondary"

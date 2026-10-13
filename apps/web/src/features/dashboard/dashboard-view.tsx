@@ -5,7 +5,7 @@ import { QuizList } from './quiz-list';
 import { ProjectCard } from './project-card';
 import type { Quiz } from './types';
 import { DashboardEmptyState } from './dashboard-empty-state';
-import { getGreeting } from '@/lib/utils';
+import { Greeting } from './greeting';
 import { APP_LINKS } from '@/config/navigation';
 
 function deduplicateQuizzes(quizzes: Quiz[]) {
@@ -33,7 +33,6 @@ export function DashboardView({
 }) {
   const uniqueQuizzes = deduplicateQuizzes(quizzes);
   const empty = uniqueQuizzes.length === 0 && projects.length === 0;
-  const greeting = getGreeting();
   const hostedQuizzes = uniqueQuizzes.filter((quiz) => quiz.role === 'host');
   const participantQuizzes = uniqueQuizzes.filter(
     (quiz) => quiz.role === 'participant',
@@ -58,7 +57,8 @@ export function DashboardView({
       <div className="flex flex-wrap items-start justify-between gap-space-md">
         <div className="min-w-0 space-y-space-xs">
           <Text as="h1" variant="page-title" className="wrap-break-word">
-            {empty ? 'Welcome to QuizMB,' : greeting} {user.name.split(' ')[0]}
+            {empty ? 'Welcome to QuizMB,' : <Greeting />}{' '}
+            {user.name.split(' ')[0]}
           </Text>
           <Text variant="body-secondary" tone="secondary">
             {empty

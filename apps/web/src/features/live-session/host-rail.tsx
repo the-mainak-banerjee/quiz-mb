@@ -276,7 +276,9 @@ export function QuizProgressPanel({
       <Text variant="caption" tone="secondary" className="text-center">
         {questionLive
           ? 'Ending now closes the live question. Missing answers count as not attempted.'
-          : `Final results use only the ${asked} questions asked so far.`}
+          : asked === 1
+            ? 'Final results use only the 1 question asked so far.'
+            : `Final results use only the ${asked} questions asked so far.`}
       </Text>
     </Surface>
   );

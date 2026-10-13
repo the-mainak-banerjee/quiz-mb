@@ -216,6 +216,12 @@ export function QuizForm({
                     max={ACCOUNT_LIMITS.participantsPerSession}
                     required
                     className="pl-space-xl"
+                    aria-invalid={!!errors.registrationLimit}
+                    aria-describedby={
+                      errors.registrationLimit
+                        ? 'registration-limit-error'
+                        : undefined
+                    }
                     {...register('registrationLimit', { valueAsNumber: true })}
                   />
                 </div>
@@ -238,6 +244,12 @@ export function QuizForm({
                     min={1}
                     required
                     className="pl-space-xl"
+                    aria-invalid={!!errors.defaultQuestionDurationSeconds}
+                    aria-describedby={
+                      errors.defaultQuestionDurationSeconds
+                        ? 'default-duration-error'
+                        : undefined
+                    }
                     {...register('defaultQuestionDurationSeconds', {
                       valueAsNumber: true,
                     })}
@@ -267,6 +279,10 @@ export function QuizForm({
                       type="datetime-local"
                       required
                       className="pl-space-xl"
+                      aria-invalid={!!errors.plannedStartAt}
+                      aria-describedby={
+                        errors.plannedStartAt ? 'quiz-date-error' : undefined
+                      }
                       value={localDate(field.value)}
                       onChange={(e) =>
                         field.onChange(
