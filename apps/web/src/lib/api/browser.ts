@@ -1,6 +1,7 @@
 import { ApiError, createApiClient } from './client';
 import { API_ORIGIN } from './config';
 import { API_ROUTES } from './routes';
+import { COLD_START_TIMEOUT_MS } from './wake';
 import { APP_LINKS } from '@/config/navigation';
 import {
   authLink,
@@ -85,7 +86,12 @@ function oneTabAtATime<T>(task: () => Promise<T>): Promise<T> {
 export function refreshSession() {
   renewal ??= oneTabAtATime(async () => {
     if (Date.now() - renewedAt() < RECENT_RENEWAL_MS) return;
-    await transport.post(API_ROUTES.AUTH.REFRESH);
+    // Often the first request after a long pause, so the API may be waking.
+    await transport.post(
+      API_ROUTES.AUTH.REFRESH,
+      {},
+      { timeoutMs: COLD_START_TIMEOUT_MS },
+    );
     markRenewed();
   })
     .then(

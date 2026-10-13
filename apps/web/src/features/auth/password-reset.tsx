@@ -36,6 +36,7 @@ import { OtpInput } from './otp-input';
 import { PasswordField } from './password-field';
 import { resendLabel, useSecondsUntil } from './resend-timer';
 import { useResetFlow } from './use-auth-flow';
+import { WakingNotice } from './waking-notice';
 
 const EYEBROW = 'Account recovery';
 const linkClass =
@@ -181,6 +182,7 @@ export function ForgotPasswordView() {
         >
           {pending ? 'Sending…' : 'Send reset code'}
         </Button>
+        <WakingNotice active={pending} />
       </form>
     </AuthCard>
   );
@@ -340,6 +342,7 @@ export function ResetCodeView({
         >
           {pending === 'verify' ? 'Checking…' : 'Verify code'}
         </Button>
+        <WakingNotice active={pending !== null} />
         <CodeLimits />
       </form>
     </AuthCard>
@@ -494,6 +497,7 @@ export function NewPasswordView({ flow }: { flow: ResetFlow | null }) {
         >
           {pending ? 'Saving…' : 'Reset password'}
         </Button>
+        <WakingNotice active={pending} />
       </form>
     </AuthCard>
   );

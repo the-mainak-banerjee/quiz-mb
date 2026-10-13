@@ -356,3 +356,32 @@ test('rate-limited answers explain the wait and are never retried', async () => 
   );
   assert.equal(calls, 3, 'one request each');
 });
+
+test('a request can wait longer than the client timeout (cold start)', async () => {
+  // Answers after 40 ms: past the client's 10 ms, inside the request's 500 ms.
+  const fetcher = (_url, { signal }) =>
+    new Promise((resolve, reject) => {
+      const answer = setTimeout(
+        () => resolve(json({ success: true, data: { awake: true } })),
+        40,
+      );
+      signal.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(answer);
+          reject(signal.reason);
+        },
+        { once: true },
+      );
+    });
+  const api = createApiClient({ baseUrl, fetcher, timeoutMs: 10 });
+  const timer = setTimeout(() => {}, 1000);
+  try {
+    await assert.rejects(api.post('/api/example'), { code: 'TIMEOUT' });
+    assert.deepEqual(await api.post('/api/example', {}, { timeoutMs: 500 }), {
+      awake: true,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+});
