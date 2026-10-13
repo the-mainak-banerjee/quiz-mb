@@ -60,10 +60,10 @@ export function BrowserFrame({
 }
 
 const BREAKDOWN = [
-  { text: 'useMemo', percent: 18 },
-  { text: 'useRef', percent: 64, correct: true },
-  { text: 'useEffect', percent: 12 },
-  { text: 'useId', percent: 6 },
+  { text: 'Atlantic', percent: 18 },
+  { text: 'Pacific', percent: 64, correct: true },
+  { text: 'Indian', percent: 12 },
+  { text: 'Arctic', percent: 6 },
 ];
 
 /** The host's live answer breakdown: what landed and what did not. */
@@ -78,7 +78,7 @@ export function AnswerBreakdownMock() {
         <TimerPill remainingSeconds={14} durationSeconds={30} />
       </div>
       <Text variant="section-heading">
-        Which hook keeps a value between renders without re-rendering?
+        Which is the largest ocean on Earth?
       </Text>
       <ul className="flex flex-col gap-space-xs">
         {BREAKDOWN.map((option, index) => (
