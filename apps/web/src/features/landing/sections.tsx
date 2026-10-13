@@ -47,7 +47,14 @@ export function CtaLink({
   );
 }
 
-export function LandingNav({ user = null }: { user?: CurrentUser | null }) {
+export function LandingNav({
+  user = null,
+  sectionLinks = true,
+}: {
+  user?: CurrentUser | null;
+  /** The home page's section links; other pages have no such sections. */
+  sectionLinks?: boolean;
+}) {
   return (
     <header className="sticky top-0 z-30 border-b border-border-surface bg-canvas/85 backdrop-blur-md">
       <div
@@ -63,33 +70,35 @@ export function LandingNav({ user = null }: { user?: CurrentUser | null }) {
         >
           <Brand />
         </Link>
-        <nav aria-label="Page sections" className="hidden lg:block">
-          <ul className="flex items-center gap-1">
-            {NAV_LINKS.map((link) => (
-              <li key={link.href}>
-                <a
-                  href={link.href}
-                  className="ds-focus rounded-control px-space-sm py-2 text-label text-text-secondary transition-colors hover:text-text-primary"
-                >
-                  {link.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        {sectionLinks && (
+          <nav aria-label="Page sections" className="hidden lg:block">
+            <ul className="flex items-center gap-1">
+              {NAV_LINKS.map((link) => (
+                <li key={link.href}>
+                  <a
+                    href={link.href}
+                    className="ds-focus rounded-control px-space-sm py-2 text-label text-text-secondary transition-colors hover:text-text-primary"
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
         <div className="flex items-center gap-space-xs">
           {user ? (
             <>
               <CtaLink
                 href={APP_LINKS.WORKSPACE.DASHBOARD}
                 variant="ghost"
-                className="h-control shrink-0 whitespace-nowrap px-control-x"
+                className="hidden h-control shrink-0 whitespace-nowrap px-control-x sm:inline-flex"
               >
-                <span className="sm:hidden">Dashboard</span>
-                <span className="hidden sm:inline">Go to dashboard</span>
+                Go to dashboard
               </CtaLink>
               <CurrentUserProvider initialUser={user}>
-                <AccountMenu />
+                {/* On phones Dashboard moves into the account menu. */}
+                <AccountMenu dashboardOnPhones />
               </CurrentUserProvider>
             </>
           ) : (

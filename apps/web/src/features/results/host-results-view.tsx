@@ -8,7 +8,7 @@ import { NavigationItem } from '@/components/workspace/navigation-item';
 import { APP_LINKS } from '@/config/navigation';
 import { apiError } from '@/lib/api/client';
 import { resultsApi } from '@/lib/api/results';
-import { cn } from '@/lib/utils';
+import { cn, pluralize } from '@/lib/utils';
 import { StatTile } from '@/features/live-session/stat-tile';
 import { CompletedDate } from './history-view';
 
@@ -203,7 +203,8 @@ export function HostResultsView({ initial }: { initial: HostQuizResultsDto }) {
           <div className="flex flex-col gap-space-sm border-t border-border-surface bg-surface-low p-space-md sm:flex-row sm:items-center sm:justify-between">
             <Text variant="caption" tone="secondary">
               Showing {entries.length.toLocaleString()} of{' '}
-              {summary.participantCount.toLocaleString()} participants
+              {summary.participantCount.toLocaleString()}{' '}
+              {pluralize(summary.participantCount, 'participant')}
             </Text>
             {nextOffset !== null && (
               <Button

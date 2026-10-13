@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useState } from 'react';
 import {
   ArrowUpRight,
-  CalendarDays,
   Download,
   Eye,
   FileDown,
@@ -401,16 +400,6 @@ export function PublishedQuizManagement({
                 {downloadError}
               </Text>
             )}
-          </Surface>
-          <Surface className="flex items-start gap-space-sm bg-surface-low">
-            <CalendarDays className="shrink-0 text-accent" aria-hidden="true" />
-            <div>
-              <Text variant="label">Calendar sync ready</Text>
-              <Text variant="caption" tone="secondary">
-                The planned date is visible to participants but remains
-                host-controlled.
-              </Text>
-            </div>
           </Surface>
         </aside>
       </div>

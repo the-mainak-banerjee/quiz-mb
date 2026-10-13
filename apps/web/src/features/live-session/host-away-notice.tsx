@@ -35,7 +35,8 @@ export function HostAwayNotice({ questionOpen }: { questionOpen: boolean }) {
 
 /**
  * After the room closed (the host closed it, or the server did after a
- * while): the participant keeps their result or the final leaderboard.
+ * while): shown over the participant's result or the final leaderboard
+ * until their saved result opens.
  */
 export function SessionClosedNotice({ message }: { message: string }) {
   return (
@@ -54,7 +55,7 @@ export function SessionClosedNotice({ message }: { message: string }) {
         <div className="min-w-0">
           <Text variant="label">{message}</Text>
           <Text variant="caption" tone="secondary">
-            Your result is saved to your history.
+            Taking you to your result…
           </Text>
         </div>
       </Surface>

@@ -1,5 +1,11 @@
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, CalendarDays, Clock3, LockKeyhole } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  CalendarDays,
+  Clock3,
+  LockKeyhole,
+} from 'lucide-react';
 import { Avatar, Button, Surface, Text } from '@/components/ui';
 import { WorkspaceFooter } from '@/components/workspace/workspace-footer';
 import { APP_LINKS } from '@/config/navigation';
@@ -12,7 +18,10 @@ function QuizDetailsPreview() {
     <div className="space-y-space-md rounded-feature border border-border-surface bg-canvas p-space-sm shadow-floating sm:p-space-lg">
       <div className="flex flex-wrap items-center gap-space-xs">
         <span className="inline-flex items-center gap-space-xs rounded-pill bg-status-scheduled-surface px-badge-x py-badge-y text-badge text-status-scheduled-text">
-          <span className="size-status-dot rounded-pill bg-current" aria-hidden="true" />
+          <span
+            className="size-status-dot rounded-pill bg-current"
+            aria-hidden="true"
+          />
           Registration open
         </span>
         <Text variant="caption" tone="secondary">
@@ -30,27 +39,47 @@ function QuizDetailsPreview() {
         <Avatar name="QuizMB Teaching Team" size="medium" />
         <div>
           <Text variant="label">QuizMB Teaching Team</Text>
-          <Text variant="caption" tone="secondary">Quiz host</Text>
+          <Text variant="caption" tone="secondary">
+            Quiz host
+          </Text>
         </div>
       </div>
       <Surface className="grid gap-space-sm bg-surface-low md:grid-cols-3">
         <div>
-          <Text variant="caption" tone="secondary" className="flex items-center gap-space-xs">
+          <Text
+            variant="caption"
+            tone="secondary"
+            className="flex items-center gap-space-xs"
+          >
             <CalendarDays size={16} aria-hidden="true" /> Date
           </Text>
-          <Text variant="label" className="mt-space-xs">Thursday, 15 Oct 2026</Text>
+          <Text variant="label" className="mt-space-xs">
+            Thursday, 15 Oct 2026
+          </Text>
         </div>
         <div>
-          <Text variant="caption" tone="secondary" className="flex items-center gap-space-xs">
+          <Text
+            variant="caption"
+            tone="secondary"
+            className="flex items-center gap-space-xs"
+          >
             <Clock3 size={16} aria-hidden="true" /> Time
           </Text>
-          <Text variant="label" className="mt-space-xs">6:30 pm IST</Text>
+          <Text variant="label" className="mt-space-xs">
+            6:30 pm IST
+          </Text>
         </div>
         <div>
-          <Text variant="caption" tone="secondary" className="flex items-center gap-space-xs">
+          <Text
+            variant="caption"
+            tone="secondary"
+            className="flex items-center gap-space-xs"
+          >
             <LockKeyhole size={16} aria-hidden="true" /> Location
           </Text>
-          <Text variant="label" className="mt-space-xs">Online live room</Text>
+          <Text variant="label" className="mt-space-xs">
+            Online live room
+          </Text>
         </div>
       </Surface>
       <Surface className="flex flex-col gap-space-sm bg-surface-low sm:flex-row sm:items-center sm:justify-between">
@@ -60,7 +89,9 @@ function QuizDetailsPreview() {
             Sign in to register for the live quiz.
           </Text>
         </div>
-        <Button disabled className="shrink-0">Preview only</Button>
+        <Button disabled className="shrink-0">
+          Preview only
+        </Button>
       </Surface>
     </div>
   );
@@ -72,7 +103,7 @@ export function PreviewJoinPage({ user }: { user: CurrentUser | null }) {
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
-      <LandingNav user={user} />
+      <LandingNav user={user} sectionLinks={false} />
       <main className="flex-1">
         <div className="mx-auto w-full max-w-content px-margin-sm py-section-sm md:px-margin md:py-section lg:px-space-xl lg:py-section">
           <section className="mx-auto max-w-3xl space-y-space-md text-center">
@@ -85,12 +116,21 @@ export function PreviewJoinPage({ user }: { user: CurrentUser | null }) {
               arrive at your quiz details page. They can see what the quiz is
               about, who’s hosting it, and when it’s planned.
             </Text>
-            <Text tone="secondary">Here’s an example of what that page looks like.</Text>
+            <Text tone="secondary">
+              Here’s an example of what that page looks like.
+            </Text>
           </section>
 
-          <section aria-label="Example quiz details" className="mx-auto mt-space-xl max-w-4xl">
+          <section
+            aria-label="Example quiz details"
+            className="mx-auto mt-space-xl max-w-4xl"
+          >
             <QuizDetailsPreview />
-            <Text variant="caption" tone="secondary" className="mt-space-sm block text-center">
+            <Text
+              variant="caption"
+              tone="secondary"
+              className="mt-space-sm block text-center"
+            >
               Example preview — this isn’t a live quiz.
             </Text>
           </section>
@@ -105,8 +145,21 @@ export function PreviewJoinPage({ user }: { user: CurrentUser | null }) {
             </Text>
           </section>
 
-          <section className="mx-auto mt-section-sm max-w-2xl rounded-feature bg-action-primary px-space-lg py-space-xl text-center text-action-on-primary sm:px-space-2xl">
-            <Text as="h2" variant="display" className="text-balance text-action-on-primary">
+          {/* The home page's For your learners surface: grid and glow. */}
+          <section className="relative isolate mx-auto mt-section-sm max-w-2xl overflow-hidden rounded-feature bg-action-primary px-space-lg py-space-xl text-center text-action-on-primary sm:px-space-2xl">
+            <div
+              aria-hidden="true"
+              className="lp-grid-inverse absolute inset-0 -z-10"
+            />
+            <div
+              aria-hidden="true"
+              className="absolute -top-32 left-1/2 -z-10 h-80 w-[70%] -translate-x-1/2 rounded-pill bg-accent opacity-45 blur-3xl"
+            />
+            <Text
+              as="h2"
+              variant="display"
+              className="text-balance text-action-on-primary"
+            >
               Ready to host a quiz of your own?
             </Text>
             <Text className="mt-space-sm text-pretty text-text-inverse/80">
@@ -131,7 +184,10 @@ export function PreviewJoinPage({ user }: { user: CurrentUser | null }) {
           </section>
 
           <div className="mt-space-xl text-center flex justify-center">
-            <Link href={APP_LINKS.HOME} className="ds-focus text-label text-accent underline-offset-4 hover:underline w-fit flex items-center gap-space-xs">
+            <Link
+              href={APP_LINKS.HOME}
+              className="ds-focus text-label text-accent underline-offset-4 hover:underline w-fit flex items-center gap-space-xs"
+            >
               <ArrowLeft size={18} />
               Back to Home page
             </Link>

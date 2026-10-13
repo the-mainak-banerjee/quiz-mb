@@ -3,6 +3,7 @@ import { Surface, Text } from '@/components/ui';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { VisuallyHidden } from '@/components/visually-hidden';
 import { APP_LINKS } from '@/config/navigation';
+import { pluralize } from '@/lib/utils';
 
 export function ProjectCard({
   project,
@@ -23,7 +24,8 @@ export function ProjectCard({
             {project.title}
           </Text>
           <Text variant="caption" tone="secondary">
-            {project.quizzes} quizzes · {project.members} members
+            {project.quizzes} {pluralize(project.quizzes, 'quiz', 'quizzes')} ·{' '}
+            {project.members} {pluralize(project.members, 'member')}
           </Text>
         </div>
       </div>

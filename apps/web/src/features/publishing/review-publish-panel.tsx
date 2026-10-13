@@ -88,8 +88,10 @@ export function ReviewPublishPanel({
               />
             </div>
             <Text variant="body-secondary" tone="secondary">
-              {quiz.questions.length} question structures · {scored.length}{' '}
-              scored · {quiz.questions.length - scored.length} descriptive
+              {quiz.questions.length}{' '}
+              {pluralize(quiz.questions.length, 'question structure')} ·{' '}
+              {scored.length} scored · {quiz.questions.length - scored.length}{' '}
+              descriptive
             </Text>
           </div>
         </div>
@@ -134,7 +136,7 @@ export function ReviewPublishPanel({
                 },
                 {
                   label: 'Total questions',
-                  value: `${quiz.questions.length} modules`,
+                  value: `${quiz.questions.length} ${pluralize(quiz.questions.length, 'module')}`,
                   Icon: Check,
                 },
                 {
@@ -230,7 +232,7 @@ export function ReviewPublishPanel({
                         {QUESTION_LABELS[question.type]} ·{' '}
                         {question.type === QUESTION_TYPE.DESCRIPTIVE
                           ? 'Unscored'
-                          : `${question.options.length} options · ${correct} correct`}{' '}
+                          : `${question.options.length} ${pluralize(question.options.length, 'option')} · ${correct} correct`}{' '}
                         ·{' '}
                         {question.durationOverrideSeconds ??
                           quiz.defaultQuestionDurationSeconds}
