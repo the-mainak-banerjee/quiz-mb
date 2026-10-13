@@ -28,9 +28,9 @@ import {
 
 export const liveQuiz: LiveQuizSummary = {
   id: '00000000-0000-4000-8000-000000000001',
-  publicId: 'token-sync-2026',
-  title: 'Design Systems & Token Architecture Sync',
-  projectName: 'Product Design Community',
+  publicId: 'money-week-4-2026',
+  title: 'Personal Finance Basics · Week 4 recap',
+  projectName: 'Money Matters Cohort',
   hostName: 'Elena Rostova',
   plannedStartAt: '2026-10-25T00:00:00.000Z',
   registrationLimit: 50,
@@ -113,82 +113,82 @@ const bank: Array<{
 }> = [
   {
     type: QUESTION_TYPE.SINGLE_CHOICE,
-    text: 'What does semantic scope mean in design tokens?',
+    text: 'What does an emergency fund mainly cover?',
     durationSeconds: 20,
   },
   {
     type: QUESTION_TYPE.MULTIPLE_CHOICE,
-    text: 'Select all valid token tier layers',
+    text: 'Select all fixed monthly costs',
     durationSeconds: 30,
   },
   {
     type: QUESTION_TYPE.DESCRIPTIVE,
-    text: 'Explain how component tokens inherit aliases',
+    text: 'Explain why paying yourself first helps you save',
     durationSeconds: 60,
   },
   {
     type: QUESTION_TYPE.SINGLE_CHOICE,
-    text: 'Which contrast ratio satisfies WCAG 2.2 AA for large text?',
+    text: 'What is compound interest?',
     durationSeconds: 15,
   },
   {
     type: QUESTION_TYPE.SINGLE_CHOICE,
-    text: 'Identify the primary source of token drift',
+    text: 'Which habit best helps you stick to a budget?',
     durationSeconds: 25,
   },
   {
     type: QUESTION_TYPE.DESCRIPTIVE,
-    text: 'Explain how semantic tokens help maintain a scalable multi-brand design system.',
+    text: 'Describe one money goal you want to reach this year and how you will track it.',
     durationSeconds: 60,
   },
   {
     type: QUESTION_TYPE.MULTIPLE_CHOICE,
-    text: 'Select all valid dark mode luminance mapping strategies',
+    text: 'Select all ways to lower your monthly spending',
     durationSeconds: 30,
   },
   {
     type: QUESTION_TYPE.SINGLE_CHOICE,
-    text: 'Where should a component token resolve its default value?',
+    text: 'In the 50/30/20 rule, what is the 20% for?',
     durationSeconds: 20,
   },
   {
     type: QUESTION_TYPE.SINGLE_CHOICE,
-    text: 'Which layer owns brand colour decisions?',
+    text: 'Which debt is usually best to pay off first?',
     durationSeconds: 20,
   },
   {
     type: QUESTION_TYPE.DESCRIPTIVE,
-    text: 'Describe one risk of skipping the semantic token layer',
+    text: 'Describe one impulse purchase you could have skipped',
     durationSeconds: 45,
   },
   {
     type: QUESTION_TYPE.MULTIPLE_CHOICE,
-    text: 'Select the properties that belong in a spacing scale',
+    text: 'Select the items that belong in a monthly budget',
     durationSeconds: 30,
   },
   {
     type: QUESTION_TYPE.SINGLE_CHOICE,
-    text: 'What triggers a token rebuild in a typical pipeline?',
+    text: 'What does a credit score mainly reflect?',
     durationSeconds: 20,
   },
   {
     type: QUESTION_TYPE.SINGLE_CHOICE,
-    text: 'Which naming pattern keeps tokens platform neutral?',
+    text: 'How many months of expenses should an emergency fund hold?',
     durationSeconds: 20,
   },
   {
     type: QUESTION_TYPE.MULTIPLE_CHOICE,
-    text: 'Select every valid elevation token consumer',
+    text: 'Select every account that can earn interest',
     durationSeconds: 25,
   },
   {
     type: QUESTION_TYPE.DESCRIPTIVE,
-    text: 'How would you migrate a legacy palette to semantic tokens?',
+    text: 'How would you split a surprise bonus between saving and spending?',
     durationSeconds: 60,
   },
   {
     type: QUESTION_TYPE.SINGLE_CHOICE,
-    text: 'Which token type should a focus ring reference?',
+    text: 'What is the main benefit of automating your savings?',
     durationSeconds: 20,
   },
 ];
@@ -223,41 +223,44 @@ export const descriptiveQueue = queue(
   'locked',
 );
 
-const semanticScopeOptions = [
+const emergencyFundOptions = [
   {
     id: 'option-a',
-    text: 'The runtime memory footprint allocated for CSS variable caching',
+    text: 'Planned holiday spending',
     isCorrect: false,
     votes: 3,
   },
   {
     id: 'option-b',
-    text: 'The contextual boundary restricting a token to specific component roles or design tiers',
+    text: 'Unexpected costs like car repairs or job loss',
     isCorrect: true,
     votes: 15,
   },
   {
     id: 'option-c',
-    text: 'The Figma variable collection inheritance rule between library files',
+    text: 'Monthly subscription payments',
     isCorrect: false,
     votes: 4,
   },
   {
     id: 'option-d',
-    text: 'The global brand fallback value when component tokens fail to resolve',
+    text: 'Long-term retirement investing',
     isCorrect: false,
     votes: 2,
   },
 ];
 
 const genericOptions = (questionId: string, multiple: boolean) =>
-  ['Primitive tokens', 'Semantic tokens', 'Component tokens', 'Raw values'].map(
-    (text, index) => ({
-      id: `${questionId}-option-${index + 1}`,
-      text,
-      isCorrect: index === 1 || (multiple && index === 2),
-    }),
-  );
+  [
+    'Rent or mortgage',
+    'Savings transfer',
+    'Groceries',
+    'Streaming services',
+  ].map((text, index) => ({
+    id: `${questionId}-option-${index + 1}`,
+    text,
+    isCorrect: index === 1 || (multiple && index === 2),
+  }));
 
 /** Host-only content for every idle queue question, keyed by id. */
 export const hostQuestions: Record<string, HostQuestion> = Object.fromEntries(
@@ -267,7 +270,7 @@ export const hostQuestions: Record<string, HostQuestion> = Object.fromEntries(
       ...question,
       options:
         index === 0
-          ? semanticScopeOptions.map(({ id, text, isCorrect }) => ({
+          ? emergencyFundOptions.map(({ id, text, isCorrect }) => ({
               id,
               text,
               isCorrect,
@@ -284,7 +287,7 @@ export const hostQuestions: Record<string, HostQuestion> = Object.fromEntries(
 
 export const scoredQuestion = {
   question: scoredQueue[0]!,
-  results: semanticScopeOptions satisfies OptionResult[],
+  results: emergencyFundOptions satisfies OptionResult[],
   submitted: 24,
   remainingSeconds: 9,
 };
@@ -298,31 +301,31 @@ export const descriptiveQuestion = {
       id: 'response-18',
       number: 18,
       receivedLabel: 'just now',
-      text: 'Semantic tokens separate the visual intent (e.g. action-primary-bg) from the raw value. When creating a sub-brand or dark mode, you remap only the semantic alias layer rather than refactoring hundreds of components.',
+      text: 'Build a three-month emergency fund by December. I set up an automatic transfer on payday and check the balance every Sunday.',
     },
     {
       id: 'response-17',
       number: 17,
       receivedLabel: '8s ago',
-      text: 'They create an abstraction boundary between design tools and codebases. Engineers subscribe to semantic variables, so value changes propagate without breaking production CSS.',
+      text: 'Pay off my credit card. I list every payment in a notes app and tick it off, so I can see the balance going down.',
     },
     {
       id: 'response-16',
       number: 16,
       receivedLabel: '15s ago',
-      text: 'A component can depend on a semantic role rather than a fixed value. If brand colours shift from forest to cobalt, the button component code stays identical.',
+      text: 'Save for a laptop without borrowing. A separate savings pot with a progress bar keeps me honest.',
     },
     {
       id: 'response-15',
       number: 15,
       receivedLabel: '22s ago',
-      text: 'Semantic scopes enforce accessible contrast and token discipline at the system level instead of relying on designers picking arbitrary values.',
+      text: 'Spend less on takeaway: a weekly limit, and I log every order in my budget sheet.',
     },
     {
       id: 'response-14',
       number: 14,
       receivedLabel: '31s ago',
-      text: 'The core component library stays uniform across product suites while only the brand semantic map is swapped at build time.',
+      text: 'Start investing a small amount each month. I will review it with my partner on the first of every month.',
     },
   ] satisfies DescriptiveResponse[],
 };
@@ -346,9 +349,9 @@ export const participantQuestions = {
       askedQuestionId: 'asked-3',
       number: 3,
       type: QUESTION_TYPE.SINGLE_CHOICE,
-      text: 'What does **semantic scope** mean in design tokens?',
+      text: 'What does an **emergency fund** mainly cover?',
       imageUrl: null,
-      options: participantSafe(semanticScopeOptions),
+      options: participantSafe(emergencyFundOptions),
       durationSeconds: 20,
     },
     correctOptionIds: ['option-b'],
@@ -364,13 +367,13 @@ export const participantQuestions = {
       askedQuestionId: 'asked-4',
       number: 4,
       type: QUESTION_TYPE.MULTIPLE_CHOICE,
-      text: 'Which of these are tiers in a modern design token architecture?',
+      text: 'Which of these are fixed monthly costs?',
       imageUrl: null,
       options: [
-        { id: 'tier-a', text: 'Global / primitive tokens' },
-        { id: 'tier-b', text: 'Semantic / alias tokens' },
-        { id: 'tier-c', text: 'Runtime compiler overrides' },
-        { id: 'tier-d', text: 'Component / scoped tokens' },
+        { id: 'tier-a', text: 'Rent or mortgage' },
+        { id: 'tier-b', text: 'Phone contract' },
+        { id: 'tier-c', text: 'Eating out' },
+        { id: 'tier-d', text: 'Insurance premiums' },
       ],
       durationSeconds: 30,
     },
@@ -387,7 +390,7 @@ export const participantQuestions = {
       askedQuestionId: 'asked-6',
       number: 6,
       type: QUESTION_TYPE.DESCRIPTIVE,
-      text: 'Explain how semantic tokens help maintain a scalable multi-brand design system.',
+      text: 'Describe one money goal you want to reach this year and how you will track it.',
       imageUrl: null,
       options: [],
       durationSeconds: 60,
@@ -398,7 +401,7 @@ export const participantQuestions = {
 } satisfies Record<string, ParticipantQuestionFixture>;
 
 export const previewDescriptiveAnswer =
-  'Components reference semantic roles such as action-primary instead of raw values, so each brand or theme only remaps the alias layer.';
+  'Save £1,000 for emergencies by June. I moved £150 to a separate pot on payday and check it every Sunday.';
 
 /** Score and rank before the previewed question was revealed. */
 export const previousStanding: ParticipantStanding = {
@@ -549,10 +552,7 @@ export const previewHistory: ParticipantHistoryDto[] = [
   },
   {
     liveSessionId: 'session-2',
-    quiz: previewPublicQuiz(
-      'Quarterly Product Milestone Sync',
-      'Company All-Hands',
-    ),
+    quiz: previewPublicQuiz('World Geography Quiz Night', 'Friday Trivia Club'),
     completedAt: '2026-10-12T17:30:00.000Z',
     result: {
       totalScore: 4120,
@@ -566,8 +566,8 @@ export const previewHistory: ParticipantHistoryDto[] = [
   {
     liveSessionId: 'session-3',
     quiz: previewPublicQuiz(
-      'Distributed Systems Live Sprint',
-      'Core Infrastructure',
+      'Healthy Habits Check-in',
+      'Friday Fitness Challenge',
     ),
     completedAt: '2026-09-29T16:10:00.000Z',
     result: null,

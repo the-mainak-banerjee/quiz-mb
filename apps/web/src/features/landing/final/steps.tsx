@@ -35,11 +35,8 @@ function Seq({
 
 /** Step 1: a question taking shape, its options arriving one by one. */
 function BuildSkeleton() {
-  const options = [
-    'A new value each render',
-    'A mutable ref object',
-    'A cleanup function',
-  ];
+  // Any subject: a language class here.
+  const options = ['Por favor', 'Gracias', 'De nada'];
   return (
     <div aria-hidden="true" className="w-full min-w-0 max-w-xs space-y-2">
       <Seq at={0} className="flex items-center gap-1.5">
@@ -51,7 +48,7 @@ function BuildSkeleton() {
         </span>
       </Seq>
       <Seq at={0.2}>
-        <Text variant="card-title">What does useRef return?</Text>
+        <Text variant="card-title">How do you say “thank you” in Spanish?</Text>
       </Seq>
       {options.map((text, index) => {
         const correct = index === 1;
@@ -161,9 +158,9 @@ function ShareSkeleton() {
 /** Step 3: the live answer breakdown filling in, then the leaderboard. */
 function HostSkeleton() {
   const bars = [
-    { letter: 0, text: 'A new value', percent: 21 },
-    { letter: 1, text: 'A mutable ref', percent: 67, correct: true },
-    { letter: 2, text: 'A cleanup', percent: 12 },
+    { letter: 0, text: 'Atlantic', percent: 21 },
+    { letter: 1, text: 'Pacific', percent: 67, correct: true },
+    { letter: 2, text: 'Indian', percent: 12 },
   ];
   return (
     <div aria-hidden="true" className="w-full min-w-0 max-w-xs space-y-2">

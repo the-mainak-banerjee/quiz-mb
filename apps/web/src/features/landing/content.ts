@@ -29,7 +29,7 @@ export const HOST_LINK = `${SITE_HOST}/quizzes/cohort-3-week-4/live`;
 export const STEPS = [
   {
     title: 'Build your quiz',
-    body: 'Single choice, multiple choice or short answers, grouped into a project for each course or cohort.',
+    body: 'Write your own questions on any subject: single choice, multiple choice or short answers, grouped into a project for each course or cohort.',
   },
   {
     title: 'Share the link before class',
@@ -66,7 +66,22 @@ export const AUDIENCES = [
   },
 ] as const;
 
+/** Example subjects: QuizMB is not only for technical topics. */
+export const TOPICS = [
+  'Language classes',
+  'Fitness coaching',
+  'Personal finance',
+  'Book clubs',
+  'Team training',
+  'Coding bootcamps',
+] as const;
+
 export const FAQ = [
+  {
+    question: 'Is QuizMB only for technical topics?',
+    answer:
+      'No. You write your own questions, on any subject: languages, fitness, finance, team training, book clubs or code. QuizMB handles the live part: timing, scoring and the leaderboard.',
+  },
   {
     question: 'Do my learners need an account?',
     answer:
