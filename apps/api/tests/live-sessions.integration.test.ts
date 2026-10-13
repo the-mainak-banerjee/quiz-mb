@@ -826,6 +826,15 @@ test(
     const lobbyGuest = await joinSession('c', next.id);
     assert.equal(
       errorCode(
+        await emit(lobbyHost, LIVE_EVENTS.sessionClose, {
+          liveSessionId: next.id,
+        }),
+      ),
+      'INVALID_STATE_TRANSITION',
+      'only a completed session can be closed',
+    );
+    assert.equal(
+      errorCode(
         await emit(lobbyGuest, LIVE_EVENTS.lobbyClose, {
           liveSessionId: next.id,
         }),

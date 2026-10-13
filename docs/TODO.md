@@ -16,10 +16,6 @@ Every authoring response reloads the full quiz with `quizInclude` (project, cove
 Fix direction: enable the `relationJoins` preview feature in `packages/database/prisma/schema.prisma` and use `relationLoadStrategy: 'join'` for `quizInclude` reads, so each reload is a single SQL query. Regenerate the client and re-run every integration test. Hosting the production API near the database (e.g. Render Singapore for the Seoul database) matters more and should be done regardless.
 
 ## Before launch
-- What to do for settings. => Done
-- Handle session expire automatically => Done
-- Create Home page/Landing page => Done
-- SEO Meta Data and SEO related pages => Done (branch `feat/seo`)
 - SEO checks after deploying to production (manual):
   1. Google Search Console → Add property → Domain `quizmb.themainakb.com` (or the parent `themainakb.com`), verified with the DNS TXT record.
   2. Sitemaps → submit `https://quizmb.themainakb.com/sitemap.xml`.
@@ -27,14 +23,6 @@ Fix direction: enable the `relationJoins` preview feature in `packages/database/
   4. Check a shared quiz link and the homepage in a preview debugger (e.g. opengraph.xyz, LinkedIn Post Inspector) for the image and text.
   5. Run Lighthouse / PageSpeed Insights (mobile) on the deployed homepage; dev-server numbers are not representative.
 - QA testing and issues fixes   
-- Pages of footer => Done
 - Load Test of Phase 11
 - Track egress (download bandwidth) usage (security design 1.5 and 1.11): image reads from Supabase Storage are not measured yet, so there is no warning before the platform's bandwidth allowance runs out. Decide how to measure it (Supabase usage, or counting signed read URLs) and add a log alert like the storage ones.
 - Integrate Vercel Analytics
-
-## BE checks
-- Check the cron job for unverified account deletation.
-
-## UI QA Issues
-
-- Add text color success whenever we are doing any success activity like password validation match text.

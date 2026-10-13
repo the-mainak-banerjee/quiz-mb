@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import {
   ERROR_CODE,
@@ -14,6 +16,7 @@ import { APP_LINKS } from '@/config/navigation';
 import { ParticipantLiveQuestion } from './participant-live-question';
 import { ParticipantQuizEnded } from './quiz-completed';
 import {
+  LiveConnecting,
   LiveNotice,
   ParticipantLiveIdle,
   ParticipantLobby,
@@ -21,7 +24,7 @@ import {
 } from './participant-screens';
 import { MAX_RECONNECT_ATTEMPTS, useLiveSession } from './use-live-session';
 import { toQuizSummary } from './view-models';
-import { HostAwayNotice } from './host-away-notice';
+import { HostAwayNotice, SessionClosedNotice } from './host-away-notice';
 import { SessionEndingNotice, useEndingSoon } from './session-ending-notice';
 
 const refusals: Record<string, { eyebrow: string; title: string }> = {
@@ -45,17 +48,25 @@ const refusals: Record<string, { eyebrow: string; title: string }> = {
     eyebrow: 'Lobby expired',
     title: 'The lobby expired before the quiz started',
   },
+  [ERROR_CODE.SESSION_CLOSED]: {
+    eyebrow: 'Session closed',
+    title: 'This live session has closed',
+  },
   [ERROR_CODE.SESSION_NOT_FOUND]: {
     eyebrow: 'Not live',
     title: 'This quiz is not live right now',
   },
 };
 
+/** How long the "session closed" note shows before the result opens. */
+const CLOSED_REDIRECT_MS = 4_000;
+
 /** Refusals that are an expected end state, not a fault. */
 const NEUTRAL_REFUSALS = new Set<string>([
   ERROR_CODE.QUIZ_COMPLETED,
   ERROR_CODE.LOBBY_CLOSED,
   ERROR_CODE.LOBBY_EXPIRED,
+  ERROR_CODE.SESSION_CLOSED,
 ]);
 
 /** Participant live experience driven by the authoritative snapshot. */
@@ -89,6 +100,18 @@ export function ParticipantLiveView({
     resync,
   } = useLiveSession(liveSessionId);
   const quiz = toQuizSummary(snapshot?.quiz ?? initialQuiz);
+  const router = useRouter();
+  const sessionClosed = failure?.code === ERROR_CODE.SESSION_CLOSED;
+  // The room closed: after a moment to read the note, open this
+  // participant's saved result for the session.
+  useEffect(() => {
+    if (!sessionClosed) return;
+    const timer = window.setTimeout(
+      () => router.replace(APP_LINKS.WORKSPACE.HISTORY_RESULT(liveSessionId)),
+      CLOSED_REDIRECT_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [sessionClosed, liveSessionId, router]);
   const endingSoon = useEndingSoon(
     snapshot?.sessionEndsAt ?? null,
     clockOffsetMs,
@@ -125,6 +148,38 @@ export function ParticipantLiveView({
       />
     );
 
+  // After the end: the final leaderboard once the host reveals it,
+  // otherwise this participant's own result. There is no rejoining; when
+  // the room closes, the screen stays with a note.
+  if (snapshot?.state === LIVE_SESSION_STATE.COMPLETED) {
+    const closed =
+      sessionClosed && failure ? (
+        <SessionClosedNotice message={failure.message} />
+      ) : null;
+    if (snapshot.role === LIVE_ROLE.PARTICIPANT && snapshot.leaderboard)
+      return (
+        <>
+          <ParticipantLeaderboard
+            board={snapshot.leaderboard}
+            standing={finalResult}
+            participantId={participantId}
+            final
+          />
+          {closed}
+        </>
+      );
+    return (
+      <>
+        <ParticipantQuizEnded
+          quizTitle={quiz.title}
+          result={finalResult}
+          closed={!!closed}
+        />
+        {closed}
+      </>
+    );
+  }
+
   if (connection === 'failed' && failure) {
     const known = refusals[failure.code];
     return (
@@ -134,29 +189,11 @@ export function ParticipantLiveView({
         title={known?.title ?? 'We could not join the live room'}
         description={failure.message}
         action={
-          failure.code === ERROR_CODE.QUIZ_COMPLETED ? historyLink : backToQuiz
+          failure.code === ERROR_CODE.QUIZ_COMPLETED ||
+          failure.code === ERROR_CODE.SESSION_CLOSED
+            ? historyLink
+            : backToQuiz
         }
-      />
-    );
-  }
-
-  // After the end: the final leaderboard once the host reveals it,
-  // otherwise this participant's own result. There is no rejoining.
-  if (snapshot?.state === LIVE_SESSION_STATE.COMPLETED) {
-    if (snapshot.role === LIVE_ROLE.PARTICIPANT && snapshot.leaderboard)
-      return (
-        <ParticipantLeaderboard
-          board={snapshot.leaderboard}
-          standing={finalResult}
-          participantId={participantId}
-          final
-        />
-      );
-    return (
-      <ParticipantQuizEnded
-        quizTitle={quiz.title}
-        result={finalResult}
-        historyHref={APP_LINKS.WORKSPACE.HISTORY}
       />
     );
   }
@@ -179,8 +216,7 @@ export function ParticipantLiveView({
         onRetry={reconnect}
       />
     ) : (
-      <LiveNotice
-        eyebrow="Connecting"
+      <LiveConnecting
         title="Joining the live room…"
         description={`Connecting you to ${quiz.title}.`}
       />

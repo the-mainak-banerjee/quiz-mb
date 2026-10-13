@@ -21,6 +21,7 @@ import { ParticipantRoster } from './participant-roster';
 import { StatTile } from './stat-tile';
 import type { LiveParticipant, LiveQuizSummary } from './types';
 import type { HostingAllowanceDto } from '@quizmb/contracts';
+import { pluralize } from '@/lib/utils';
 
 const startNotes = [
   'Starting closes registration and locks questions for this quiz.',
@@ -156,7 +157,9 @@ export function HostLobby({
               label="Registered participants connected"
             />
             <Text variant="caption" tone="secondary">
-              {connected} participants are connected and waiting.
+              {connected}{' '}
+              {pluralize(connected, 'participant is', 'participants are')}{' '}
+              connected and waiting.
             </Text>
           </div>
         </StatTile>
@@ -176,7 +179,8 @@ export function HostLobby({
               aria-hidden="true"
               className="size-2 rounded-pill bg-border-control"
             />
-            {offline} registered participants not connected yet
+            {offline} registered {pluralize(offline, 'participant')} not
+            connected yet
           </Text>
           <Text variant="caption" tone="secondary" className="pt-1">
             Registration limit: {quiz.registrationLimit}
@@ -272,7 +276,10 @@ export function HostLobby({
             </Text>
             <dl className="divide-y divide-border-surface text-caption text-text-secondary">
               {[
-                ['Questions', `${quiz.questionCount} questions`],
+                [
+                  'Questions',
+                  `${quiz.questionCount} ${pluralize(quiz.questionCount, 'question')}`,
+                ],
                 ['Default timer', `${quiz.defaultDurationSeconds}s / question`],
                 ['Question order', 'Chosen live by you'],
                 ['Leaderboard', 'Shown only when you choose'],

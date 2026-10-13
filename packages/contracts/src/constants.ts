@@ -157,6 +157,8 @@ export const ERROR_CODE = {
   NOT_JOINED: 'NOT_JOINED',
   SESSION_REPLACED: 'SESSION_REPLACED',
   LOBBY_CLOSED: 'LOBBY_CLOSED',
+  /** A completed session's room was closed (by the host or after a while). */
+  SESSION_CLOSED: 'SESSION_CLOSED',
   LIVE_UNAVAILABLE: 'LIVE_UNAVAILABLE',
   OPERATION_IN_PROGRESS: 'OPERATION_IN_PROGRESS',
   // Live questions

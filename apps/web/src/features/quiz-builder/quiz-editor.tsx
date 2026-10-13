@@ -1,7 +1,7 @@
 'use client';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
-import { useRef, useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowDown,
@@ -39,6 +39,7 @@ import { apiError } from '@/lib/api/client';
 import { authoringApi } from '@/lib/api/authoring';
 import { cn } from '@/lib/utils';
 import { PromptText } from '@/components/markdown-preview';
+import { MiloLoading } from '@/components/milo/milo-states';
 import { QuizForm, quizValues } from './quiz-form';
 import { EDITOR_NOTICE_TEXT, type EditorNotice } from './editor-notice';
 import {
@@ -522,54 +523,64 @@ export function QuizEditor({
         title="Saved quiz preview"
         description="Preview saved question content. This is not a live session."
       >
-        <div className="space-y-space-lg">
-          {quiz?.questions.map((q, i) => (
-            <section key={q.id} className="space-y-space-sm">
-              <Text as="h3" variant="card-title">
-                Question {i + 1}
-              </Text>
-              <MarkdownPreview text={q.text} />
-              {q.image && (
-                <Image
-                  unoptimized
-                  width={800}
-                  height={450}
-                  src={q.image.url}
-                  alt={q.image.fileName}
-                  className="max-h-64 w-full object-contain"
-                />
-              )}
-              {q.type !== QUESTION_TYPE.DESCRIPTIVE &&
-                q.options.map((option, index) => (
-                  <QuizOption
-                    key={index}
-                    type={
-                      q.type === QUESTION_TYPE.SINGLE_CHOICE
-                        ? QUESTION_TYPE.SINGLE_CHOICE
-                        : QUESTION_TYPE.MULTIPLE_CHOICE
-                    }
-                    index={index}
-                    isCorrect={option.isCorrect}
-                  >
-                    <Text className="wrap-break-word">{option.text}</Text>
-                  </QuizOption>
-                ))}
-              {q.type === QUESTION_TYPE.DESCRIPTIVE && (
-                <div className="flex min-h-40 flex-col items-center justify-center gap-space-sm rounded-control border border-dashed border-border-control bg-surface-low p-space-lg text-center">
-                  <FileText
-                    className="text-accent"
-                    size={28}
-                    aria-hidden="true"
+        {/* The Markdown renderer loads on first open: wait here, not with
+            the workspace's page loader. */}
+        <Suspense
+          fallback={
+            <div className="py-space-lg">
+              <MiloLoading label="Loading the preview…" />
+            </div>
+          }
+        >
+          <div className="space-y-space-lg">
+            {quiz?.questions.map((q, i) => (
+              <section key={q.id} className="space-y-space-sm">
+                <Text as="h3" variant="card-title">
+                  Question {i + 1}
+                </Text>
+                <MarkdownPreview text={q.text} />
+                {q.image && (
+                  <Image
+                    unoptimized
+                    width={800}
+                    height={450}
+                    src={q.image.url}
+                    alt={q.image.fileName}
+                    className="max-h-64 w-full object-contain"
                   />
-                  <Text variant="label">Written response area</Text>
-                  <Text variant="body-secondary" tone="secondary">
-                    Participants will compose an ungraded response here.
-                  </Text>
-                </div>
-              )}
-            </section>
-          ))}
-        </div>
+                )}
+                {q.type !== QUESTION_TYPE.DESCRIPTIVE &&
+                  q.options.map((option, index) => (
+                    <QuizOption
+                      key={index}
+                      type={
+                        q.type === QUESTION_TYPE.SINGLE_CHOICE
+                          ? QUESTION_TYPE.SINGLE_CHOICE
+                          : QUESTION_TYPE.MULTIPLE_CHOICE
+                      }
+                      index={index}
+                      isCorrect={option.isCorrect}
+                    >
+                      <Text className="wrap-break-word">{option.text}</Text>
+                    </QuizOption>
+                  ))}
+                {q.type === QUESTION_TYPE.DESCRIPTIVE && (
+                  <div className="flex min-h-40 flex-col items-center justify-center gap-space-sm rounded-control border border-dashed border-border-control bg-surface-low p-space-lg text-center">
+                    <FileText
+                      className="text-accent"
+                      size={28}
+                      aria-hidden="true"
+                    />
+                    <Text variant="label">Written response area</Text>
+                    <Text variant="body-secondary" tone="secondary">
+                      Participants will compose an ungraded response here.
+                    </Text>
+                  </div>
+                )}
+              </section>
+            ))}
+          </div>
+        </Suspense>
       </Modal>
       {quiz && (
         <ConfirmDeleteModal

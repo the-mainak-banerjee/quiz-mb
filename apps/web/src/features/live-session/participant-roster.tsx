@@ -11,7 +11,7 @@ import {
 } from '@/components/ui';
 import { NavigationItem } from '@/components/workspace/navigation-item';
 import { EmptyStateIllustration } from '@/components/empty-state-illustration';
-import { cn } from '@/lib/utils';
+import { cn, pluralize } from '@/lib/utils';
 import type { LiveParticipant } from './types';
 
 type Filter = 'all' | 'connected' | 'offline';
@@ -105,7 +105,8 @@ export function ParticipantRoster({
 
       <div className="flex flex-wrap items-center justify-between gap-space-xs">
         <Text variant="caption" tone="secondary">
-          Showing {visible.length} of {registered} participants
+          Showing {visible.length} of {registered}{' '}
+          {pluralize(registered, 'participant')}
         </Text>
         <NavigationItem
           href={rosterHref}

@@ -9,7 +9,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Avatar, Badge, Callout, Surface, Text } from '@/components/ui';
-import { MiloStage } from '@/components/milo/milo-states';
+import { MiloLoading, MiloStage } from '@/components/milo/milo-states';
 import { LocalDateTime } from '@/components/local-date-time';
 import { cn, pluralize } from '@/lib/utils';
 import { ActionButton } from './action-button';
@@ -214,7 +214,7 @@ export function ParticipantReconnecting({
     stats?.asked !== undefined && ['Questions asked', String(stats.asked)],
     stats?.connected !== undefined && [
       'In room',
-      `${stats.connected} participants`,
+      `${stats.connected} ${pluralize(stats.connected, 'participant')}`,
     ],
   ].filter((figure): figure is [string, string] => Boolean(figure));
   const circumference = 2 * Math.PI * 48;
@@ -380,6 +380,21 @@ export function ParticipantReconnecting({
 }
 
 /** Terminal, blocking or waiting live states (ended, replaced, refused, connecting). */
+/** Connecting to the live room: Milo and a running progress line. */
+export function LiveConnecting({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <ParticipantStage>
+      <MiloLoading label={title} hint={description} />
+    </ParticipantStage>
+  );
+}
+
 export function LiveNotice({
   eyebrow,
   title,
@@ -457,24 +472,6 @@ export function ParticipantLiveIdle({
             It appears on your screen automatically when the host asks it, and
             its timer starts right away.
           </Text>
-          <div
-            aria-hidden="true"
-            className="mb-space-sm flex items-center justify-center gap-1.5 py-space-xs"
-          >
-            {['h-3', 'h-5', 'h-8', 'h-4', 'h-6', 'h-3'].map((height, index) => (
-              <span
-                key={index}
-                className={cn(
-                  'ds-live-dot w-1 rounded-pill',
-                  height,
-                  index === 2 || index === 4
-                    ? 'bg-accent'
-                    : 'bg-status-live-surface',
-                )}
-                style={{ animationDelay: `${index * 150}ms` }}
-              />
-            ))}
-          </div>
           <div className="flex w-full flex-col items-center justify-between gap-space-xs rounded-control bg-surface-low p-space-sm text-left sm:flex-row">
             <Text variant="label" className="flex items-center gap-space-xs">
               <Avatar name={participantName} size="small" decorative />

@@ -59,6 +59,7 @@ export const SOCKET_RATE_BUCKET: Partial<Record<string, SocketRateBucket>> = {
   [LIVE_EVENTS.quizEnd]: 'host',
   [LIVE_EVENTS.finalLeaderboardShow]: 'host',
   [LIVE_EVENTS.lobbyClose]: 'host',
+  [LIVE_EVENTS.sessionClose]: 'host',
 };
 
 /** Socket.IO's own lifecycle events (not part of our contract). */

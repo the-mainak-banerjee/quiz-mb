@@ -773,6 +773,22 @@ test(
       ERROR_CODE.QUIZ_COMPLETED,
     );
 
+    // ---- Closing the room: host-only; everyone else is told and
+    // disconnected, the closing host keeps its socket.
+    assert.equal(
+      errorCode(await emit(a.socket, LIVE_EVENTS.sessionClose, {})),
+      ERROR_CODE.FORBIDDEN,
+    );
+    const closedOnA = nextEvent<{ code: string }>(
+      a.socket,
+      LIVE_EVENTS.removed,
+    );
+    const aGone = nextEvent(a.socket, 'disconnect');
+    ok(await emit(host.socket, LIVE_EVENTS.sessionClose, {}));
+    assert.equal((await closedOnA).code, ERROR_CODE.SESSION_CLOSED);
+    await aGone;
+    assert.equal(host.socket.connected, true);
+
     // ---- Results pages and history.
     const results = await data<HostQuizResultsDto>(
       await request(

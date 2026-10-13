@@ -1282,6 +1282,28 @@ export class LiveSessionsService {
     );
   }
 
+  /**
+   * Closes a completed session's room: its presence is dropped and the
+   * host's connections forgotten, so their disconnect is not "away". The
+   * host closing it passes `userId` (checked); the server's own close after
+   * a while passes none.
+   */
+  async closeRoom(liveSessionId: string, userId?: string) {
+    if (userId) {
+      const session = await this.load(liveSessionId);
+      this.requireHost(session, userId);
+      if (session.state !== LIVE_SESSION_STATE.COMPLETED)
+        throw new ApiError(
+          409,
+          ERROR_CODE.INVALID_STATE_TRANSITION,
+          'The session can be closed once the quiz has ended.',
+        );
+    }
+    this.hostSockets.delete(liveSessionId);
+    this.forget(liveSessionId);
+    await this.store.clearPresence(liveSessionId);
+  }
+
   /** Host closes a lobby before starting; returns the quiz id. */
   async closeLobby(liveSessionId: string, userId: string) {
     const session = await this.load(liveSessionId);

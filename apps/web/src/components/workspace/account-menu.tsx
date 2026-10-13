@@ -1,15 +1,28 @@
 'use client';
 
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { ChevronDown, Settings2, UserRound } from 'lucide-react';
+import {
+  ChevronDown,
+  LayoutDashboard,
+  Settings2,
+  UserRound,
+} from 'lucide-react';
 import { Button, Text } from '@/components/ui';
 import { useCurrentUser } from '@/contexts/current-user-context';
 import { APP_LINKS } from '@/config/navigation';
 import { LogoutButton } from '@/features/auth/logout-button';
 import { NavigationItem } from './navigation-item';
 
-/** Shared account actions for workspace and public landing headers. */
-export function AccountMenu() {
+/**
+ * Shared account actions for workspace and public landing headers.
+ * `dashboardOnPhones`: the landing header has no room for its Dashboard
+ * button on phones, so the menu offers it there instead.
+ */
+export function AccountMenu({
+  dashboardOnPhones = false,
+}: {
+  dashboardOnPhones?: boolean;
+}) {
   const {
     user: { name, email },
   } = useCurrentUser();
@@ -45,6 +58,17 @@ export function AccountMenu() {
           </div>
           <div className="space-y-space-sm p-space-xs pt-2">
             <DropdownMenu.Group className="flex flex-col gap-space-xs">
+              {dashboardOnPhones && (
+                <DropdownMenu.Item asChild>
+                  <NavigationItem
+                    className="w-full justify-start data-highlighted:bg-surface-low sm:hidden"
+                    href={APP_LINKS.WORKSPACE.DASHBOARD}
+                    icon={<LayoutDashboard size={18} aria-hidden="true" />}
+                  >
+                    Dashboard
+                  </NavigationItem>
+                </DropdownMenu.Item>
+              )}
               <DropdownMenu.Item asChild>
                 <NavigationItem
                   className="w-full justify-start data-highlighted:bg-surface-low"

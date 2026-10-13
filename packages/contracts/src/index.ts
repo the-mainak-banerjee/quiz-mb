@@ -567,6 +567,8 @@ export const LIVE_EVENTS = {
   quizEnded: 'quiz:ended',
   /** Host reveals the final Top 10 on every participant screen. */
   finalLeaderboardShow: 'host:final-leaderboard-show',
+  /** Host closes a completed session: everyone is told and disconnected. */
+  sessionClose: 'host:session-close',
   /** Participants: the host lost connection or came back (after a grace). */
   hostPresence: 'session:host-presence',
 } as const;
@@ -752,6 +754,8 @@ export const LIVE_SESSION_LIMITS = {
   maxMinutes: 4 * 60,
   /** The warning shows this long before the maximum is reached. */
   warningMinutes: 30,
+  /** A completed room still open this long is closed by the server. */
+  completedRoomMinutes: 15,
 } as const;
 
 /** The host's monthly hosted-session allowance (shown before starting). */

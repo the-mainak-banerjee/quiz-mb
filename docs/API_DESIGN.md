@@ -1082,6 +1082,7 @@ host:leaderboard-hide
 host:leaderboard-get
 host:late-join-set
 host:quiz-end
+host:session-close
 ```
 
 ---
@@ -1656,6 +1657,13 @@ Participant-specific:
 ```
 
 Final leaderboard is still host-controlled.
+
+After `quiz:ended` the room stays open so the host can reveal the final leaderboard. It closes when:
+
+- the host sends `host:session-close` (`{ "liveSessionId": "..." }`; host only, only once the quiz is `COMPLETED`, else `409 INVALID_STATE_TRANSITION`), or
+- 15 minutes pass without that (`LIVE_SESSION_LIMITS.completedRoomMinutes`).
+
+Every other socket in the room then receives `session:removed` with `SESSION_CLOSED` and is disconnected; the closing host socket gets the acknowledgement instead. Participants keep their result or the final leaderboard on screen. The room's Redis presence is cleared.
 
 ---
 
