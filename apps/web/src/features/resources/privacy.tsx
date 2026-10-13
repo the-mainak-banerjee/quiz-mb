@@ -145,9 +145,9 @@ const sections: ResourceSection[] = [
       <>
         <Text tone="secondary">
           QuizMB uses service providers for application hosting, database
-          storage, images, temporary live-session state, email delivery, and
-          operational monitoring. Information needed for those functions may be
-          processed by the relevant provider.
+          storage, images, temporary live-session state, email delivery, visit
+          analytics, and operational monitoring. Information needed for those
+          functions may be processed by the relevant provider.
         </Text>
         <ContentCards
           items={[
@@ -162,6 +162,10 @@ const sections: ResourceSection[] = [
             {
               title: 'Hosting and monitoring',
               body: 'Application hosting and monitoring providers process requests and operational logs to serve pages and investigate failures.',
+            },
+            {
+              title: 'Visit analytics',
+              body: 'Vercel Web Analytics counts page visits (the page address without its query string, referrer, country, and device and browser type) to show how the site is used. It sets no cookies and does not identify individual visitors across sites.',
             },
             {
               title: 'Transactional email',
@@ -279,7 +283,7 @@ export function Privacy() {
       title="Privacy Policy"
       description="What QuizMB collects, how information is used, and how you can manage your account and data."
       label="Data & privacy"
-      updated="October 8, 2026"
+      updated="October 13, 2026"
       sections={sections}
       introduction={
         <Surface className="space-y-space-sm">
