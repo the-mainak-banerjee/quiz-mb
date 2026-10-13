@@ -29,6 +29,7 @@ import { CodeLimits, cooldownEnd } from './code-limits';
 import { OtpInput } from './otp-input';
 import { resendLabel, useSecondsUntil } from './resend-timer';
 import { useVerificationFlow } from './use-auth-flow';
+import { WakingNotice } from './waking-notice';
 
 const panel = {
   eyebrow: 'Why we verify',
@@ -268,6 +269,7 @@ export function VerifyEmailView({
         >
           {pending === 'verify' ? 'Verifying…' : 'Verify email'}
         </Button>
+        <WakingNotice active={pending !== null} />
         <CodeLimits />
       </form>
     </AuthCard>
