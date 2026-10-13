@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
+import { SiteAnalytics } from '@/components/analytics';
 import { NavigationGuardProvider } from '@/components/forms/navigation-provider';
 import {
   NO_INDEX,
@@ -29,6 +30,7 @@ export default function RootLayout({
     <html lang="en" className={jakarta.variable}>
       <body className="min-h-screen font-sans bg-canvas text-text-primary">
         <NavigationGuardProvider>{children}</NavigationGuardProvider>
+        <SiteAnalytics />
       </body>
     </html>
   );

@@ -18,8 +18,18 @@ if (
 
 export const SITE_URL = siteUrl.origin;
 export const SITE_TITLE = 'QuizMB | Live Quizzes for Classes and Communities';
+// Under ~125 characters, so link previews show it whole.
 export const SITE_DESCRIPTION =
-  'Create and host live quizzes for your classes and communities. Share a link or QR code, control each question, and track results with QuizMB.';
+  'Host live quizzes for your classes and communities. Share a link or QR code, run each question, and track the results.';
+export const PREVIEW_DESCRIPTION_MAX = 125;
+
+/** Shortens text for a link preview at a word boundary, with an ellipsis. */
+export function previewDescription(text: string) {
+  const plain = text.trim().replace(/\s+/g, ' ');
+  if (plain.length <= PREVIEW_DESCRIPTION_MAX) return plain;
+  const cut = plain.slice(0, PREVIEW_DESCRIPTION_MAX - 1);
+  return `${cut.slice(0, cut.lastIndexOf(' ') > 0 ? cut.lastIndexOf(' ') : cut.length)}…`;
+}
 
 /** The preview image drawn by app/opengraph-image.tsx. */
 export const SOCIAL_IMAGE = {
