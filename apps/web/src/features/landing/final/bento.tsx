@@ -59,7 +59,7 @@ function BentoCard({
  * A device-like frame for a screenshot: an outer shell with even padding and
  * an inner screen whose radius is the outer radius minus that padding
  * (feature 1.5rem - 0.5rem = card 1rem), so the corners stay concentric.
- * `bleed` runs off the right edge from md up; on phones it stays whole.
+ * `bleed` runs off the right edge from lg up; on phones it stays whole.
  */
 function ShotFrame({
   bleed = false,
@@ -74,14 +74,14 @@ function ShotFrame({
     <div
       className={cn(
         'rounded-t-feature border-x border-t border-border-surface bg-surface-low/80 p-2 pb-0 shadow-raised backdrop-blur-sm',
-        bleed && 'md:rounded-tr-none md:border-r-0 md:pr-0',
+        bleed && 'lg:rounded-tr-none lg:border-r-0 lg:pr-0',
         className,
       )}
     >
       <div
         className={cn(
           'overflow-hidden rounded-t-card border-x border-t border-border-surface bg-surface',
-          bleed && 'md:rounded-tr-none md:border-r-0',
+          bleed && 'lg:rounded-tr-none lg:border-r-0',
         )}
       >
         {children}
@@ -104,15 +104,15 @@ function CornerShot({
   alt,
   fit,
   displayWidth,
-  areaHeight = 'h-64 md:h-72',
+  areaHeight = 'h-64 lg:h-72',
   phone,
 }: {
   name: ScreenshotName;
   alt: string;
   fit: 'bleed' | 'inset';
-  /** A narrower capture shown below md instead, so nothing is cut off. */
+  /** A narrower capture shown below lg (phones and tablets) instead, so nothing is cut off. */
   phone?: { name: ScreenshotName; sizes: string };
-  /** Width from md up for `bleed`; wider than the card runs it off the side. */
+  /** Width from lg up for `bleed`; wider than the card runs it off the side. */
   displayWidth?: string;
   areaHeight?: string;
 }) {
@@ -123,7 +123,7 @@ function CornerShot({
         className={cn(
           'absolute inset-x-space-lg top-0',
           HOVER_LIFT,
-          fit === 'bleed' && cn('md:right-auto', displayWidth),
+          fit === 'bleed' && cn('lg:right-auto', displayWidth),
         )}
       >
         <LandingScreenshot
@@ -131,8 +131,8 @@ function CornerShot({
           alt={alt}
           sizes={
             fit === 'bleed'
-              ? '(min-width: 768px) 526px, calc(100vw - 114px)'
-              : '(min-width: 1280px) 308px, (min-width: 768px) calc(33.333vw - 119.333px), calc(100vw - 114px)'
+              ? '(min-width: 1024px) 526px, calc(100vw - 114px)'
+              : '(min-width: 1280px) 308px, (min-width: 1024px) calc(33.333vw - 119.333px), calc(100vw - 114px)'
           }
           {...(phone ? { mobile: phone } : {})}
         />
@@ -158,7 +158,7 @@ function CornerShot({
 
 /**
  * Project cards exactly as the Projects page draws them: stacked and whole
- * on phones, a row running off the right edge from md up.
+ * on phones, a row running off the right edge from lg up.
  */
 // function ProjectCards() {
 //   return (
@@ -224,7 +224,7 @@ function CornerShot({
 function JoinVisual() {
   const registered = ['Sophia Lin', 'Leo Martins', 'Priya Rao', 'Sam Okafor'];
   return (
-    <div className="relative mt-auto h-72 overflow-hidden md:h-96">
+    <div className="relative mt-auto h-72 overflow-hidden lg:h-96">
       <div
         aria-hidden="true"
         className="absolute left-space-lg top-0 w-60 space-y-space-sm"
@@ -259,7 +259,7 @@ function JoinVisual() {
       </div>
       <ShotFrame
         className={cn(
-          'absolute left-[46%] top-0 w-70 max-md:hidden',
+          'absolute left-[46%] top-0 w-70 max-lg:hidden',
           HOVER_LIFT,
         )}
       >
@@ -300,12 +300,12 @@ export function FeatureBento() {
           when you find out what landed and teach the part that didn’t.
         </Text>
       </div>
-      <div className="grid gap-gutter md:grid-cols-3">
+      <div className="grid gap-gutter lg:grid-cols-3">
         <BentoCard
           layout="visual-top"
           title="See what landed, while you’re still live"
           description="Answers arrive as a live breakdown only you can see, so you know exactly which idea to explain next."
-          className="md:col-span-2"
+          className="lg:col-span-2"
         >
           {/* Framed as a live screen, so the mock question reads as product. */}
           <InView className="px-space-lg pt-space-lg">
@@ -343,7 +343,7 @@ export function FeatureBento() {
             name="bento-leaderboard"
             alt="The leaderboard as the host sees it: the top players with ranks, names and total points, and a button to hide it from participants."
             fit="inset"
-            areaHeight="min-h-64 flex-1 md:min-h-72"
+            areaHeight="min-h-64 flex-1 lg:min-h-72"
           />
         </BentoCard>
         <BentoCard
@@ -355,7 +355,7 @@ export function FeatureBento() {
             name="bento-history"
             alt="A participant's history: completed quizzes with the final score, correct and incorrect answers, and final rank."
             fit="bleed"
-            displayWidth="md:w-[34rem]"
+            displayWidth="lg:w-[34rem]"
             phone={{
               name: 'bento-history-phone',
               sizes: 'calc(100vw - 114px)',
@@ -371,14 +371,14 @@ export function FeatureBento() {
             name="bento-result"
             alt="A participant's result on a phone: Correct, plus 820 points, with the share of answers for each option."
             fit="inset"
-            areaHeight="h-72 md:h-96"
+            areaHeight="h-72 lg:h-96"
           />
         </BentoCard> */}
         <BentoCard
           layout="text-top"
           title="Join from any phone"
           description="Share a link or QR code before class. Learners register once and are ready when you start."
-          className="md:col-span-2"
+          className="lg:col-span-2"
         >
           <JoinVisual />
         </BentoCard>
@@ -386,7 +386,7 @@ export function FeatureBento() {
           layout="text-top"
           title="A project for every cohort"
           description="Keep each course, cohort or community’s quizzes together, week after week."
-          className="md:col-span-2"
+          className="lg:col-span-2"
         >
           <ProjectCards />
         </BentoCard> */}
