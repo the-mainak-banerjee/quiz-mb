@@ -7,6 +7,7 @@ import { APP_LINKS } from '@/config/navigation';
 import { api } from '@/lib/api/browser';
 import { apiError } from '@/lib/api/client';
 import { API_ROUTES } from '@/lib/api/routes';
+import { COLD_START_TIMEOUT_MS } from '@/lib/api/wake';
 import { z } from 'zod';
 import {
   AUTH_RESULT_STATUS,
@@ -17,6 +18,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { authFlow } from '@/lib/auth/auth-flow';
 import { PasswordField } from './password-field';
+import { WakingNotice } from './waking-notice';
 
 type Field = 'name' | 'email' | 'password' | 'confirm';
 const emailSchema = z.email().max(254);
@@ -125,6 +127,8 @@ export function AuthForm({
       const result = await api.post<AuthResultDto>(
         signup ? API_ROUTES.AUTH.SIGNUP : API_ROUTES.AUTH.LOGIN,
         input,
+        // Often the first request of a visit: the API may still be waking.
+        { timeoutMs: COLD_START_TIMEOUT_MS },
       );
       if (result.status === AUTH_RESULT_STATUS.VERIFICATION_REQUIRED) {
         // No session yet: the email must be verified first.
@@ -261,6 +265,7 @@ export function AuthForm({
             ? 'Create account'
             : 'Sign in to QuizMB'}
       </Button>
+      <WakingNotice active={pending} />
       {signup && (
         <Text variant="caption" tone="secondary" className="text-center">
           By signing up, you agree to our{' '}

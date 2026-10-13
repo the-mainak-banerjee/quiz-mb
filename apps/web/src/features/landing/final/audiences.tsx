@@ -1,7 +1,7 @@
 import { Check } from 'lucide-react';
 import { Text } from '@/components/ui';
 import { MiloStage } from '@/components/milo/milo-states';
-import { AUDIENCES } from '../content';
+import { AUDIENCES, TOPICS } from '../content';
 import { Eyebrow } from '../sections';
 import {
   FrameCorner as Corner,
@@ -42,6 +42,20 @@ export function WhoItsFor() {
             Built for course creators, coaches, and community hosts who want
             their learners to join in, not just listen.
           </Text>
+          {/* Any subject works: a few examples. */}
+          <ul
+            aria-label="Example topics"
+            className="flex flex-wrap justify-center gap-space-xs pt-space-sm"
+          >
+            {TOPICS.map((topic) => (
+              <li
+                key={topic}
+                className="rounded-pill border border-border-surface bg-surface px-space-sm py-1 text-caption text-text-secondary"
+              >
+                {topic}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
 

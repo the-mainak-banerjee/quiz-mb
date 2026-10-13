@@ -74,6 +74,8 @@ type Options = {
   authenticated?: boolean;
   /** Called before each automatic retry of a busy server, e.g. for a label. */
   onBusyRetry?: () => void;
+  /** Overrides the client's timeout for this request (e.g. a cold start). */
+  timeoutMs?: number;
 };
 type Config = {
   baseUrl: string;
@@ -127,7 +129,9 @@ export function createApiClient(config: Config) {
     const encoded = body === undefined ? undefined : JSON.stringify(body);
     const startedGeneration = generation;
     async function send(): Promise<T> {
-      const timeout = AbortSignal.timeout(config.timeoutMs ?? 15000);
+      const timeout = AbortSignal.timeout(
+        options.timeoutMs ?? config.timeoutMs ?? 15000,
+      );
       const signal = options.signal
         ? AbortSignal.any([options.signal, timeout])
         : timeout;
